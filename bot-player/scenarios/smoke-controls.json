@@ -1,0 +1,160 @@
+{
+  "name": "smoke-controls",
+  "description": "Enter run mode and exercise common control interactions.",
+  "options": {
+    "timeoutMs": 5000,
+    "stepDelayMs": 200,
+    "failOnConsoleError": true
+  },
+  "steps": [
+    {
+      "action": "click",
+      "name": "skip-splash",
+      "optional": true,
+      "targets": [
+        { "text": "Press any key" }
+      ]
+    },
+    {
+      "action": "press",
+      "name": "splash-enter-fallback",
+      "optional": true,
+      "key": "Enter"
+    },
+    {
+      "action": "waitFor",
+      "name": "wait-for-menu",
+      "targets": [
+        { "selector": "#menu-new-run" }
+      ]
+    },
+    {
+      "action": "click",
+      "name": "clear-stale-splash-pointer-hook",
+      "optional": true,
+      "timeoutMs": 600,
+      "targets": [
+        { "selector": ".menu-screen" },
+        { "selector": "body" }
+      ]
+    },
+    {
+      "action": "waitFor",
+      "name": "reconfirm-menu",
+      "targets": [
+        { "selector": "#menu-new-run" }
+      ]
+    },
+    {
+      "action": "click",
+      "name": "open-standard-setup",
+      "targets": [
+        { "selector": "#menu-new-run" }
+      ]
+    },
+    {
+      "action": "waitFor",
+      "name": "wait-for-setup",
+      "targets": [
+        { "selector": "#start-standard-run" }
+      ]
+    },
+    {
+      "action": "click",
+      "name": "start-standard-run",
+      "targets": [
+        { "selector": "#start-standard-run" }
+      ]
+    },
+    {
+      "action": "waitFor",
+      "name": "wait-for-map",
+      "targets": [
+        { "selector": "#game-canvas" },
+        { "selector": ".run-screen" },
+        { "selector": "[data-testid='in-run-screen']" },
+        { "selector": "[data-surface='run']" },
+        { "selector": "canvas" }
+      ]
+    },
+    {
+      "action": "press",
+      "name": "build-hotkey",
+      "key": "1",
+      "optional": true
+    },
+    {
+      "action": "press",
+      "name": "demolish-hotkey",
+      "key": "2",
+      "optional": true
+    },
+    {
+      "action": "press",
+      "name": "reroute-hotkey",
+      "key": "3",
+      "optional": true
+    },
+    {
+      "action": "press",
+      "name": "pause-on",
+      "key": "Space",
+      "optional": true
+    },
+    {
+      "action": "wait",
+      "name": "pause-hold",
+      "ms": 300
+    },
+    {
+      "action": "press",
+      "name": "pause-off",
+      "key": "Space",
+      "optional": true
+    },
+    {
+      "action": "autoplay",
+      "name": "light-autoplay",
+      "iterations": 8,
+      "dwellMs": 250,
+      "advanceMs": 300,
+      "idleKey": "Tab",
+      "selectors": [
+        ".tool-btn[data-tool='build']",
+        ".tool-btn[data-tool='demolish']",
+        ".tool-btn[data-tool='reroute']",
+        ".asset-btn[data-asset='plant']",
+        ".asset-btn[data-asset='substation']",
+        ".asset-btn[data-asset='storage']",
+        "#run-pause-btn",
+        "[data-testid='tool-build']",
+        "[data-testid='tool-demolish']",
+        "[data-testid='tool-reroute']",
+        "[data-testid='alert-next']",
+        "[data-testid='action-confirm']"
+      ],
+      "canvasSelector": "#game-canvas"
+    },
+    {
+      "action": "click",
+      "name": "save-and-exit",
+      "targets": [
+        { "selector": "#run-save-exit-btn" },
+        { "text": "Save & Exit" }
+      ]
+    },
+    {
+      "action": "waitFor",
+      "name": "menu-return-check",
+      "targets": [
+        { "selector": "#menu-continue" },
+        { "text": "Command Console" }
+      ]
+    },
+    {
+      "action": "screenshot",
+      "name": "smoke-controls",
+      "fullPage": true
+    }
+  ]
+}

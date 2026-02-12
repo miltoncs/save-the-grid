@@ -1,0 +1,2580 @@
+import {
+  ALERT_LEVELS,
+  ASSET_RULES,
+  BASE_MAP,
+  CAMPAIGN_MISSIONS,
+  CLIMATE_MULTIPLIERS,
+  CUSTOM_OPTIONS,
+  CUSTOM_PRESETS,
+  DEFAULT_SETTINGS,
+  NEWS_BLURBS,
+  SEASON_ORDER,
+  STANDARD_PRESETS,
+  STORAGE_KEYS,
+  TERRAIN_COST_MULTIPLIERS,
+} from "./data.js";
+
+const TICK_SECONDS = 0.1;
+const TOOL_BUILD = "build";
+const TOOL_DEMOLISH = "demolish";
+const TOOL_REROUTE = "reroute";
+const ASSET_ORDER = ["plant", "substation", "storage"];
+const PRIORITY_ORDER = ["low", "normal", "high"];
+
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function lerp(a, b, t) {
+  return a + (b - a) * t;
+}
+
+function deepClone(value) {
+  return JSON.parse(JSON.stringify(value));
+}
+
+function formatTime(seconds) {
+  const clamped = Math.max(0, Math.floor(seconds));
+  const mm = String(Math.floor(clamped / 60)).padStart(2, "0");
+  const ss = String(clamped % 60).padStart(2, "0");
+  return `${mm}:${ss}`;
+}
+
+function randomRange(min, max) {
+  return min + Math.random() * (max - min);
+}
+
+function pickRandom(list) {
+  return list[Math.floor(Math.random() * list.length)];
+}
+
+function readJsonStorage(key, fallback) {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) {
+      return fallback;
+    }
+    return JSON.parse(raw);
+  } catch {
+    return fallback;
+  }
+}
+
+function writeJsonStorage(key, value) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // Ignore storage failures in MVP.
+  }
+}
+
+function toOrdinal(index) {
+  const n = index + 1;
+  if (n % 10 === 1 && n % 100 !== 11) return `${n}st`;
+  if (n % 10 === 2 && n % 100 !== 12) return `${n}nd`;
+  if (n % 10 === 3 && n % 100 !== 13) return `${n}rd`;
+  return `${n}th`;
+}
+
+function unlockedByFragmentation(fragmentation, regionId) {
+  if (fragmentation === "none" || fragmentation === "open") return true;
+  const alwaysOpen = new Set(["capital", "north_industry", "south_farms"]);
+  if (fragmentation === "moderate") {
+    const moderateOpen = new Set([
+      "capital",
+      "north_industry",
+      "south_farms",
+      "west_hydro",
+      "east_coast",
+    ]);
+    return moderateOpen.has(regionId);
+  }
+  return alwaysOpen.has(regionId);
+}
+
+function normalizePopulationMode(mode) {
+  if (mode === "off") {
+    return { enabled: false, strength: 0 };
+  }
+  if (mode === "high") {
+    return { enabled: true, strength: 1.45 };
+  }
+  return { enabled: true, strength: 1 };
+}
+
+function normalizeClimateIntensity(value) {
+  if (typeof value === "number") return value;
+  if (value === "low") return 0.82;
+  if (value === "high") return 1.25;
+  return 1;
+}
+
+function normalizeEventIntensity(value) {
+  if (typeof value === "number") return value;
+  if (value === "low") return 0.75;
+  if (value === "high") return 1.3;
+  return 1;
+}
+
+function normalizeFailureStrictness(value) {
+  if (typeof value === "number") return value;
+  if (value === "lenient") return 0.84;
+  if (value === "strict") return 1.22;
+  return 1;
+}
+
+function normalizeUnlockProfile(value) {
+  if (value === "low") return 0.82;
+  if (value === "high") return 1.3;
+  return 1;
+}
+
+function buildRunConfigFromStandardPreset(presetId) {
+  const preset = STANDARD_PRESETS.find((item) => item.id === presetId) || STANDARD_PRESETS[0];
+  const population = normalizePopulationMode(preset.populationMode);
+  return {
+    mode: "standard",
+    label: `Standard Run (${preset.label})`,
+    leaderboardClass: "standard",
+    leaderboardEligible: preset.leaderboardEligible,
+    demandGrowthMultiplier: preset.demandGrowthMultiplier,
+    eventIntensity: normalizeEventIntensity(preset.eventIntensity),
+    seasonalProfile: preset.seasonalProfile,
+    climateIntensity: normalizeClimateIntensity(preset.climateIntensity),
+    infraCostMultiplier: preset.infraCostMultiplier,
+    failureStrictness: normalizeFailureStrictness(preset.failureStrictness),
+    populationEnabled: population.enabled,
+    populationStrength: population.strength,
+    regionFragmentation: preset.regionFragmentation,
+    unlockCostMultiplier: normalizeUnlockProfile(preset.unlockCostProfile),
+    startingBudget: preset.budget,
+    runTargetSec: 0,
+    mission: null,
+    sourcePresetId: preset.id,
+  };
+}
+
+function buildRunConfigFromCampaignMission(missionId) {
+  const mission = CAMPAIGN_MISSIONS.find((item) => item.id === missionId) || CAMPAIGN_MISSIONS[0];
+  const population = normalizePopulationMode(mission.populationMode);
+  return {
+    mode: "campaign",
+    label: `Campaign Mission: ${mission.codename}`,
+    leaderboardClass: "campaign",
+    leaderboardEligible: true,
+    demandGrowthMultiplier: mission.difficulty === "Easy" ? 0.92 : mission.difficulty === "Normal" ? 1 : mission.difficulty === "Hard" ? 1.15 : 1.28,
+    eventIntensity: mission.difficulty === "Easy" ? 0.85 : mission.difficulty === "Normal" ? 1 : mission.difficulty === "Hard" ? 1.2 : 1.35,
+    seasonalProfile: mission.seasonalMode === "on" ? "mixed" : "neutral",
+    climateIntensity: mission.seasonalMode === "on" ? 1.05 : 1,
+    infraCostMultiplier: mission.difficulty === "Easy" ? 0.95 : mission.difficulty === "Normal" ? 1 : mission.difficulty === "Hard" ? 1.12 : 1.18,
+    failureStrictness: mission.difficulty === "Easy" ? 0.9 : mission.difficulty === "Normal" ? 1 : mission.difficulty === "Hard" ? 1.14 : 1.25,
+    populationEnabled: population.enabled,
+    populationStrength: population.strength,
+    regionFragmentation: mission.fragmentation.toLowerCase() === "open" ? "open" : "high",
+    unlockCostMultiplier: mission.fragmentation.toLowerCase() === "open" ? 0.95 : 1.12,
+    startingBudget: mission.startingBudget,
+    runTargetSec: mission.objective.targetDurationSec,
+    mission,
+    sourceMissionId: mission.id,
+  };
+}
+
+function buildRunConfigFromCustom(customState) {
+  const population = normalizePopulationMode(customState.populationMode);
+  return {
+    mode: "custom",
+    label: "Custom Game",
+    leaderboardClass: customState.leaderboardEligible ? "standard" : "custom",
+    leaderboardEligible: !!customState.leaderboardEligible,
+    demandGrowthMultiplier: customState.demandGrowthMultiplier,
+    eventIntensity: normalizeEventIntensity(customState.eventIntensity),
+    seasonalProfile: customState.seasonalProfile,
+    climateIntensity: normalizeClimateIntensity(customState.climateIntensity),
+    infraCostMultiplier: customState.infraCostMultiplier,
+    failureStrictness: normalizeFailureStrictness(customState.failureStrictness),
+    populationEnabled: population.enabled,
+    populationStrength: population.strength,
+    regionFragmentation: customState.regionFragmentation,
+    unlockCostMultiplier: normalizeUnlockProfile(customState.unlockCostProfile),
+    startingBudget: customState.budget,
+    runTargetSec: customState.runTargetMinutes * 60,
+    mission: null,
+    sourceCustom: deepClone(customState),
+  };
+}
+
+class GameRuntime {
+  constructor(options) {
+    this.canvas = options.canvas;
+    this.ctx = this.canvas.getContext("2d");
+    this.config = deepClone(options.runConfig);
+    this.snapshot = options.snapshot || null;
+    this.callbacks = options.callbacks;
+    this.settings = options.settings || DEFAULT_SETTINGS;
+
+    this.running = false;
+    this.paused = false;
+    this.accumulator = 0;
+    this.lastFrame = 0;
+    this.renderPulse = 0;
+    this.loopHandle = 0;
+    this.mouse = { x: 0, y: 0, inside: false };
+
+    this.zoomLevels = [0.55, 0.72, 0.9, 1.1, 1.32];
+    this.camera = {
+      x: BASE_MAP.width / 2,
+      y: BASE_MAP.height / 2,
+      zoomIndex: 2,
+      dragActive: false,
+      dragStartX: 0,
+      dragStartY: 0,
+      dragCamX: BASE_MAP.width / 2,
+      dragCamY: BASE_MAP.height / 2,
+    };
+
+    this.tool = TOOL_BUILD;
+    this.buildAssetType = "plant";
+    this.selectedRegionId = null;
+    this.highlightedAlertId = null;
+
+    this.state = this.snapshot ? this.rehydrateSnapshot(this.snapshot) : this.createFreshState();
+
+    this.resizeObserver = null;
+    this.boundResize = () => this.resizeCanvas();
+    this.boundMouseMove = (event) => this.onPointerMove(event);
+    this.boundPointerDown = (event) => this.onPointerDown(event);
+    this.boundPointerUp = (event) => this.onPointerUp(event);
+    this.boundWheel = (event) => this.onWheel(event);
+    this.boundContextMenu = (event) => event.preventDefault();
+    this.boundKeydown = (event) => this.onKeyDown(event);
+
+    this.bindInputs();
+    this.resizeCanvas();
+    this.pushHudUpdate();
+  }
+
+  createFreshState() {
+    const regions = BASE_MAP.regions.map((region) => {
+      const unlocked = unlockedByFragmentation(this.config.regionFragmentation, region.id);
+      return {
+        ...deepClone(region),
+        unlocked,
+        priority: "normal",
+        assets: deepClone(region.starterAssets),
+        demand: region.baseDemand,
+        targetDemand: region.baseDemand,
+        served: region.baseDemand,
+        unmet: 0,
+        utilization: 0,
+        demandEventMultiplier: 1,
+        lineEventMultiplier: 1,
+        selected: false,
+        cooldownUntil: 0,
+      };
+    });
+
+    const links = BASE_MAP.links.map((link) => ({
+      ...deepClone(link),
+      used: 0,
+      safeCapacity: link.baseCapacity,
+      hardCapacity: link.baseCapacity * 1.15,
+      stress: 0,
+      overload: false,
+    }));
+
+    return {
+      runtimeSeconds: 0,
+      budget: this.config.startingBudget,
+      reliability: 84,
+      score: 0,
+      hiddenTrust: 75,
+      lawsuits: 0,
+      totalDemand: 0,
+      totalServed: 0,
+      totalUnmet: 0,
+      seasonIndex: 0,
+      seasonTimer: 0,
+      seasonLabel: "neutral",
+      alerts: [],
+      incidents: [],
+      objectiveLog: [],
+      timeline: [
+        {
+          at: 0,
+          text: "Run initiated by the Energy Directory.",
+        },
+      ],
+      nextEventAt: randomRange(20, 34),
+      nextNewsAt: 7,
+      nextLawsuitEligibleAt: 45,
+      collapseSeconds: 0,
+      regions,
+      links,
+    };
+  }
+
+  rehydrateSnapshot(snapshot) {
+    const safe = deepClone(snapshot);
+    safe.links = safe.links || [];
+    safe.regions = safe.regions || [];
+    safe.alerts = safe.alerts || [];
+    safe.incidents = safe.incidents || [];
+    safe.timeline = safe.timeline || [];
+    if (!safe.nextEventAt) safe.nextEventAt = safe.runtimeSeconds + randomRange(20, 34);
+    if (!safe.nextNewsAt) safe.nextNewsAt = safe.runtimeSeconds + 7;
+    if (!safe.nextLawsuitEligibleAt) safe.nextLawsuitEligibleAt = safe.runtimeSeconds + 45;
+    safe.totalDemand = safe.totalDemand || 0;
+    safe.totalServed = safe.totalServed || 0;
+    safe.totalUnmet = safe.totalUnmet || 0;
+    return safe;
+  }
+
+  bindInputs() {
+    this.canvas.addEventListener("mousemove", this.boundMouseMove);
+    this.canvas.addEventListener("pointerdown", this.boundPointerDown);
+    window.addEventListener("pointerup", this.boundPointerUp);
+    this.canvas.addEventListener("wheel", this.boundWheel, { passive: false });
+    this.canvas.addEventListener("contextmenu", this.boundContextMenu);
+    window.addEventListener("keydown", this.boundKeydown);
+    window.addEventListener("resize", this.boundResize);
+    this.resizeObserver = new ResizeObserver(() => this.resizeCanvas());
+    this.resizeObserver.observe(this.canvas.parentElement);
+  }
+
+  unbindInputs() {
+    this.canvas.removeEventListener("mousemove", this.boundMouseMove);
+    this.canvas.removeEventListener("pointerdown", this.boundPointerDown);
+    window.removeEventListener("pointerup", this.boundPointerUp);
+    this.canvas.removeEventListener("wheel", this.boundWheel);
+    this.canvas.removeEventListener("contextmenu", this.boundContextMenu);
+    window.removeEventListener("keydown", this.boundKeydown);
+    window.removeEventListener("resize", this.boundResize);
+    if (this.resizeObserver) {
+      this.resizeObserver.disconnect();
+      this.resizeObserver = null;
+    }
+  }
+
+  resizeCanvas() {
+    const holder = this.canvas.parentElement;
+    if (!holder) return;
+    const rect = holder.getBoundingClientRect();
+    const pixelRatio = window.devicePixelRatio || 1;
+    const width = Math.max(640, Math.floor(rect.width));
+    const height = Math.max(380, Math.floor(rect.height));
+    this.canvas.width = Math.floor(width * pixelRatio);
+    this.canvas.height = Math.floor(height * pixelRatio);
+    this.canvas.style.width = `${width}px`;
+    this.canvas.style.height = `${height}px`;
+    this.ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+    this.render();
+  }
+
+  start() {
+    if (this.running) return;
+    this.running = true;
+    this.lastFrame = performance.now();
+    this.loopHandle = requestAnimationFrame((timestamp) => this.frame(timestamp));
+  }
+
+  stop() {
+    this.running = false;
+    cancelAnimationFrame(this.loopHandle);
+    this.unbindInputs();
+  }
+
+  frame(timestamp) {
+    if (!this.running) return;
+    const dt = Math.min(0.25, (timestamp - this.lastFrame) / 1000);
+    this.lastFrame = timestamp;
+
+    if (!this.paused) {
+      this.accumulator += dt;
+      while (this.accumulator >= TICK_SECONDS) {
+        this.stepSimulation(TICK_SECONDS);
+        this.accumulator -= TICK_SECONDS;
+      }
+    }
+
+    this.renderPulse += dt;
+    this.handleEdgePan(dt);
+    this.render();
+    this.loopHandle = requestAnimationFrame((next) => this.frame(next));
+  }
+
+  advanceTime(ms) {
+    const safeMs = Math.max(0, ms);
+    const steps = Math.max(1, Math.round(safeMs / (TICK_SECONDS * 1000)));
+    for (let i = 0; i < steps; i += 1) {
+      if (!this.paused) {
+        this.stepSimulation(TICK_SECONDS);
+      }
+      this.renderPulse += TICK_SECONDS;
+    }
+    this.render();
+    return Promise.resolve();
+  }
+
+  onPointerMove(event) {
+    const rect = this.canvas.getBoundingClientRect();
+    this.mouse.x = event.clientX - rect.left;
+    this.mouse.y = event.clientY - rect.top;
+    this.mouse.inside =
+      this.mouse.x >= 0 &&
+      this.mouse.y >= 0 &&
+      this.mouse.x <= rect.width &&
+      this.mouse.y <= rect.height;
+
+    if (this.camera.dragActive) {
+      const zoom = this.zoomLevels[this.camera.zoomIndex];
+      const dx = (event.clientX - this.camera.dragStartX) / zoom;
+      const dy = (event.clientY - this.camera.dragStartY) / zoom;
+      this.camera.x = clamp(this.camera.dragCamX - dx, 0, BASE_MAP.width);
+      this.camera.y = clamp(this.camera.dragCamY - dy, 0, BASE_MAP.height);
+    }
+  }
+
+  onPointerDown(event) {
+    const worldPoint = this.screenToWorld(this.mouse.x, this.mouse.y);
+
+    if (event.button === 1 || (event.button === 0 && event.altKey)) {
+      this.camera.dragActive = true;
+      this.camera.dragStartX = event.clientX;
+      this.camera.dragStartY = event.clientY;
+      this.camera.dragCamX = this.camera.x;
+      this.camera.dragCamY = this.camera.y;
+      return;
+    }
+
+    const region = this.findRegionAt(worldPoint.x, worldPoint.y);
+    if (!region) {
+      this.selectedRegionId = null;
+      this.pushHudUpdate();
+      return;
+    }
+
+    this.selectedRegionId = region.id;
+
+    if (event.button === 2) {
+      this.handleDemolish(region);
+      this.pushHudUpdate();
+      return;
+    }
+
+    if (this.tool === TOOL_BUILD) {
+      if (!region.unlocked) {
+        this.tryUnlockRegion(region);
+      } else {
+        this.handleBuild(region);
+      }
+    } else if (this.tool === TOOL_DEMOLISH) {
+      this.handleDemolish(region);
+    } else if (this.tool === TOOL_REROUTE) {
+      this.handleReroute(region);
+    }
+
+    this.pushHudUpdate();
+  }
+
+  onPointerUp() {
+    this.camera.dragActive = false;
+  }
+
+  onWheel(event) {
+    event.preventDefault();
+    const delta = Math.sign(event.deltaY);
+    this.camera.zoomIndex = clamp(this.camera.zoomIndex - delta, 0, this.zoomLevels.length - 1);
+  }
+
+  onKeyDown(event) {
+    if (event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement) {
+      return;
+    }
+
+    if (event.code === "Space") {
+      event.preventDefault();
+      this.togglePause();
+      return;
+    }
+
+    if (event.code === "Digit1") {
+      this.tool = TOOL_BUILD;
+      this.buildAssetType = "plant";
+      this.pushHudUpdate();
+      return;
+    }
+
+    if (event.code === "Digit2") {
+      this.tool = TOOL_BUILD;
+      this.buildAssetType = "substation";
+      this.pushHudUpdate();
+      return;
+    }
+
+    if (event.code === "Digit3") {
+      this.tool = TOOL_BUILD;
+      this.buildAssetType = "storage";
+      this.pushHudUpdate();
+      return;
+    }
+
+    if (event.code === "KeyD") {
+      this.tool = TOOL_DEMOLISH;
+      this.pushHudUpdate();
+      return;
+    }
+
+    if (event.code === "KeyR") {
+      this.tool = TOOL_REROUTE;
+      this.pushHudUpdate();
+      return;
+    }
+
+    if (event.code === "Tab") {
+      event.preventDefault();
+      this.cycleCriticalAlert();
+      return;
+    }
+
+    if (event.code === "Escape") {
+      this.selectedRegionId = null;
+      this.pushHudUpdate();
+      return;
+    }
+
+    if (event.code === "KeyF") {
+      this.toggleFullscreen();
+    }
+  }
+
+  togglePause() {
+    this.paused = !this.paused;
+    this.pushAlert(
+      this.paused ? "Simulation paused." : "Simulation resumed.",
+      this.paused ? "advisory" : "warning",
+      5
+    );
+    this.pushHudUpdate();
+  }
+
+  cycleCriticalAlert() {
+    const critical = this.state.alerts.filter((alert) => alert.level === "critical");
+    if (!critical.length) return;
+    const currentIndex = critical.findIndex((item) => item.id === this.highlightedAlertId);
+    const next = critical[(currentIndex + 1) % critical.length];
+    this.highlightedAlertId = next.id;
+    this.callbacks.onHighlightAlert(next.id);
+  }
+
+  toggleFullscreen() {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch(() => {});
+      return;
+    }
+    document.exitFullscreen().catch(() => {});
+  }
+
+  screenToWorld(screenX, screenY) {
+    const width = this.canvas.clientWidth;
+    const height = this.canvas.clientHeight;
+    const zoom = this.zoomLevels[this.camera.zoomIndex];
+    const wx = this.camera.x + (screenX - width / 2) / zoom;
+    const wy = this.camera.y + (screenY - height / 2) / zoom;
+    return { x: wx, y: wy };
+  }
+
+  worldToScreen(worldX, worldY) {
+    const width = this.canvas.clientWidth;
+    const height = this.canvas.clientHeight;
+    const zoom = this.zoomLevels[this.camera.zoomIndex];
+    const sx = (worldX - this.camera.x) * zoom + width / 2;
+    const sy = (worldY - this.camera.y) * zoom + height / 2;
+    return { x: sx, y: sy };
+  }
+
+  findRegionAt(worldX, worldY) {
+    for (let i = this.state.regions.length - 1; i >= 0; i -= 1) {
+      const region = this.state.regions[i];
+      const dx = worldX - region.x;
+      const dy = worldY - region.y;
+      if (Math.hypot(dx, dy) <= region.radius) {
+        return region;
+      }
+    }
+    return null;
+  }
+
+  findRegion(regionId) {
+    return this.state.regions.find((region) => region.id === regionId) || null;
+  }
+
+  findLink(linkId) {
+    return this.state.links.find((link) => link.id === linkId) || null;
+  }
+
+  handleBuild(region) {
+    const rule = ASSET_RULES[this.buildAssetType];
+    if (!rule) return;
+
+    if (this.state.runtimeSeconds < region.cooldownUntil) {
+      this.pushAlert(
+        `${region.name} slot cooling down after demolition.`,
+        "advisory",
+        4
+      );
+      return;
+    }
+
+    const terrainFactor = TERRAIN_COST_MULTIPLIERS[region.terrain] || 1;
+    const globalCostFactor = this.getModifierValue("build_cost", 1);
+    const rawCost = rule.cost * terrainFactor * this.config.infraCostMultiplier * globalCostFactor;
+    const cost = Math.ceil(rawCost);
+
+    if (this.state.budget < cost) {
+      this.pushAlert("Insufficient budget for selected build.", "warning", 5);
+      return;
+    }
+
+    region.assets[this.buildAssetType] += 1;
+    this.state.budget -= cost;
+    this.state.score += 5;
+    this.logTimeline(`Built ${rule.label} in ${region.name} (${cost} budget).`);
+    this.pushAlert(`${rule.label} commissioned in ${region.name}.`, "advisory", 4);
+  }
+
+  handleDemolish(region) {
+    const assetType = this.buildAssetType;
+    const rule = ASSET_RULES[assetType];
+    if (!rule) return;
+
+    if (region.assets[assetType] <= 0) {
+      this.pushAlert(`No ${rule.label.toLowerCase()} available to demolish.`, "advisory", 4);
+      return;
+    }
+
+    region.assets[assetType] -= 1;
+    const refund = Math.floor(rule.cost * rule.refundRatio);
+    this.state.budget += refund;
+    region.cooldownUntil = this.state.runtimeSeconds + 4.5;
+    this.logTimeline(`Demolished ${rule.label} in ${region.name} (+${refund} budget refund).`);
+    this.pushAlert(`${rule.label} demolished in ${region.name}.`, "warning", 4);
+  }
+
+  handleReroute(region) {
+    const currentIndex = PRIORITY_ORDER.indexOf(region.priority);
+    region.priority = PRIORITY_ORDER[(currentIndex + 1) % PRIORITY_ORDER.length];
+    this.logTimeline(`${region.name} routing priority set to ${region.priority.toUpperCase()}.`);
+    this.pushAlert(`${region.name} rerouted to ${region.priority} priority.`, "advisory", 4);
+  }
+
+  tryUnlockRegion(region) {
+    if (region.unlocked) return;
+    const baseCost = region.unlockCost * this.config.unlockCostMultiplier;
+    const cost = Math.ceil(baseCost);
+
+    if (this.state.budget < cost) {
+      this.pushAlert(`Cannot unlock ${region.name}: need ${cost} budget.`, "warning", 5);
+      return;
+    }
+
+    region.unlocked = true;
+    this.state.budget -= cost;
+    this.state.score += 30;
+    this.logTimeline(`Unlocked ${region.name} for ${cost} budget.`);
+    this.pushAlert(`${region.name} unlocked. New demand obligations activated.`, "warning", 6);
+  }
+
+  handleEdgePan(dt) {
+    if (!this.mouse.inside || this.camera.dragActive) return;
+    const edge = 28;
+    const speed = 340;
+    const width = this.canvas.clientWidth;
+    const height = this.canvas.clientHeight;
+    let panX = 0;
+    let panY = 0;
+
+    if (this.mouse.x <= edge) panX -= 1;
+    if (this.mouse.x >= width - edge) panX += 1;
+    if (this.mouse.y <= edge) panY -= 1;
+    if (this.mouse.y >= height - edge) panY += 1;
+
+    if (!panX && !panY) return;
+    const zoom = this.zoomLevels[this.camera.zoomIndex];
+    this.camera.x = clamp(this.camera.x + (panX * speed * dt) / zoom, 0, BASE_MAP.width);
+    this.camera.y = clamp(this.camera.y + (panY * speed * dt) / zoom, 0, BASE_MAP.height);
+  }
+
+  stepSimulation(dt) {
+    this.state.runtimeSeconds += dt;
+
+    this.updateSeason(dt);
+    this.expireIncidents();
+    this.spawnEventsIfNeeded();
+    this.updateDemand(dt);
+    this.resolveGrid();
+    this.updateEconomyAndReliability(dt);
+    this.updateScoring(dt);
+    this.evaluateObjectiveAndEndConditions(dt);
+    this.emitNewsIfNeeded();
+
+    this.trimAlerts();
+    this.pushHudUpdate();
+  }
+
+  updateSeason(dt) {
+    if (this.config.seasonalProfile === "neutral") {
+      this.state.seasonLabel = "neutral";
+      return;
+    }
+
+    this.state.seasonTimer += dt;
+    const seasonLength = this.config.mode === "campaign" ? 85 : 100;
+
+    if (this.state.seasonTimer >= seasonLength) {
+      this.state.seasonTimer = 0;
+      this.state.seasonIndex = (this.state.seasonIndex + 1) % SEASON_ORDER.length;
+      this.state.seasonLabel = SEASON_ORDER[this.state.seasonIndex];
+      this.pushAlert(
+        `Season shift: ${this.state.seasonLabel.toUpperCase()} pressure active.`,
+        "advisory",
+        6
+      );
+    }
+
+    if (!this.state.seasonLabel || this.state.seasonLabel === "neutral") {
+      this.state.seasonLabel = SEASON_ORDER[this.state.seasonIndex % SEASON_ORDER.length];
+    }
+
+    if (this.config.seasonalProfile === "winter-peak") {
+      this.state.seasonLabel = "winter";
+    } else if (this.config.seasonalProfile === "summer-peak") {
+      this.state.seasonLabel = "summer";
+    }
+  }
+
+  expireIncidents() {
+    const now = this.state.runtimeSeconds;
+    this.state.incidents = this.state.incidents.filter((incident) => {
+      if (incident.expiresAt <= now) {
+        this.logTimeline(`Incident resolved: ${incident.title}.`);
+        this.pushAlert(`${incident.title} resolved.`, "advisory", 4);
+        return false;
+      }
+      return true;
+    });
+  }
+
+  spawnEventsIfNeeded() {
+    if (this.state.runtimeSeconds < this.state.nextEventAt) {
+      return;
+    }
+
+    const intervalBase = randomRange(24, 40);
+    this.state.nextEventAt = this.state.runtimeSeconds + intervalBase / this.config.eventIntensity;
+
+    const unlockedRegions = this.state.regions.filter((region) => region.unlocked);
+    if (!unlockedRegions.length) {
+      return;
+    }
+
+    const coastRegions = unlockedRegions.filter((region) => region.terrain === "coast");
+    const coldRegions = unlockedRegions.filter((region) => region.climate === "cold");
+    const warmRegions = unlockedRegions.filter((region) => region.climate === "warm");
+
+    const events = [];
+
+    if (warmRegions.length) {
+      const target = pickRandom(warmRegions);
+      events.push({
+        title: `Heat wave in ${target.name}`,
+        body: "Cooling demand surges in warm regions.",
+        level: "warning",
+        duration: 22,
+        type: "demand_boost",
+        regionId: target.id,
+        multiplier: 1.28,
+      });
+    }
+
+    if (coldRegions.length) {
+      const target = pickRandom(coldRegions);
+      events.push({
+        title: `Cold snap in ${target.name}`,
+        body: "Heating pressure increases cold-region load.",
+        level: "warning",
+        duration: 20,
+        type: "demand_boost",
+        regionId: target.id,
+        multiplier: 1.25,
+      });
+    }
+
+    if (coastRegions.length) {
+      const target = pickRandom(coastRegions);
+      events.push({
+        title: `Coastal storm near ${target.name}`,
+        body: "Transmission resilience is reduced in coastal links.",
+        level: "critical",
+        duration: 18,
+        type: "line_cap",
+        regionId: target.id,
+        multiplier: 0.65,
+      });
+    }
+
+    events.push({
+      title: "Fuel price shock",
+      body: "Operating burden rises temporarily.",
+      level: "warning",
+      duration: 20,
+      type: "operating_cost",
+      multiplier: 1.28,
+    });
+
+    events.push({
+      title: "Policy rebate window",
+      body: "Infrastructure costs temporarily reduced.",
+      level: "advisory",
+      duration: 16,
+      type: "build_cost",
+      multiplier: 0.82,
+    });
+
+    const selected = pickRandom(events);
+    const incident = {
+      id: `incident-${Math.round(performance.now() * Math.random())}`,
+      ...selected,
+      startsAt: this.state.runtimeSeconds,
+      expiresAt: this.state.runtimeSeconds + selected.duration,
+    };
+
+    this.state.incidents.push(incident);
+    this.pushAlert(`${incident.title}: ${incident.body}`, incident.level, incident.duration);
+    this.logTimeline(`Incident triggered: ${incident.title}.`);
+  }
+
+  updateDemand(dt) {
+    const seasonLabel = this.state.seasonLabel || "neutral";
+    const seasonProfile = CLIMATE_MULTIPLIERS[seasonLabel] || CLIMATE_MULTIPLIERS.neutral;
+
+    for (const region of this.state.regions) {
+      if (!region.unlocked) {
+        region.demand = 0;
+        region.targetDemand = 0;
+        region.served = 0;
+        region.unmet = 0;
+        region.utilization = 0;
+        continue;
+      }
+
+      if (this.config.populationEnabled) {
+        region.population += region.growthRate * this.config.populationStrength * dt;
+      }
+
+      const climateMultiplier =
+        1 + ((seasonProfile[region.climate] || 1) - 1) * this.config.climateIntensity;
+      const populationMultiplier =
+        1 + ((region.population - 20) / 100) * 0.52 * this.config.demandGrowthMultiplier;
+      const volatility =
+        region.districtType === "Industrial Belt"
+          ? 1 + Math.sin(this.state.runtimeSeconds * 0.45) * 0.1
+          : region.districtType === "Urban Core"
+            ? 1 + Math.sin(this.state.runtimeSeconds * 0.22 + region.x * 0.01) * 0.06
+            : 1 + Math.sin(this.state.runtimeSeconds * 0.13 + region.y * 0.008) * 0.04;
+
+      const incidentDemand = this.getIncidentMultiplierForRegion(region.id, "demand_boost");
+      const targetDemand = clamp(
+        region.baseDemand * populationMultiplier * climateMultiplier * volatility * incidentDemand,
+        15,
+        420
+      );
+
+      region.targetDemand = targetDemand;
+      region.demand = lerp(region.demand, targetDemand, 0.36);
+      region.served = 0;
+      region.unmet = 0;
+      region.utilization = 0;
+    }
+  }
+
+  resolveGrid() {
+    for (const link of this.state.links) {
+      link.used = 0;
+      link.stress = 0;
+      link.overload = false;
+      const a = this.findRegion(link.a);
+      const b = this.findRegion(link.b);
+      if (!a || !b || !a.unlocked || !b.unlocked) {
+        link.safeCapacity = 0;
+        link.hardCapacity = 0;
+        continue;
+      }
+
+      const substationBoost = ((a.assets.substation || 0) + (b.assets.substation || 0)) * 9;
+      const lineEventMultiplier = this.getLineModifierForLink(link);
+      link.safeCapacity = (link.baseCapacity + substationBoost) * lineEventMultiplier;
+      link.hardCapacity = link.safeCapacity * 1.15;
+    }
+
+    const unlocked = this.state.regions.filter((region) => region.unlocked);
+    let pool = 0;
+
+    for (const region of unlocked) {
+      const localGeneration =
+        region.assets.plant * ASSET_RULES.plant.generation +
+        region.assets.storage * ASSET_RULES.storage.generation;
+
+      const localServed = Math.min(localGeneration, region.demand);
+      region.served = localServed;
+      region.unmet = Math.max(0, region.demand - localServed);
+      pool += Math.max(0, localGeneration - localServed);
+    }
+
+    const prioritySort = { high: 0, normal: 1, low: 2 };
+    const targets = unlocked
+      .filter((region) => region.unmet > 0)
+      .sort((a, b) => {
+        const p = prioritySort[a.priority] - prioritySort[b.priority];
+        if (p !== 0) return p;
+        return b.unmet - a.unmet;
+      });
+
+    for (const target of targets) {
+      if (pool <= 0.0001) break;
+      if (target.id === "capital") continue;
+
+      const path = this.findPath("capital", target.id);
+      if (!path.length) continue;
+
+      let transferable = Infinity;
+      for (const linkId of path) {
+        const link = this.findLink(linkId);
+        if (!link) continue;
+        transferable = Math.min(transferable, Math.max(0, link.hardCapacity - link.used));
+      }
+
+      if (!Number.isFinite(transferable) || transferable <= 0) continue;
+
+      const moved = Math.min(target.unmet, pool, transferable);
+      target.served += moved;
+      target.unmet -= moved;
+      pool -= moved;
+
+      for (const linkId of path) {
+        const link = this.findLink(linkId);
+        if (!link) continue;
+        link.used += moved;
+        link.stress = link.safeCapacity > 0 ? link.used / link.safeCapacity : 0;
+        link.overload = link.used > link.safeCapacity;
+      }
+    }
+
+    for (const region of unlocked) {
+      region.unmet = clamp(region.unmet, 0, region.demand);
+      region.utilization = region.demand > 0 ? region.served / region.demand : 1;
+    }
+
+    this.state.totalDemand = unlocked.reduce((acc, region) => acc + region.demand, 0);
+    this.state.totalServed = unlocked.reduce((acc, region) => acc + region.served, 0);
+    this.state.totalUnmet = unlocked.reduce((acc, region) => acc + region.unmet, 0);
+  }
+
+  findPath(startId, endId) {
+    if (startId === endId) return [];
+
+    const queue = [[startId, []]];
+    const visited = new Set([startId]);
+
+    while (queue.length) {
+      const [nodeId, path] = queue.shift();
+      for (const link of this.state.links) {
+        if (link.safeCapacity <= 0) continue;
+        let nextId = null;
+        if (link.a === nodeId) nextId = link.b;
+        if (link.b === nodeId) nextId = link.a;
+        if (!nextId || visited.has(nextId)) continue;
+
+        visited.add(nextId);
+        const nextPath = [...path, link.id];
+        if (nextId === endId) {
+          return nextPath;
+        }
+        queue.push([nextId, nextPath]);
+      }
+    }
+
+    return [];
+  }
+
+  updateEconomyAndReliability(dt) {
+    const unlocked = this.state.regions.filter((region) => region.unlocked);
+
+    const operatingBase = unlocked.reduce((acc, region) => {
+      return (
+        acc +
+        region.assets.plant * ASSET_RULES.plant.operatingCostPerSecond +
+        region.assets.substation * ASSET_RULES.substation.operatingCostPerSecond +
+        region.assets.storage * ASSET_RULES.storage.operatingCostPerSecond
+      );
+    }, 0);
+
+    const operatingMultiplier = this.getModifierValue("operating_cost", 1);
+    const operatingCost = operatingBase * operatingMultiplier;
+
+    const revenue = this.state.totalServed * 0.108;
+    const unmetPenalty = this.state.totalUnmet * 0.12 * this.config.failureStrictness;
+    const overloadPenalty =
+      this.state.links.filter((link) => link.overload).length * 1.4 * this.config.failureStrictness;
+    const lawsuitPenalty = this.state.lawsuits * 0.18;
+
+    this.state.budget += (revenue - operatingCost - unmetPenalty - overloadPenalty - lawsuitPenalty) * dt;
+
+    const unmetRatio =
+      this.state.totalDemand > 0 ? this.state.totalUnmet / this.state.totalDemand : 0;
+    const overloadRatio =
+      this.state.links.length > 0
+        ? this.state.links.filter((link) => link.overload).length / this.state.links.length
+        : 0;
+
+    const assetReliabilityBonus = unlocked.reduce((acc, region) => {
+      return (
+        acc +
+        region.assets.plant * ASSET_RULES.plant.reliabilityBonus +
+        region.assets.substation * ASSET_RULES.substation.reliabilityBonus +
+        region.assets.storage * ASSET_RULES.storage.reliabilityBonus
+      );
+    }, 0);
+
+    const targetReliability = clamp(
+      100 - unmetRatio * 160 - overloadRatio * 85 + assetReliabilityBonus * 0.2,
+      0,
+      100
+    );
+
+    this.state.reliability = clamp(
+      lerp(this.state.reliability, targetReliability, 0.2 * dt * 10),
+      0,
+      100
+    );
+
+    if (this.state.reliability < 20) {
+      this.state.collapseSeconds += dt;
+    } else {
+      this.state.collapseSeconds = Math.max(0, this.state.collapseSeconds - dt * 1.6);
+    }
+
+    let trustPressure = 0;
+    for (const region of unlocked) {
+      const unmetShare = region.demand > 0 ? region.unmet / region.demand : 0;
+      if (unmetShare > 0.35) {
+        trustPressure += unmetShare * 2.1;
+      } else {
+        trustPressure -= 0.55;
+      }
+    }
+
+    this.state.hiddenTrust = clamp(this.state.hiddenTrust - trustPressure * dt * 1.6, 0, 100);
+
+    if (
+      this.state.hiddenTrust < 18 &&
+      this.state.runtimeSeconds > this.state.nextLawsuitEligibleAt
+    ) {
+      this.state.lawsuits += 1;
+      this.state.hiddenTrust = clamp(this.state.hiddenTrust + 22, 0, 100);
+      this.state.nextLawsuitEligibleAt = this.state.runtimeSeconds + 70;
+      this.state.budget -= 140;
+      this.pushAlert("Underserved-region lawsuit filed against the Power Department.", "critical", 8);
+      this.logTimeline("Lawsuit penalty triggered after sustained underserved regions.");
+    }
+
+    if (unmetRatio > 0.32) {
+      this.pushTransientAlertOnce(
+        "grid-stress",
+        "Grid stress rising: unmet demand sustained beyond warning threshold.",
+        "warning",
+        4
+      );
+    }
+
+    if (this.state.reliability < 35) {
+      this.pushTransientAlertOnce(
+        "reliability-critical",
+        "Reliability entering critical range.",
+        "critical",
+        4
+      );
+    }
+
+    if (this.state.budget < 160) {
+      this.pushTransientAlertOnce(
+        "budget-low",
+        "Treasury warning: budget reserves running low.",
+        "warning",
+        4
+      );
+    }
+  }
+
+  updateScoring(dt) {
+    const servedScore = this.state.totalServed * dt * 2.2;
+    const reliabilityScore = this.state.reliability * dt * 0.6;
+    const penalty = this.state.totalUnmet * dt * 0.7 + this.state.lawsuits * dt * 0.4;
+    this.state.score = Math.max(0, this.state.score + servedScore + reliabilityScore - penalty);
+  }
+
+  evaluateObjectiveAndEndConditions() {
+    if (this.state.budget <= 0) {
+      this.finishRun("defeat", "Bankruptcy triggered: budget reached zero.");
+      return;
+    }
+
+    const collapseThreshold = 16 / this.config.failureStrictness;
+    if (this.state.reliability <= collapseThreshold && this.state.collapseSeconds >= 15) {
+      this.finishRun("defeat", "Reliability collapse: sustained national blackout risk.");
+      return;
+    }
+
+    if (this.config.mode === "campaign" && this.config.mission) {
+      if (this.state.runtimeSeconds >= this.config.runTargetSec) {
+        const mission = this.config.mission;
+        const unlockedCount = this.state.regions.filter((region) => region.unlocked).length;
+        const objective = mission.objective;
+        const objectivePass =
+          this.state.reliability >= objective.reliabilityFloor &&
+          unlockedCount >= (objective.requiredUnlocked || 0) &&
+          (objective.budgetFloor == null || this.state.budget >= objective.budgetFloor) &&
+          (objective.maxLawsuits == null || this.state.lawsuits <= objective.maxLawsuits);
+
+        if (objectivePass) {
+          this.finishRun("victory", `Mission complete: ${mission.codename}.`);
+        } else {
+          this.finishRun("defeat", `Mission failed: ${mission.codename} objectives not met.`);
+        }
+        return;
+      }
+    }
+
+    if (this.config.mode === "custom" && this.config.runTargetSec > 0) {
+      if (this.state.runtimeSeconds >= this.config.runTargetSec) {
+        const goodReliability = this.state.reliability >= 64;
+        const notBankrupt = this.state.budget > 0;
+        this.finishRun(
+          goodReliability && notBankrupt ? "victory" : "defeat",
+          goodReliability && notBankrupt
+            ? "Custom run target reached with stable grid performance."
+            : "Custom run ended with unstable grid conditions."
+        );
+      }
+    }
+  }
+
+  emitNewsIfNeeded() {
+    if (this.state.runtimeSeconds < this.state.nextNewsAt) return;
+    this.state.nextNewsAt = this.state.runtimeSeconds + randomRange(11, 18);
+    const blurb = pickRandom(NEWS_BLURBS);
+    this.callbacks.onNews(blurb);
+  }
+
+  finishRun(result, reason) {
+    const summary = this.buildEndSummary(result, reason);
+    this.stop();
+    this.callbacks.onRunEnd(summary);
+  }
+
+  buildEndSummary(result, reason) {
+    const finalScore = Math.round(
+      this.state.score + this.state.budget * 0.4 + this.state.reliability * 12 - this.state.lawsuits * 35
+    );
+
+    const demandServedRatio =
+      this.state.totalDemand > 0 ? this.state.totalServed / this.state.totalDemand : 1;
+
+    return {
+      result,
+      reason,
+      runLabel: this.config.label,
+      runClass: this.config.leaderboardEligible ? this.config.leaderboardClass : "custom",
+      leaderboardEligible: this.config.leaderboardEligible,
+      durationSec: this.state.runtimeSeconds,
+      finalScore,
+      reliability: this.state.reliability,
+      budget: this.state.budget,
+      lawsuits: this.state.lawsuits,
+      demandServedRatio,
+      season: this.state.seasonLabel,
+      timeline: this.state.timeline.slice(-8),
+      config: deepClone(this.config),
+    };
+  }
+
+  getIncidentMultiplierForRegion(regionId, type) {
+    let multiplier = 1;
+    const now = this.state.runtimeSeconds;
+    for (const incident of this.state.incidents) {
+      if (incident.type !== type) continue;
+      if (incident.regionId && incident.regionId !== regionId) continue;
+      if (incident.expiresAt <= now) continue;
+      multiplier *= incident.multiplier || 1;
+    }
+    return multiplier;
+  }
+
+  getModifierValue(type, fallback) {
+    let value = fallback;
+    const now = this.state.runtimeSeconds;
+    for (const incident of this.state.incidents) {
+      if (incident.type !== type) continue;
+      if (incident.expiresAt <= now) continue;
+      value *= incident.multiplier || 1;
+    }
+    return value;
+  }
+
+  getLineModifierForLink(link) {
+    const now = this.state.runtimeSeconds;
+    let multiplier = 1;
+
+    for (const incident of this.state.incidents) {
+      if (incident.type !== "line_cap") continue;
+      if (incident.expiresAt <= now) continue;
+      if (!incident.regionId) continue;
+      if (link.a === incident.regionId || link.b === incident.regionId) {
+        multiplier *= incident.multiplier || 1;
+      }
+    }
+
+    return multiplier;
+  }
+
+  pushAlert(text, level = "advisory", ttl = 5) {
+    const id = `alert-${Math.round(performance.now() * Math.random())}`;
+    this.state.alerts.unshift({
+      id,
+      text,
+      level,
+      createdAt: this.state.runtimeSeconds,
+      expiresAt: this.state.runtimeSeconds + ttl,
+    });
+
+    if (level === "critical") {
+      this.highlightedAlertId = id;
+      this.callbacks.onHighlightAlert(id);
+    }
+  }
+
+  pushTransientAlertOnce(marker, text, level, ttl) {
+    const now = this.state.runtimeSeconds;
+    const present = this.state.alerts.some(
+      (alert) =>
+        alert.marker === marker &&
+        alert.expiresAt > now
+    );
+
+    if (!present) {
+      const id = `alert-${marker}`;
+      this.state.alerts.unshift({
+        id,
+        marker,
+        text,
+        level,
+        createdAt: now,
+        expiresAt: now + ttl,
+      });
+    }
+  }
+
+  trimAlerts() {
+    const now = this.state.runtimeSeconds;
+    this.state.alerts = this.state.alerts
+      .filter((alert) => alert.expiresAt > now)
+      .slice(0, 9);
+  }
+
+  logTimeline(text) {
+    this.state.timeline.push({
+      at: Math.floor(this.state.runtimeSeconds),
+      text,
+    });
+    if (this.state.timeline.length > 64) {
+      this.state.timeline.shift();
+    }
+  }
+
+  getSelectedRegion() {
+    if (!this.selectedRegionId) return null;
+    return this.findRegion(this.selectedRegionId);
+  }
+
+  render() {
+    const ctx = this.ctx;
+    const width = this.canvas.clientWidth;
+    const height = this.canvas.clientHeight;
+    if (!width || !height) return;
+
+    ctx.clearRect(0, 0, width, height);
+    this.drawMapBackdrop(ctx, width, height);
+    this.drawLinks(ctx);
+    this.drawRegions(ctx);
+    this.drawOverlay(ctx, width, height);
+  }
+
+  drawMapBackdrop(ctx, width, height) {
+    const gradient = ctx.createLinearGradient(0, 0, width, height);
+    gradient.addColorStop(0, "#071d2a");
+    gradient.addColorStop(1, "#0f3c42");
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, width, height);
+
+    const zoom = this.zoomLevels[this.camera.zoomIndex];
+    const spacing = 90 * zoom;
+    ctx.strokeStyle = "rgba(136, 199, 173, 0.09)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let x = (this.camera.x * zoom) % spacing; x <= width; x += spacing) {
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, height);
+    }
+    for (let y = (this.camera.y * zoom) % spacing; y <= height; y += spacing) {
+      ctx.moveTo(0, y);
+      ctx.lineTo(width, y);
+    }
+    ctx.stroke();
+
+    // Stylized coastline plate.
+    ctx.fillStyle = "rgba(111, 173, 125, 0.24)";
+    ctx.beginPath();
+    const coastline = [
+      this.worldToScreen(420, 220),
+      this.worldToScreen(1770, 180),
+      this.worldToScreen(1930, 760),
+      this.worldToScreen(1740, 1210),
+      this.worldToScreen(580, 1260),
+      this.worldToScreen(370, 850),
+    ];
+    coastline.forEach((point, index) => {
+      if (index === 0) ctx.moveTo(point.x, point.y);
+      else ctx.lineTo(point.x, point.y);
+    });
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  drawLinks(ctx) {
+    for (const link of this.state.links) {
+      const a = this.findRegion(link.a);
+      const b = this.findRegion(link.b);
+      if (!a || !b || !a.unlocked || !b.unlocked) continue;
+
+      const sa = this.worldToScreen(a.x, a.y);
+      const sb = this.worldToScreen(b.x, b.y);
+
+      const stress = link.safeCapacity > 0 ? link.used / link.safeCapacity : 0;
+      let color = "rgba(114, 208, 142, 0.62)";
+      if (stress > 0.8) color = "rgba(244, 180, 88, 0.8)";
+      if (stress > 1) color = "rgba(255, 98, 98, 0.92)";
+
+      ctx.strokeStyle = color;
+      ctx.lineWidth = clamp(2 + (link.safeCapacity / 90) * this.zoomLevels[this.camera.zoomIndex], 2, 9);
+      ctx.beginPath();
+      ctx.moveTo(sa.x, sa.y);
+      ctx.lineTo(sb.x, sb.y);
+      ctx.stroke();
+
+      const t = (this.renderPulse * 0.5) % 1;
+      const pulseX = lerp(sa.x, sb.x, t);
+      const pulseY = lerp(sa.y, sb.y, t);
+      ctx.fillStyle = stress > 1 ? "#ff8b8b" : "#e6fff2";
+      ctx.beginPath();
+      ctx.arc(pulseX, pulseY, 2.5 + Math.min(4, stress * 3), 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  drawRegions(ctx) {
+    const selectedId = this.selectedRegionId;
+
+    for (const region of this.state.regions) {
+      const point = this.worldToScreen(region.x, region.y);
+      const radius = region.radius * this.zoomLevels[this.camera.zoomIndex];
+
+      const climateColor =
+        region.climate === "cold"
+          ? "#86afde"
+          : region.climate === "warm"
+            ? "#d8a46e"
+            : "#7ab98a";
+
+      const lockOverlay = region.unlocked ? 0 : 0.58;
+      const serviceRatio = region.demand > 0 ? region.served / region.demand : 1;
+      const serviceTint =
+        serviceRatio > 0.9 ? "rgba(129, 225, 156, 0.45)" : serviceRatio > 0.72 ? "rgba(246, 194, 106, 0.44)" : "rgba(255, 99, 99, 0.52)";
+
+      ctx.fillStyle = `rgba(20, 33, 46, ${0.72 + lockOverlay})`;
+      ctx.beginPath();
+      ctx.arc(point.x, point.y, radius, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = climateColor;
+      ctx.globalAlpha = 0.33;
+      ctx.beginPath();
+      ctx.arc(point.x, point.y, radius * 0.94, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+
+      ctx.fillStyle = serviceTint;
+      ctx.beginPath();
+      ctx.arc(point.x, point.y, radius * 0.68, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.lineWidth = selectedId === region.id ? 4 : 2;
+      ctx.strokeStyle = selectedId === region.id ? "#f4f7d5" : "rgba(235, 245, 237, 0.5)";
+      ctx.beginPath();
+      ctx.arc(point.x, point.y, radius, 0, Math.PI * 2);
+      ctx.stroke();
+
+      if (!region.unlocked) {
+        ctx.strokeStyle = "rgba(255, 230, 188, 0.5)";
+        ctx.lineWidth = 1;
+        for (let offset = -radius; offset <= radius; offset += 8) {
+          ctx.beginPath();
+          ctx.moveTo(point.x - radius, point.y + offset);
+          ctx.lineTo(point.x + radius, point.y + offset + radius * 0.5);
+          ctx.stroke();
+        }
+      }
+
+      const farZoom = this.zoomLevels[this.camera.zoomIndex] <= 0.72;
+      if (farZoom) continue;
+
+      ctx.fillStyle = "#f0f7ef";
+      ctx.textAlign = "center";
+      ctx.font = `600 ${Math.max(11, 11 * this.zoomLevels[this.camera.zoomIndex])}px "IBM Plex Sans", sans-serif`;
+      ctx.fillText(region.name, point.x, point.y - radius * 0.18);
+
+      const demandText = region.unlocked
+        ? `${Math.round(region.served)}/${Math.round(region.demand)} MW`
+        : `Locked: ${Math.ceil(region.unlockCost * this.config.unlockCostMultiplier)} budget`;
+
+      ctx.fillStyle = "rgba(246, 251, 250, 0.92)";
+      ctx.font = `500 ${Math.max(10, 10 * this.zoomLevels[this.camera.zoomIndex])}px "IBM Plex Mono", monospace`;
+      ctx.fillText(demandText, point.x, point.y + radius * 0.12);
+
+      if (region.unlocked) {
+        const assetText = `P${region.assets.plant} S${region.assets.substation} B${region.assets.storage}`;
+        ctx.fillStyle = "rgba(194, 229, 212, 0.88)";
+        ctx.fillText(assetText, point.x, point.y + radius * 0.36);
+      }
+    }
+  }
+
+  drawOverlay(ctx, width, height) {
+    ctx.fillStyle = "rgba(7, 20, 28, 0.72)";
+    ctx.fillRect(14, 12, 320, 66);
+    ctx.strokeStyle = "rgba(170, 229, 204, 0.3)";
+    ctx.strokeRect(14, 12, 320, 66);
+
+    ctx.fillStyle = "#ecf9ef";
+    ctx.font = '600 14px "IBM Plex Mono", monospace';
+    ctx.fillText(`Tool: ${this.tool.toUpperCase()} (${this.buildAssetType})`, 24, 34);
+    ctx.fillText(`Pause: Space | Fullscreen: F | Alerts: Tab`, 24, 54);
+    ctx.fillText(`Zoom ${this.camera.zoomIndex + 1}/${this.zoomLevels.length}`, 24, 72);
+
+    if (this.paused) {
+      ctx.fillStyle = "rgba(8, 18, 26, 0.68)";
+      ctx.fillRect(width / 2 - 120, height / 2 - 30, 240, 60);
+      ctx.strokeStyle = "rgba(242, 246, 214, 0.4)";
+      ctx.strokeRect(width / 2 - 120, height / 2 - 30, 240, 60);
+      ctx.fillStyle = "#f4f7d8";
+      ctx.font = '600 20px "Rajdhani", sans-serif';
+      ctx.textAlign = "center";
+      ctx.fillText("SIMULATION PAUSED", width / 2, height / 2 + 7);
+      ctx.textAlign = "left";
+    }
+  }
+
+  pushHudUpdate() {
+    const selected = this.getSelectedRegion();
+    const objective = this.buildObjectiveStatus();
+
+    this.callbacks.onHud({
+      runLabel: this.config.label,
+      budget: this.state.budget,
+      reliability: this.state.reliability,
+      unmetDemand: this.state.totalUnmet,
+      servedDemand: this.state.totalServed,
+      timer: this.state.runtimeSeconds,
+      season: this.state.seasonLabel,
+      populationActive: this.config.populationEnabled,
+      lawsuits: this.state.lawsuits,
+      score: this.state.score,
+      paused: this.paused,
+      tool: this.tool,
+      buildAssetType: this.buildAssetType,
+      objective,
+      alerts: this.state.alerts,
+      incidents: this.state.incidents,
+      selectedRegion: selected,
+    });
+  }
+
+  buildObjectiveStatus() {
+    if (this.config.mode === "campaign" && this.config.mission) {
+      const mission = this.config.mission;
+      const unlockedCount = this.state.regions.filter((region) => region.unlocked).length;
+      const progress = clamp(this.state.runtimeSeconds / mission.objective.targetDurationSec, 0, 1);
+      return {
+        title: mission.codename,
+        text: mission.objective.description,
+        progress,
+        detail: `Unlocked ${unlockedCount}/${mission.objective.requiredUnlocked} | Reliability ${this.state.reliability.toFixed(1)}%`,
+      };
+    }
+
+    if (this.config.mode === "custom") {
+      const target = this.config.runTargetSec;
+      const progress = target > 0 ? clamp(this.state.runtimeSeconds / target, 0, 1) : 0;
+      return {
+        title: "Custom Objective",
+        text: `Survive until ${formatTime(target)} with stable reliability.`,
+        progress,
+        detail: `Reliability ${this.state.reliability.toFixed(1)}% | Budget ${Math.round(this.state.budget)}`,
+      };
+    }
+
+    return {
+      title: "Standard Run",
+      text: "Survive and maximize score before collapse conditions trigger.",
+      progress: 0,
+      detail: `Current score ${Math.round(this.state.score)} | Reliability ${this.state.reliability.toFixed(1)}%`,
+    };
+  }
+
+  serializeForSuspend() {
+    return {
+      runConfig: deepClone(this.config),
+      gameState: deepClone(this.state),
+      camera: deepClone(this.camera),
+      tool: this.tool,
+      buildAssetType: this.buildAssetType,
+      selectedRegionId: this.selectedRegionId,
+      paused: this.paused,
+    };
+  }
+
+  hydrateRuntimeState(snapshotPayload) {
+    if (!snapshotPayload) return;
+    this.config = deepClone(snapshotPayload.runConfig || this.config);
+    this.state = this.rehydrateSnapshot(snapshotPayload.gameState || this.state);
+    this.camera = {
+      ...this.camera,
+      ...(snapshotPayload.camera || {}),
+      dragActive: false,
+    };
+    this.tool = snapshotPayload.tool || TOOL_BUILD;
+    this.buildAssetType = snapshotPayload.buildAssetType || "plant";
+    this.selectedRegionId = snapshotPayload.selectedRegionId || null;
+    this.paused = !!snapshotPayload.paused;
+    this.pushHudUpdate();
+  }
+
+  renderGameToText() {
+    const payload = {
+      mode: this.config.mode,
+      runLabel: this.config.label,
+      coordinateSystem: {
+        origin: "top-left of map world",
+        xAxis: "positive right",
+        yAxis: "positive down",
+        mapSize: { width: BASE_MAP.width, height: BASE_MAP.height },
+        camera: {
+          x: Number(this.camera.x.toFixed(2)),
+          y: Number(this.camera.y.toFixed(2)),
+          zoom: this.zoomLevels[this.camera.zoomIndex],
+        },
+      },
+      timerSeconds: Number(this.state.runtimeSeconds.toFixed(2)),
+      paused: this.paused,
+      season: this.state.seasonLabel,
+      budget: Number(this.state.budget.toFixed(2)),
+      score: Number(this.state.score.toFixed(2)),
+      reliability: Number(this.state.reliability.toFixed(2)),
+      totalDemand: Number(this.state.totalDemand.toFixed(2)),
+      totalServed: Number(this.state.totalServed.toFixed(2)),
+      totalUnmet: Number(this.state.totalUnmet.toFixed(2)),
+      selectedTool: this.tool,
+      selectedBuildAsset: this.buildAssetType,
+      selectedRegionId: this.selectedRegionId,
+      regions: this.state.regions.map((region) => ({
+        id: region.id,
+        name: region.name,
+        x: Number(region.x.toFixed(1)),
+        y: Number(region.y.toFixed(1)),
+        unlocked: region.unlocked,
+        priority: region.priority,
+        climate: region.climate,
+        terrain: region.terrain,
+        population: Number(region.population.toFixed(2)),
+        demand: Number(region.demand.toFixed(2)),
+        served: Number(region.served.toFixed(2)),
+        unmet: Number(region.unmet.toFixed(2)),
+        utilization: Number(region.utilization.toFixed(3)),
+        assets: { ...region.assets },
+      })),
+      links: this.state.links
+        .filter((link) => link.safeCapacity > 0)
+        .map((link) => ({
+          id: link.id,
+          a: link.a,
+          b: link.b,
+          used: Number(link.used.toFixed(2)),
+          safeCapacity: Number(link.safeCapacity.toFixed(2)),
+          stress: Number(link.stress.toFixed(3)),
+          overload: link.overload,
+        })),
+      incidents: this.state.incidents.map((incident) => ({
+        title: incident.title,
+        level: incident.level,
+        type: incident.type,
+        regionId: incident.regionId || null,
+        expiresIn: Number((incident.expiresAt - this.state.runtimeSeconds).toFixed(2)),
+      })),
+      alerts: this.state.alerts.map((alert) => ({
+        id: alert.id,
+        level: alert.level,
+        text: alert.text,
+      })),
+    };
+
+    return JSON.stringify(payload, null, 2);
+  }
+}
+
+export class SaveTheGridApp {
+  constructor(root) {
+    this.root = root;
+    this.currentScreen = "splash";
+    this.runtime = null;
+
+    this.records = readJsonStorage(STORAGE_KEYS.records, {
+      standard: [],
+      campaign: [],
+      custom: [],
+    });
+    this.settings = {
+      ...DEFAULT_SETTINGS,
+      ...readJsonStorage(STORAGE_KEYS.settings, {}),
+    };
+    this.campaignProgress = readJsonStorage(STORAGE_KEYS.campaignProgress, {
+      unlockedMissionIndex: 0,
+      missionBest: {},
+    });
+    this.suspendedRun = readJsonStorage(STORAGE_KEYS.suspendedRun, null);
+
+    this.selectedStandardPresetId = STANDARD_PRESETS[0].id;
+    this.customConfig = deepClone(CUSTOM_PRESETS[0]);
+
+    this.splashTimeout = 0;
+    this.boundSkipSplash = () => this.renderMainMenu();
+
+    window.render_game_to_text = () => this.renderGameToTextBridge();
+    window.advanceTime = (ms) => this.advanceTimeBridge(ms);
+
+    this.renderSplash();
+  }
+
+  renderGameToTextBridge() {
+    if (this.runtime) {
+      return this.runtime.renderGameToText();
+    }
+    return JSON.stringify({
+      mode: this.currentScreen,
+      message: "No active run",
+    });
+  }
+
+  advanceTimeBridge(ms) {
+    if (this.runtime) {
+      return this.runtime.advanceTime(ms);
+    }
+    return Promise.resolve();
+  }
+
+  cleanupRuntime() {
+    if (!this.runtime) return;
+    this.runtime.stop();
+    this.runtime = null;
+  }
+
+  renderSplash() {
+    this.cleanupRuntime();
+    this.currentScreen = "splash";
+    this.root.innerHTML = `
+      <section class="screen splash-screen" id="splash-screen">
+        <div class="pulse-grid" aria-hidden="true"></div>
+        <div class="splash-content">
+          <p class="eyebrow">National Energy Command</p>
+          <h1>Save the Grid</h1>
+          <p class="subtitle">The country modernizes in real-time. Keep the power stable.</p>
+          <p class="hint">Press any key to continue</p>
+          <p class="status" id="splash-status">Initializing grid simulation...</p>
+        </div>
+      </section>
+    `;
+
+    window.addEventListener("keydown", this.boundSkipSplash, { once: true });
+    window.addEventListener("pointerdown", this.boundSkipSplash, { once: true });
+
+    this.splashTimeout = window.setTimeout(() => {
+      this.renderMainMenu();
+    }, 1800);
+  }
+
+  renderMainMenu() {
+    window.clearTimeout(this.splashTimeout);
+    this.currentScreen = "menu";
+    this.cleanupRuntime();
+
+    const hasContinue = !!this.suspendedRun;
+
+    this.root.innerHTML = `
+      <section class="screen menu-screen">
+        <div class="menu-layout">
+          <aside class="menu-column">
+            <h2>Command Console</h2>
+            <p class="menu-copy">Direct national power strategy through build, demolish, and reroute decisions.</p>
+            <div class="menu-actions">
+              ${hasContinue ? '<button class="action-btn" id="menu-continue">Continue Run</button>' : ""}
+              <button class="action-btn action-btn-primary" id="menu-new-run">New Run</button>
+              <button class="action-btn" id="menu-campaign">Campaign Missions</button>
+              <button class="action-btn" id="menu-custom">Custom Game</button>
+              <button class="action-btn" id="menu-cosmetics" disabled>Cosmetics (Soon)</button>
+              <button class="action-btn" id="menu-records">Records</button>
+              <button class="action-btn" id="menu-settings">Settings</button>
+              <button class="action-btn" id="menu-exit">Exit</button>
+            </div>
+            <p class="menu-footer">Local best score: ${this.bestScoreOverall()}</p>
+          </aside>
+          <div class="menu-map-preview" aria-hidden="true">
+            <div class="grid-silhouette"></div>
+            <div class="energy-rings"></div>
+          </div>
+          <aside class="menu-bulletin">
+            <h3>National Bulletin</h3>
+            <ul>
+              <li>Early maps stay compact for fast readability.</li>
+              <li>Population pressure activates in later missions.</li>
+              <li>Fragmented regions require in-level capital to unlock.</li>
+              <li>Completion unlocks progression, with no money carryover.</li>
+            </ul>
+          </aside>
+        </div>
+      </section>
+    `;
+
+    if (hasContinue) {
+      this.root.querySelector("#menu-continue")?.addEventListener("click", () => {
+        this.startRunFromSnapshot(this.suspendedRun);
+      });
+    }
+
+    this.root.querySelector("#menu-new-run")?.addEventListener("click", () => this.renderStandardSetup());
+    this.root.querySelector("#menu-campaign")?.addEventListener("click", () => this.renderCampaignSelect());
+    this.root.querySelector("#menu-custom")?.addEventListener("click", () => this.renderCustomSetup());
+    this.root.querySelector("#menu-records")?.addEventListener("click", () => this.renderRecordsScreen());
+    this.root.querySelector("#menu-settings")?.addEventListener("click", () => this.renderSettingsScreen());
+    this.root.querySelector("#menu-exit")?.addEventListener("click", () => {
+      this.pushToast("Exit is disabled in browser builds. Close the tab to leave.");
+    });
+  }
+
+  bestScoreOverall() {
+    const all = [...this.records.standard, ...this.records.campaign, ...this.records.custom];
+    if (!all.length) return "0";
+    const best = all.reduce((acc, run) => (run.finalScore > acc ? run.finalScore : acc), 0);
+    return String(best);
+  }
+
+  renderStandardSetup() {
+    this.currentScreen = "standard-setup";
+
+    const presetMarkup = STANDARD_PRESETS.map((preset) => {
+      const activeClass = preset.id === this.selectedStandardPresetId ? "preset-card active" : "preset-card";
+      return `
+        <button class="${activeClass}" data-preset="${preset.id}">
+          <h3>${preset.label}</h3>
+          <p>${preset.description}</p>
+          <p>Growth x${preset.demandGrowthMultiplier.toFixed(2)} | Event x${preset.eventIntensity.toFixed(2)}</p>
+          <p>Budget ${preset.budget} | Fragmentation ${preset.regionFragmentation}</p>
+        </button>
+      `;
+    }).join("");
+
+    this.root.innerHTML = `
+      <section class="screen setup-screen">
+        <header class="setup-header">
+          <h2>Standard Run Setup</h2>
+          <button class="ghost-btn" id="setup-back">Back to Menu</button>
+        </header>
+        <p class="setup-copy">Choose a leaderboard-eligible scenario profile.</p>
+        <div class="preset-grid">${presetMarkup}</div>
+        <footer class="setup-actions">
+          <button class="action-btn action-btn-primary" id="start-standard-run">Start Standard Run</button>
+        </footer>
+      </section>
+    `;
+
+    this.root.querySelectorAll("[data-preset]").forEach((button) => {
+      button.addEventListener("click", () => {
+        this.selectedStandardPresetId = button.getAttribute("data-preset") || STANDARD_PRESETS[0].id;
+        this.renderStandardSetup();
+      });
+    });
+
+    this.root.querySelector("#setup-back")?.addEventListener("click", () => this.renderMainMenu());
+    this.root.querySelector("#start-standard-run")?.addEventListener("click", () => {
+      const config = buildRunConfigFromStandardPreset(this.selectedStandardPresetId);
+      this.startRun(config);
+    });
+  }
+
+  renderCampaignSelect() {
+    this.currentScreen = "campaign-select";
+
+    const missionCards = CAMPAIGN_MISSIONS.map((mission, index) => {
+      const unlocked = index <= this.campaignProgress.unlockedMissionIndex;
+      const best = this.campaignProgress.missionBest[mission.id];
+      return `
+        <article class="mission-card ${unlocked ? "" : "locked"}" data-mission="${mission.id}">
+          <p class="mission-arc">${mission.arc}</p>
+          <h3>${toOrdinal(index)} Mission: ${mission.codename}</h3>
+          <p>${mission.premise}</p>
+          <p class="mission-tags">
+            <span>${mission.difficulty}</span>
+            <span>${mission.mapScale}</span>
+            <span>${mission.fragmentation}</span>
+            <span>${mission.populationMode === "off" ? "Static Population" : "Growth Active"}</span>
+            <span>${mission.seasonalMode === "off" ? "Neutral" : "Mixed Conditions"}</span>
+          </p>
+          <p class="mission-best">${best ? `Best ${best.finalScore} (${best.medal})` : "No completion record"}</p>
+          ${unlocked ? "" : '<p class="mission-locked-label">Locked</p>'}
+        </article>
+      `;
+    }).join("");
+
+    this.root.innerHTML = `
+      <section class="screen campaign-screen">
+        <header class="setup-header">
+          <h2>Campaign Missions</h2>
+          <button class="ghost-btn" id="campaign-back">Back to Menu</button>
+        </header>
+        <p class="setup-copy">Complete missions sequentially to unlock the next level.</p>
+        <div class="mission-grid">${missionCards}</div>
+      </section>
+    `;
+
+    this.root.querySelector("#campaign-back")?.addEventListener("click", () => this.renderMainMenu());
+
+    this.root.querySelectorAll("[data-mission]").forEach((card, index) => {
+      card.addEventListener("click", () => {
+        if (index > this.campaignProgress.unlockedMissionIndex) {
+          this.pushToast("Mission is locked. Complete previous missions first.");
+          return;
+        }
+        const missionId = card.getAttribute("data-mission");
+        const config = buildRunConfigFromCampaignMission(missionId);
+        this.startRun(config);
+      });
+    });
+  }
+
+  renderCustomSetup() {
+    this.currentScreen = "custom-setup";
+
+    const presetOptions = CUSTOM_PRESETS.map((preset) => {
+      return `<option value="${preset.id}">${preset.label}</option>`;
+    }).join("");
+
+    this.root.innerHTML = `
+      <section class="screen custom-screen">
+        <header class="setup-header">
+          <h2>Custom Game</h2>
+          <button class="ghost-btn" id="custom-back">Back to Menu</button>
+        </header>
+        <p class="setup-copy">Tune scenario pressure. Modified settings go to the Custom records table.</p>
+        <form class="custom-form" id="custom-form">
+          <label>
+            Preset
+            <select name="presetId">${presetOptions}</select>
+          </label>
+          <label>
+            Starting Budget
+            <input type="number" name="budget" min="400" max="2000" step="20" value="${this.customConfig.budget}">
+          </label>
+          <label>
+            Demand Growth Multiplier
+            <input type="number" name="demandGrowthMultiplier" min="0.5" max="1.8" step="0.05" value="${this.customConfig.demandGrowthMultiplier}">
+          </label>
+          <label>
+            Event Intensity
+            <select name="eventIntensity">
+              ${CUSTOM_OPTIONS.eventIntensity.map((value) => `<option value="${value}" ${String(this.customConfig.eventIntensity) === value ? "selected" : ""}>${value}</option>`).join("")}
+            </select>
+          </label>
+          <label>
+            Seasonal Profile
+            <select name="seasonalProfile">
+              ${CUSTOM_OPTIONS.seasonalProfile.map((value) => `<option value="${value}" ${this.customConfig.seasonalProfile === value ? "selected" : ""}>${value}</option>`).join("")}
+            </select>
+          </label>
+          <label>
+            Population Growth
+            <select name="populationMode">
+              ${CUSTOM_OPTIONS.populationMode.map((value) => `<option value="${value}" ${this.customConfig.populationMode === value ? "selected" : ""}>${value}</option>`).join("")}
+            </select>
+          </label>
+          <label>
+            Climate Intensity
+            <select name="climateIntensity">
+              ${CUSTOM_OPTIONS.climateIntensity.map((value) => `<option value="${value}" ${this.customConfig.climateIntensity === value ? "selected" : ""}>${value}</option>`).join("")}
+            </select>
+          </label>
+          <label>
+            Infrastructure Cost Multiplier
+            <input type="number" name="infraCostMultiplier" min="0.7" max="1.5" step="0.05" value="${this.customConfig.infraCostMultiplier}">
+          </label>
+          <label>
+            Failure Strictness
+            <select name="failureStrictness">
+              ${CUSTOM_OPTIONS.failureStrictness.map((value) => `<option value="${value}" ${String(this.customConfig.failureStrictness) === value ? "selected" : ""}>${value}</option>`).join("")}
+            </select>
+          </label>
+          <label>
+            Region Fragmentation
+            <select name="regionFragmentation">
+              ${CUSTOM_OPTIONS.regionFragmentation.map((value) => `<option value="${value}" ${this.customConfig.regionFragmentation === value ? "selected" : ""}>${value}</option>`).join("")}
+            </select>
+          </label>
+          <label>
+            Region Unlock Cost Profile
+            <select name="unlockCostProfile">
+              ${CUSTOM_OPTIONS.unlockCostProfile.map((value) => `<option value="${value}" ${this.customConfig.unlockCostProfile === value ? "selected" : ""}>${value}</option>`).join("")}
+            </select>
+          </label>
+          <label>
+            Run Target Duration (minutes)
+            <select name="runTargetMinutes">
+              ${CUSTOM_OPTIONS.runTargetMinutes.map((value) => `<option value="${value}" ${this.customConfig.runTargetMinutes === value ? "selected" : ""}>${value}</option>`).join("")}
+            </select>
+          </label>
+          <label class="checkbox-row">
+            <input type="checkbox" name="leaderboardEligible" ${this.customConfig.leaderboardEligible ? "checked" : ""}>
+            Mark as leaderboard-eligible preset
+          </label>
+          <footer class="setup-actions">
+            <button class="action-btn action-btn-primary" type="submit">Launch Custom Game</button>
+          </footer>
+        </form>
+      </section>
+    `;
+
+    this.root.querySelector("#custom-back")?.addEventListener("click", () => this.renderMainMenu());
+
+    const form = this.root.querySelector("#custom-form");
+    const presetSelect = form.querySelector("select[name='presetId']");
+    presetSelect.addEventListener("change", () => {
+      const preset = CUSTOM_PRESETS.find((item) => item.id === presetSelect.value);
+      if (preset) {
+        this.customConfig = deepClone(preset);
+        this.renderCustomSetup();
+      }
+    });
+
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const formData = new FormData(form);
+      this.customConfig = {
+        presetId: formData.get("presetId"),
+        budget: Number(formData.get("budget")),
+        demandGrowthMultiplier: Number(formData.get("demandGrowthMultiplier")),
+        eventIntensity: formData.get("eventIntensity"),
+        seasonalProfile: formData.get("seasonalProfile"),
+        populationMode: formData.get("populationMode"),
+        climateIntensity: formData.get("climateIntensity"),
+        infraCostMultiplier: Number(formData.get("infraCostMultiplier")),
+        failureStrictness: formData.get("failureStrictness"),
+        regionFragmentation: formData.get("regionFragmentation"),
+        unlockCostProfile: formData.get("unlockCostProfile"),
+        runTargetMinutes: Number(formData.get("runTargetMinutes")),
+        leaderboardEligible: !!formData.get("leaderboardEligible"),
+      };
+
+      const config = buildRunConfigFromCustom(this.customConfig);
+      this.startRun(config);
+    });
+  }
+
+  renderRecordsScreen() {
+    this.currentScreen = "records";
+
+    const renderRows = (records) => {
+      if (!records.length) {
+        return `<tr><td colspan="6">No records yet.</td></tr>`;
+      }
+      return records
+        .slice(0, 10)
+        .map((entry, index) => {
+          return `
+            <tr>
+              <td>${index + 1}</td>
+              <td>${entry.runLabel}</td>
+              <td>${entry.result}</td>
+              <td>${entry.finalScore}</td>
+              <td>${entry.reliability.toFixed(1)}%</td>
+              <td>${new Date(entry.completedAt).toLocaleString()}</td>
+            </tr>
+          `;
+        })
+        .join("");
+    };
+
+    this.root.innerHTML = `
+      <section class="screen records-screen">
+        <header class="setup-header">
+          <h2>Records</h2>
+          <button class="ghost-btn" id="records-back">Back to Menu</button>
+        </header>
+        <div class="records-layout">
+          <article>
+            <h3>Standard</h3>
+            <table>
+              <thead><tr><th>#</th><th>Run</th><th>Result</th><th>Score</th><th>Reliability</th><th>When</th></tr></thead>
+              <tbody>${renderRows(this.records.standard)}</tbody>
+            </table>
+          </article>
+          <article>
+            <h3>Campaign</h3>
+            <table>
+              <thead><tr><th>#</th><th>Run</th><th>Result</th><th>Score</th><th>Reliability</th><th>When</th></tr></thead>
+              <tbody>${renderRows(this.records.campaign)}</tbody>
+            </table>
+          </article>
+          <article>
+            <h3>Custom</h3>
+            <table>
+              <thead><tr><th>#</th><th>Run</th><th>Result</th><th>Score</th><th>Reliability</th><th>When</th></tr></thead>
+              <tbody>${renderRows(this.records.custom)}</tbody>
+            </table>
+          </article>
+        </div>
+      </section>
+    `;
+
+    this.root.querySelector("#records-back")?.addEventListener("click", () => this.renderMainMenu());
+  }
+
+  renderSettingsScreen() {
+    this.currentScreen = "settings";
+
+    this.root.innerHTML = `
+      <section class="screen settings-screen">
+        <header class="setup-header">
+          <h2>Settings</h2>
+          <button class="ghost-btn" id="settings-back">Back to Menu</button>
+        </header>
+        <form class="settings-form" id="settings-form">
+          <label>
+            UI Scale
+            <select name="uiScale">
+              <option value="compact" ${this.settings.uiScale === "compact" ? "selected" : ""}>Compact</option>
+              <option value="normal" ${this.settings.uiScale === "normal" ? "selected" : ""}>Normal</option>
+              <option value="large" ${this.settings.uiScale === "large" ? "selected" : ""}>Large</option>
+            </select>
+          </label>
+          <label class="checkbox-row">
+            <input type="checkbox" name="highContrast" ${this.settings.highContrast ? "checked" : ""}>
+            High contrast alerts
+          </label>
+          <label class="checkbox-row">
+            <input type="checkbox" name="reducedMotion" ${this.settings.reducedMotion ? "checked" : ""}>
+            Reduced motion
+          </label>
+          <footer class="setup-actions">
+            <button class="action-btn action-btn-primary" type="submit">Save Settings</button>
+          </footer>
+        </form>
+      </section>
+    `;
+
+    this.root.querySelector("#settings-back")?.addEventListener("click", () => this.renderMainMenu());
+    this.root.querySelector("#settings-form")?.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const formData = new FormData(event.currentTarget);
+      this.settings = {
+        uiScale: formData.get("uiScale"),
+        highContrast: !!formData.get("highContrast"),
+        reducedMotion: !!formData.get("reducedMotion"),
+      };
+      writeJsonStorage(STORAGE_KEYS.settings, this.settings);
+      this.pushToast("Settings saved.");
+      this.renderMainMenu();
+    });
+  }
+
+  startRun(runConfig) {
+    this.currentScreen = "run";
+    this.cleanupRuntime();
+
+    this.root.innerHTML = `
+      <section class="screen run-screen">
+        <header class="hud-topbar">
+          <div class="hud-metrics" id="hud-metrics">
+            <span>Budget <strong id="hud-budget">0</strong></span>
+            <span>Reliability <strong id="hud-reliability">0%</strong></span>
+            <span>Unmet <strong id="hud-unmet">0</strong></span>
+            <span>Timer <strong id="hud-timer">00:00</strong></span>
+            <span>Season <strong id="hud-season">neutral</strong></span>
+            <span>Score <strong id="hud-score">0</strong></span>
+            <span>Lawsuits <strong id="hud-lawsuits">0</strong></span>
+          </div>
+          <div class="hud-actions">
+            <button class="ghost-btn" id="run-pause-btn">Pause</button>
+            <button class="ghost-btn" id="run-save-exit-btn">Save & Exit</button>
+          </div>
+        </header>
+
+        <div class="run-layout">
+          <aside class="tool-rail">
+            <h3>Command Tools</h3>
+            <button class="tool-btn" data-tool="build">Build</button>
+            <button class="tool-btn" data-tool="demolish">Demolish</button>
+            <button class="tool-btn" data-tool="reroute">Reroute</button>
+            <hr>
+            <button class="asset-btn" data-asset="plant">1: Plant</button>
+            <button class="asset-btn" data-asset="substation">2: Substation</button>
+            <button class="asset-btn" data-asset="storage">3: Storage</button>
+            <p class="tool-hint">Right click: quick demolish<br>Space: pause<br>Tab: cycle critical alerts<br>F: fullscreen</p>
+          </aside>
+
+          <main class="map-shell" id="map-shell">
+            <canvas id="game-canvas" aria-label="Grid map"></canvas>
+          </main>
+
+          <aside class="event-rail">
+            <section class="objective-box">
+              <h3 id="objective-title">Objective</h3>
+              <p id="objective-text"></p>
+              <div class="objective-progress"><span id="objective-progress-fill"></span></div>
+              <p id="objective-detail" class="objective-detail"></p>
+            </section>
+            <section>
+              <h3>Incident Rail</h3>
+              <ul id="incident-list" class="incident-list"></ul>
+            </section>
+            <section>
+              <h3>Alert Rail</h3>
+              <ul id="alert-list" class="alert-list"></ul>
+            </section>
+          </aside>
+        </div>
+
+        <footer class="context-panel" id="context-panel">
+          <div id="region-context">
+            <h3>Region Context</h3>
+            <p>Select a region on the map.</p>
+          </div>
+          <div class="ticker" id="news-ticker">National bulletin feed online.</div>
+        </footer>
+      </section>
+    `;
+
+    const canvas = this.root.querySelector("#game-canvas");
+    const pauseButton = this.root.querySelector("#run-pause-btn");
+    const saveExitButton = this.root.querySelector("#run-save-exit-btn");
+
+    this.runtime = new GameRuntime({
+      canvas,
+      runConfig,
+      settings: this.settings,
+      callbacks: {
+        onHud: (payload) => this.updateRunHud(payload),
+        onRunEnd: (summary) => this.handleRunEnd(summary),
+        onHighlightAlert: (alertId) => this.highlightAlert(alertId),
+        onNews: (text) => {
+          const ticker = this.root.querySelector("#news-ticker");
+          if (ticker) ticker.textContent = text;
+        },
+      },
+    });
+
+    this.runtime.start();
+
+    this.root.querySelectorAll("[data-tool]").forEach((button) => {
+      button.addEventListener("click", () => {
+        this.runtime.tool = button.getAttribute("data-tool");
+        this.runtime.pushHudUpdate();
+      });
+    });
+
+    this.root.querySelectorAll("[data-asset]").forEach((button) => {
+      button.addEventListener("click", () => {
+        this.runtime.tool = TOOL_BUILD;
+        this.runtime.buildAssetType = button.getAttribute("data-asset");
+        this.runtime.pushHudUpdate();
+      });
+    });
+
+    pauseButton?.addEventListener("click", () => {
+      this.runtime.togglePause();
+      pauseButton.textContent = this.runtime.paused ? "Resume" : "Pause";
+    });
+
+    saveExitButton?.addEventListener("click", () => {
+      const snapshot = this.runtime.serializeForSuspend();
+      this.suspendedRun = snapshot;
+      writeJsonStorage(STORAGE_KEYS.suspendedRun, snapshot);
+      this.pushToast("Run suspended. Continue Run is now available from menu.");
+      this.renderMainMenu();
+    });
+  }
+
+  startRunFromSnapshot(snapshot) {
+    if (!snapshot || !snapshot.runConfig || !snapshot.gameState) {
+      this.pushToast("Saved run data was invalid. Starting fresh menu.");
+      this.suspendedRun = null;
+      writeJsonStorage(STORAGE_KEYS.suspendedRun, null);
+      this.renderMainMenu();
+      return;
+    }
+
+    this.currentScreen = "run";
+    this.cleanupRuntime();
+
+    this.root.innerHTML = `
+      <section class="screen run-screen">
+        <header class="hud-topbar">
+          <div class="hud-metrics" id="hud-metrics">
+            <span>Budget <strong id="hud-budget">0</strong></span>
+            <span>Reliability <strong id="hud-reliability">0%</strong></span>
+            <span>Unmet <strong id="hud-unmet">0</strong></span>
+            <span>Timer <strong id="hud-timer">00:00</strong></span>
+            <span>Season <strong id="hud-season">neutral</strong></span>
+            <span>Score <strong id="hud-score">0</strong></span>
+            <span>Lawsuits <strong id="hud-lawsuits">0</strong></span>
+          </div>
+          <div class="hud-actions">
+            <button class="ghost-btn" id="run-pause-btn">Pause</button>
+            <button class="ghost-btn" id="run-save-exit-btn">Save & Exit</button>
+          </div>
+        </header>
+
+        <div class="run-layout">
+          <aside class="tool-rail">
+            <h3>Command Tools</h3>
+            <button class="tool-btn" data-tool="build">Build</button>
+            <button class="tool-btn" data-tool="demolish">Demolish</button>
+            <button class="tool-btn" data-tool="reroute">Reroute</button>
+            <hr>
+            <button class="asset-btn" data-asset="plant">1: Plant</button>
+            <button class="asset-btn" data-asset="substation">2: Substation</button>
+            <button class="asset-btn" data-asset="storage">3: Storage</button>
+            <p class="tool-hint">Right click: quick demolish<br>Space: pause<br>Tab: cycle critical alerts<br>F: fullscreen</p>
+          </aside>
+
+          <main class="map-shell" id="map-shell">
+            <canvas id="game-canvas" aria-label="Grid map"></canvas>
+          </main>
+
+          <aside class="event-rail">
+            <section class="objective-box">
+              <h3 id="objective-title">Objective</h3>
+              <p id="objective-text"></p>
+              <div class="objective-progress"><span id="objective-progress-fill"></span></div>
+              <p id="objective-detail" class="objective-detail"></p>
+            </section>
+            <section>
+              <h3>Incident Rail</h3>
+              <ul id="incident-list" class="incident-list"></ul>
+            </section>
+            <section>
+              <h3>Alert Rail</h3>
+              <ul id="alert-list" class="alert-list"></ul>
+            </section>
+          </aside>
+        </div>
+
+        <footer class="context-panel" id="context-panel">
+          <div id="region-context">
+            <h3>Region Context</h3>
+            <p>Select a region on the map.</p>
+          </div>
+          <div class="ticker" id="news-ticker">Resuming archived session...</div>
+        </footer>
+      </section>
+    `;
+
+    const canvas = this.root.querySelector("#game-canvas");
+
+    this.runtime = new GameRuntime({
+      canvas,
+      runConfig: snapshot.runConfig,
+      snapshot: snapshot.gameState,
+      settings: this.settings,
+      callbacks: {
+        onHud: (payload) => this.updateRunHud(payload),
+        onRunEnd: (summary) => this.handleRunEnd(summary),
+        onHighlightAlert: (alertId) => this.highlightAlert(alertId),
+        onNews: (text) => {
+          const ticker = this.root.querySelector("#news-ticker");
+          if (ticker) ticker.textContent = text;
+        },
+      },
+    });
+
+    this.runtime.hydrateRuntimeState(snapshot);
+    this.runtime.start();
+
+    this.root.querySelectorAll("[data-tool]").forEach((button) => {
+      button.addEventListener("click", () => {
+        this.runtime.tool = button.getAttribute("data-tool");
+        this.runtime.pushHudUpdate();
+      });
+    });
+
+    this.root.querySelectorAll("[data-asset]").forEach((button) => {
+      button.addEventListener("click", () => {
+        this.runtime.tool = TOOL_BUILD;
+        this.runtime.buildAssetType = button.getAttribute("data-asset");
+        this.runtime.pushHudUpdate();
+      });
+    });
+
+    this.root.querySelector("#run-pause-btn")?.addEventListener("click", () => {
+      this.runtime.togglePause();
+    });
+
+    this.root.querySelector("#run-save-exit-btn")?.addEventListener("click", () => {
+      const nextSnapshot = this.runtime.serializeForSuspend();
+      this.suspendedRun = nextSnapshot;
+      writeJsonStorage(STORAGE_KEYS.suspendedRun, nextSnapshot);
+      this.pushToast("Run suspended. Continue Run is available from menu.");
+      this.renderMainMenu();
+    });
+
+    this.suspendedRun = snapshot;
+  }
+
+  updateRunHud(payload) {
+    const $ = (selector) => this.root.querySelector(selector);
+
+    const budgetNode = $("#hud-budget");
+    const reliabilityNode = $("#hud-reliability");
+    const unmetNode = $("#hud-unmet");
+    const timerNode = $("#hud-timer");
+    const seasonNode = $("#hud-season");
+    const scoreNode = $("#hud-score");
+    const lawsuitsNode = $("#hud-lawsuits");
+
+    if (!budgetNode || !reliabilityNode || !unmetNode || !timerNode || !seasonNode || !scoreNode || !lawsuitsNode) {
+      return;
+    }
+
+    budgetNode.textContent = Math.round(payload.budget).toString();
+    reliabilityNode.textContent = `${payload.reliability.toFixed(1)}%`;
+    unmetNode.textContent = payload.unmetDemand.toFixed(1);
+    timerNode.textContent = formatTime(payload.timer);
+    seasonNode.textContent = payload.season.toUpperCase();
+    scoreNode.textContent = Math.round(payload.score).toString();
+    lawsuitsNode.textContent = String(payload.lawsuits);
+
+    const toolButtons = this.root.querySelectorAll(".tool-btn");
+    toolButtons.forEach((button) => {
+      const isActive = button.getAttribute("data-tool") === payload.tool;
+      button.classList.toggle("active", isActive);
+    });
+
+    const assetButtons = this.root.querySelectorAll(".asset-btn");
+    assetButtons.forEach((button) => {
+      const isActive = button.getAttribute("data-asset") === payload.buildAssetType;
+      button.classList.toggle("active", isActive);
+    });
+
+    const objectiveTitle = $("#objective-title");
+    const objectiveText = $("#objective-text");
+    const objectiveDetail = $("#objective-detail");
+    const objectiveFill = $("#objective-progress-fill");
+
+    if (objectiveTitle) objectiveTitle.textContent = payload.objective.title;
+    if (objectiveText) objectiveText.textContent = payload.objective.text;
+    if (objectiveDetail) objectiveDetail.textContent = payload.objective.detail;
+    if (objectiveFill) objectiveFill.style.width = `${Math.round(payload.objective.progress * 100)}%`;
+
+    const incidentList = $("#incident-list");
+    if (incidentList) {
+      incidentList.innerHTML = payload.incidents.length
+        ? payload.incidents
+            .slice(0, 5)
+            .map((incident) => {
+              const level = ALERT_LEVELS[incident.level] || ALERT_LEVELS.advisory;
+              return `<li style="--level:${level.color}"><strong>${incident.title}</strong><span>${incident.body}</span></li>`;
+            })
+            .join("")
+        : "<li><span>No active incidents.</span></li>";
+    }
+
+    const alertList = $("#alert-list");
+    if (alertList) {
+      alertList.innerHTML = payload.alerts.length
+        ? payload.alerts
+            .slice(0, 7)
+            .map((alert) => {
+              const level = ALERT_LEVELS[alert.level] || ALERT_LEVELS.advisory;
+              return `<li data-alert-id="${alert.id}" style="--level:${level.color}"><strong>${level.label}</strong><span>${alert.text}</span></li>`;
+            })
+            .join("")
+        : "<li><span>No active alerts.</span></li>";
+    }
+
+    const contextPanel = $("#context-panel");
+    if (contextPanel) {
+      const regionContext = contextPanel.querySelector("#region-context");
+      const selected = payload.selectedRegion;
+      if (!selected) {
+        if (regionContext) {
+          regionContext.innerHTML = "<h3>Region Context</h3><p>Select a region on the map.</p>";
+        }
+      } else {
+        const unlockCost = Math.ceil(selected.unlockCost * this.runtime.config.unlockCostMultiplier);
+        const selectedHtml = `
+          <h3>${selected.name}</h3>
+          <p>${selected.districtType} | ${selected.climate} climate | ${selected.terrain} terrain</p>
+          <p>Priority ${selected.priority.toUpperCase()} | Population ${selected.population.toFixed(1)}</p>
+          <p>Demand ${selected.demand.toFixed(1)} | Served ${selected.served.toFixed(1)} | Unmet ${selected.unmet.toFixed(1)}</p>
+          <p>Assets P${selected.assets.plant} S${selected.assets.substation} B${selected.assets.storage}</p>
+          <p>${selected.unlocked ? "Region active" : `Unlock cost: ${unlockCost}`}</p>
+        `;
+        if (regionContext) {
+          regionContext.innerHTML = selectedHtml;
+        }
+      }
+    }
+  }
+
+  highlightAlert(alertId) {
+    this.root.querySelectorAll("#alert-list li").forEach((item) => {
+      const active = item.getAttribute("data-alert-id") === alertId;
+      item.classList.toggle("highlight", active);
+    });
+  }
+
+  handleRunEnd(summary) {
+    this.runtime = null;
+
+    this.suspendedRun = null;
+    writeJsonStorage(STORAGE_KEYS.suspendedRun, null);
+
+    const runClass = summary.leaderboardEligible ? summary.runClass : "custom";
+    const targetBucket = this.records[runClass] ? runClass : "custom";
+
+    const entry = {
+      runLabel: summary.runLabel,
+      result: summary.result,
+      finalScore: summary.finalScore,
+      reliability: summary.reliability,
+      budget: summary.budget,
+      completedAt: Date.now(),
+    };
+
+    this.records[targetBucket].push(entry);
+    this.records[targetBucket].sort((a, b) => b.finalScore - a.finalScore);
+    this.records[targetBucket] = this.records[targetBucket].slice(0, 20);
+    writeJsonStorage(STORAGE_KEYS.records, this.records);
+
+    if (summary.config.mode === "campaign" && summary.config.mission && summary.result === "victory") {
+      const missionIndex = CAMPAIGN_MISSIONS.findIndex((m) => m.id === summary.config.mission.id);
+      const nextIndex = Math.max(this.campaignProgress.unlockedMissionIndex, missionIndex + 1);
+      this.campaignProgress.unlockedMissionIndex = Math.min(nextIndex, CAMPAIGN_MISSIONS.length - 1);
+
+      const medal =
+        summary.reliability >= 90 && summary.finalScore >= 2800
+          ? "gold"
+          : summary.reliability >= 82 && summary.finalScore >= 2200
+            ? "silver"
+            : "bronze";
+
+      const existing = this.campaignProgress.missionBest[summary.config.mission.id];
+      if (!existing || summary.finalScore > existing.finalScore) {
+        this.campaignProgress.missionBest[summary.config.mission.id] = {
+          finalScore: summary.finalScore,
+          reliability: summary.reliability,
+          medal,
+        };
+      }
+
+      writeJsonStorage(STORAGE_KEYS.campaignProgress, this.campaignProgress);
+    }
+
+    this.renderEndScreen(summary, entry);
+  }
+
+  renderEndScreen(summary, recordEntry) {
+    this.currentScreen = "end";
+
+    const rankingBucket = summary.leaderboardEligible ? summary.runClass : "custom";
+    const leaderboard = (this.records[rankingBucket] || []).slice(0, 5);
+    const placement = leaderboard.findIndex(
+      (entry) =>
+        entry.finalScore === recordEntry.finalScore &&
+        entry.completedAt === recordEntry.completedAt
+    );
+
+    const timelineItems = summary.timeline
+      .map((moment) => `<li><strong>${formatTime(moment.at)}</strong> ${moment.text}</li>`)
+      .join("");
+
+    this.root.innerHTML = `
+      <section class="screen end-screen">
+        <header>
+          <p class="eyebrow">${summary.result === "victory" ? "Grid Stabilized" : "Grid Under Strain"}</p>
+          <h2>${summary.reason}</h2>
+          <p>${summary.result === "victory" ? "National command retained system control." : "Run ended under collapse conditions."}</p>
+        </header>
+
+        <div class="end-metrics">
+          <article><h3>Final Score</h3><p>${summary.finalScore}</p></article>
+          <article><h3>Leaderboard</h3><p>${placement >= 0 ? toOrdinal(placement) : "Unranked"}</p></article>
+          <article><h3>Reliability</h3><p>${summary.reliability.toFixed(1)}%</p></article>
+          <article><h3>Budget</h3><p>${Math.round(summary.budget)}</p></article>
+          <article><h3>Demand Served</h3><p>${Math.round(summary.demandServedRatio * 100)}%</p></article>
+        </div>
+
+        <section class="timeline-box">
+          <h3>Key Timeline Moments</h3>
+          <ul>${timelineItems || "<li>No timeline moments recorded.</li>"}</ul>
+        </section>
+
+        <footer class="setup-actions">
+          <button class="action-btn action-btn-primary" id="end-retry">Retry</button>
+          <button class="action-btn" id="end-new-run">New Run</button>
+          <button class="action-btn" id="end-menu">Return to Menu</button>
+        </footer>
+      </section>
+    `;
+
+    this.root.querySelector("#end-retry")?.addEventListener("click", () => {
+      this.startRun(summary.config);
+    });
+    this.root.querySelector("#end-new-run")?.addEventListener("click", () => this.renderStandardSetup());
+    this.root.querySelector("#end-menu")?.addEventListener("click", () => this.renderMainMenu());
+  }
+
+  pushToast(message) {
+    const existing = this.root.querySelector(".toast");
+    if (existing) existing.remove();
+
+    const toast = document.createElement("div");
+    toast.className = "toast";
+    toast.textContent = message;
+    this.root.appendChild(toast);
+    window.setTimeout(() => toast.remove(), 2400);
+  }
+}

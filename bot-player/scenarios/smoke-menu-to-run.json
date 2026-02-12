@@ -1,0 +1,182 @@
+{
+  "name": "smoke-menu-to-run",
+  "description": "Menu -> standard setup -> in-run -> save/exit sequence.",
+  "options": {
+    "timeoutMs": 7000,
+    "stepDelayMs": 250,
+    "failOnConsoleError": true
+  },
+  "steps": [
+    {
+      "action": "wait",
+      "ms": 400,
+      "name": "initial-load-wait"
+    },
+    {
+      "action": "click",
+      "name": "skip-splash",
+      "optional": true,
+      "targets": [
+        { "selector": "[data-testid='splash-skip']" },
+        { "text": "Press any key" },
+        { "text": "Skip" }
+      ]
+    },
+    {
+      "action": "press",
+      "name": "fallback-enter",
+      "key": "Enter",
+      "optional": true
+    },
+    {
+      "action": "waitFor",
+      "name": "wait-for-main-menu",
+      "targets": [
+        { "selector": "#menu-new-run" },
+        { "role": "button", "name": "New Run" }
+      ]
+    },
+    {
+      "action": "click",
+      "name": "clear-stale-splash-pointer-hook",
+      "optional": true,
+      "timeoutMs": 600,
+      "targets": [
+        { "selector": ".menu-screen" },
+        { "selector": "body" }
+      ]
+    },
+    {
+      "action": "waitFor",
+      "name": "reconfirm-main-menu",
+      "targets": [
+        { "selector": "#menu-new-run" }
+      ]
+    },
+    {
+      "action": "click",
+      "name": "start-new-run",
+      "targets": [
+        { "selector": "#menu-new-run" },
+        { "selector": "[data-testid='menu-new-run']" },
+        { "role": "button", "name": "New Run" },
+        { "text": "New Run" }
+      ]
+    },
+    {
+      "action": "waitFor",
+      "name": "wait-for-standard-setup",
+      "targets": [
+        { "selector": "#start-standard-run" },
+        { "role": "button", "name": "Start Standard Run" },
+        { "text": "Standard Run Setup" }
+      ]
+    },
+    {
+      "action": "click",
+      "name": "start-standard-run",
+      "targets": [
+        { "selector": "#start-standard-run" },
+        { "role": "button", "name": "Start Standard Run" },
+        { "text": "Start Standard Run" }
+      ]
+    },
+    {
+      "action": "waitFor",
+      "name": "enter-run-screen",
+      "targets": [
+        { "selector": "#game-canvas" },
+        { "selector": ".run-screen" },
+        { "selector": "[data-testid='in-run-screen']" },
+        { "selector": "[data-surface='run']" },
+        { "selector": "canvas" }
+      ]
+    },
+    {
+      "action": "click",
+      "name": "select-build-tool",
+      "targets": [
+        { "selector": ".tool-btn[data-tool='build']" },
+        { "selector": "[data-testid='tool-build']" },
+        { "text": "Build" }
+      ]
+    },
+    {
+      "action": "click",
+      "name": "select-plant-asset",
+      "targets": [
+        { "selector": ".asset-btn[data-asset='plant']" },
+        { "selector": "[data-testid='asset-plant']" },
+        { "text": "1: Plant" }
+      ]
+    },
+    {
+      "action": "press",
+      "name": "hotkey-build-tool",
+      "key": "1",
+      "optional": true
+    },
+    {
+      "action": "autoplay",
+      "name": "short-autoplay",
+      "iterations": 9,
+      "dwellMs": 250,
+      "advanceMs": 450,
+      "idleKey": "Tab",
+      "selectors": [
+        ".tool-btn[data-tool='build']",
+        ".tool-btn[data-tool='demolish']",
+        ".tool-btn[data-tool='reroute']",
+        ".asset-btn[data-asset='plant']",
+        ".asset-btn[data-asset='substation']",
+        ".asset-btn[data-asset='storage']",
+        "#run-pause-btn",
+        "[data-testid='tool-build']",
+        "[data-testid='tool-reroute']",
+        "[data-testid='tool-demolish']",
+        "[data-testid='action-confirm']",
+        "[data-testid='event-dismiss']"
+      ],
+      "canvasSelector": "#game-canvas"
+    },
+    {
+      "action": "press",
+      "name": "pause-toggle-on",
+      "key": "Space",
+      "optional": true
+    },
+    {
+      "action": "wait",
+      "name": "pause-hold",
+      "ms": 350
+    },
+    {
+      "action": "press",
+      "name": "pause-toggle-off",
+      "key": "Space",
+      "optional": true
+    },
+    {
+      "action": "click",
+      "name": "save-and-exit",
+      "targets": [
+        { "selector": "#run-save-exit-btn" },
+        { "text": "Save & Exit" }
+      ]
+    },
+    {
+      "action": "waitFor",
+      "name": "back-on-menu",
+      "targets": [
+        { "selector": "#menu-continue" },
+        { "selector": "#menu-new-run" },
+        { "text": "Command Console" }
+      ]
+    },
+    {
+      "action": "screenshot",
+      "name": "smoke-menu-to-run",
+      "fullPage": true
+    }
+  ]
+}
