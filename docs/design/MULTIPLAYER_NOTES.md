@@ -54,3 +54,4 @@ Whenever a design decision is made in singleplayer implementation, append a shor
 1. Added campaign missions as fixed-scenario singleplayer content. Impact: neutral-to-positive for asynchronous multiplayer because authored map IDs and objective packets can be reused as competitive scenarios.
 2. Added custom game parameter screen with separate score class. Impact: positive because ruleset declarations can later become lobby presets.
 3. Locked 2D overhead map and shared interaction vocabulary across modes. Impact: positive because it avoids per-mode control fragmentation in future multiplayer UI.
+4. Added seasonal/regional demand modifiers with onboarding gating. Impact: positive if season state and climate tags are included in scenario packets for fair score comparability.

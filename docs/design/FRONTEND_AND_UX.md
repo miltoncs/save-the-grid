@@ -89,6 +89,8 @@ Primary user-facing surfaces:
 3. Difficulty indicator.
 4. Completion medal state (none, bronze, silver, gold).
 5. Best score and best reliability.
+6. Population growth status tag (`Static Population` or `Growth Active`).
+7. Seasonal/regional condition status tag (`Neutral`, `Winter Pressure`, `Summer Pressure`, `Mixed`).
 
 ### UX Rules
 
@@ -107,9 +109,11 @@ Let players tune scenario pressure for practice or challenge runs while preservi
 2. Starting budget.
 3. Demand growth rate.
 4. Event intensity.
-5. Infrastructure costs.
-6. Failure strictness thresholds.
-7. Run target duration band.
+5. Seasonal profile.
+6. Regional climate intensity.
+7. Infrastructure costs.
+8. Failure strictness thresholds.
+9. Run target duration band.
 
 ### Scoring and Integrity Rules
 
@@ -121,7 +125,7 @@ Let players tune scenario pressure for practice or challenge runs while preservi
 
 ### Information Architecture
 
-- Top bar: budget, reliability, public trust, unmet demand, run timer.
+- Top bar: budget, reliability, public trust, unmet demand, run timer, population trend (when enabled), active season/condition.
 - Left tool rail: build, demolish, reroute categories.
 - Right event rail: active incidents, mission objectives, short briefings.
 - Bottom context panel: selected asset stats and action confirmations.
@@ -141,6 +145,9 @@ Let players tune scenario pressure for practice or challenge runs while preservi
 3. Critical (red): immediate service threat.
 
 Alerts must be non-blocking and expire cleanly.
+
+Population-related warnings should use the same alert system once the mechanic is enabled.
+Seasonal/regional demand warnings should use the same alert system once the mechanic is enabled.
 
 ### Pause Behavior (Singleplayer)
 
@@ -162,6 +169,11 @@ Rules:
 - No forced dialogue trees.
 - Mechanical consequence always shown next to narrative text.
 - Story copy length target: one to two lines.
+
+Onboarding rule:
+
+- Tutorial and early levels hide population-growth UI elements until the mechanic is introduced.
+- Tutorial and early levels hide seasonal/regional condition UI elements until the mechanic is introduced.
 
 ## 9. Input and Control Mapping (Draft)
 

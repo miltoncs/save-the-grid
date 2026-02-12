@@ -29,6 +29,8 @@ The player is the Chief of Energy for a fictional country. In real time, they bu
 9. Campaign rewards remain cosmetic-only.
 10. V1 maps are handcrafted (procedural generation deferred).
 11. Visual style is flat 2D with limited color palettes and minimal gradients.
+12. Population growth is a core difficulty mechanic, introduced only after tutorial/early onboarding levels.
+13. Seasonal and regional demand conditions are core difficulty mechanics, introduced only after tutorial/early onboarding levels.
 
 ## 4. Player Fantasy and Role
 
@@ -53,10 +55,14 @@ The primary strategic question is always the same: what to build, when to build 
 
 - Player begins with a starter grid, budget, and small baseline generation.
 - Initial objectives are simple to teach controls and priorities.
+- Early onboarding runs/missions can disable population growth to avoid overload.
+- Early onboarding runs/missions can disable seasonal/regional demand modifiers to avoid overload.
 
 ### Mid-Run Escalation
 
 - Demand growth accelerates.
+- Population growth pressure comes online (outside onboarding missions).
+- Seasonal and regional demand pressure comes online (outside onboarding missions).
 - Event frequency increases.
 - Grid complexity rises with bottlenecks and overloaded routes.
 
@@ -94,6 +100,23 @@ The primary strategic question is always the same: what to build, when to build 
 - Supply is simplified to capacity and availability values.
 - Routing is based on connectivity and line capacity.
 
+### 8.3.1 Population Growth as Difficulty Driver
+
+- Districts track population as a lightweight value that influences demand growth.
+- When population grows, baseline demand and peak stress both increase.
+- Growth rates are tuned to be readable and strategically meaningful, not simulation-heavy.
+- Population growth is disabled in tutorial/early onboarding missions and enabled in later content.
+
+### 8.3.2 Seasonal and Regional Demand Conditions
+
+- Regions have simple climate tags (for example cold, temperate, warm) that modify demand by season.
+- Seasonal demand effects are intentionally high-level and transparent to the player.
+- Example demand effects:
+  - Cold regions in winter draw more power (heating pressure).
+  - Warm regions in summer draw more power (cooling pressure).
+- Seasonal/regional modifiers are applied as readable demand multipliers, not deep weather simulation.
+- Seasonal/regional modifiers are disabled in tutorial/early onboarding missions and enabled in later content.
+
 ### 8.4 Failure and Pressure
 
 - Overload when routed power exceeds line/substation limits.
@@ -119,9 +142,12 @@ To keep the game shallow and fast:
 
 - Include:
   - Plant output, demand growth, reliability pressure, basic operating costs.
+  - Population growth pressure as a simple demand multiplier once onboarding is complete.
+  - Seasonal and regional demand modifiers as simple, visible multipliers once onboarding is complete.
   - Event-driven modifiers (for example heat wave demand spikes).
 - Exclude for v1:
   - Layered mechanics that dilute the build/when/where strategic core.
+  - Detailed weather physics or climate micro-simulation.
   - Detailed fuel supply chains.
   - Unit-level labor simulation.
   - Deep policy/legal simulation trees.
@@ -179,3 +205,5 @@ See `MULTIPLAYER_NOTES.md` for forward-looking design constraints.
 3. Launch campaign size (8, 10, or 12 missions).
 4. Number of handcrafted maps at launch (1, 2, or 3).
 5. Event interaction model (passive events only vs fast binary choices in real time).
+6. Population growth curve tuning after onboarding (gentle, moderate, or steep).
+7. Seasonal demand model shape (fixed season per run vs season shifts during long runs).

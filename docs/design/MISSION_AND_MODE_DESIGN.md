@@ -42,6 +42,12 @@ Campaign missions provide curated scenarios and light national storytelling with
   2. Industrial Expansion.
   3. Transition and Resilience.
 
+Onboarding rule:
+
+- First tutorial/early missions run with static population (no growth mechanic).
+- Population growth is introduced in later missions once core build/reroute controls are learned.
+- Seasonal/regional demand modifiers are introduced in later missions after baseline routing mastery.
+
 ### Mission Format
 
 Each mission defines:
@@ -51,6 +57,8 @@ Each mission defines:
 3. 2-3 explicit objectives.
 4. 1-2 constraint modifiers.
 5. Optional secondary objective for higher medal tier.
+6. Population growth mode (`off` for onboarding, `on` for standard and advanced missions).
+7. Seasonal/regional condition mode (`off` for onboarding, `on` for standard and advanced missions).
 
 ### Objective Types
 
@@ -59,6 +67,8 @@ Each mission defines:
 3. Survive an event sequence.
 4. Limit budget overspend.
 5. Reach electrification coverage in target regions.
+6. Stabilize service during population-driven demand acceleration.
+7. Maintain reliability through seasonal demand spikes.
 
 ### Constraint Examples
 
@@ -66,6 +76,7 @@ Each mission defines:
 2. Higher line construction costs.
 3. Increased weather event frequency.
 4. Restricted demolition refunds.
+5. Regional winter/summer demand surges.
 
 ### Mission Completion and Rewards
 
@@ -102,6 +113,9 @@ No branching dialogue trees are required for v1.
 7. Reliability failure tolerance.
 8. Trust decay sensitivity.
 9. Run duration target band.
+10. Population growth strength (`off`, `normal`, `high`).
+11. Seasonal profile (`neutral`, `winter-peak`, `summer-peak`, `mixed`).
+12. Regional climate intensity (`low`, `normal`, `high`).
 
 ### Integrity Policy
 
@@ -114,9 +128,11 @@ No branching dialogue trees are required for v1.
 Difficulty should scale through a small set of readable knobs:
 
 1. Demand ramp speed.
-2. Incident frequency.
-3. Economic pressure.
-4. Failure threshold strictness.
+2. Population growth pressure.
+3. Seasonal/regional demand pressure.
+4. Incident frequency.
+5. Economic pressure.
+6. Failure threshold strictness.
 
 Avoid hidden multipliers that reduce player trust in outcomes.
 

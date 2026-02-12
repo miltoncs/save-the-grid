@@ -1,24 +1,20 @@
 # Save the Grid Documentation
 
-This folder contains the active design docs for the game concept.
+This directory is organized into two documentation tracks:
 
-## Documents
+- `design/`: game design and design philosophy.
+- `implementation/`: engineering and delivery documentation.
 
-- `GAME_DESIGN.md`: Primary game design document (vision, loop, systems, and MVP scope).
-- `FRONTEND_AND_UX.md`: Splash screen, main menu, HUD, and UI interaction model.
-- `MISSION_AND_MODE_DESIGN.md`: Roguelike run mode, campaign mission structure, and custom game rules.
-- `MAP_DESIGN_2D.md`: 2D overhead map structure, readability rules, and region/terrain behavior.
-- `MULTIPLAYER_NOTES.md`: Singleplayer-first strategy and forward-looking multiplayer compatibility notes.
+## Quick Index
 
-## Current Concept Status
+- `design/README.md`: Design doc index, scope, and ownership.
+- `implementation/README.md`: Implementation doc index and technical doc conventions.
 
-- Mode focus: Singleplayer first.
-- Run structure: Roguelike runs.
-- Additional mode surfaces: Campaign mission chain + custom game setup.
-- Meta progression: Cosmetic-only unlocks between runs.
-- Runtime pacing: Real-time simulation with optional pause in singleplayer (no slow-motion).
-- Story approach: Light, unobtrusive background storytelling.
-- Simulation depth: Shallow and readable.
-- Map perspective: 2D overhead.
-- Map content strategy: Handcrafted maps in v1.
-- Web-game principle: Easy to play, hard to master.
+## Documentation Boundary
+
+Use this rule when adding or updating docs:
+
+- `design/` answers: what the player experience should be and why.
+- `implementation/` answers: how systems are built, integrated, tested, and shipped.
+
+If a document mixes both, split it into one design doc and one implementation doc that cross-link each other.

@@ -53,6 +53,19 @@ Initial target:
    - Rural cluster: broad coverage, low density.
    - Coastal corridor: moderate demand with storm vulnerability.
 
+District data includes a simple population value used for demand scaling when growth is enabled.
+Districts/regions also include a climate tag used for seasonal demand modifiers when enabled.
+
+### 3.1 Seasonal and Regional Demand Modifiers
+
+- Regions carry simple climate categories (cold, temperate, warm).
+- Season state modifies demand by climate category.
+- Example effects:
+  - Cold + winter: higher heating-related demand.
+  - Warm + summer: higher cooling-related demand.
+- Modifiers should be clearly surfaced and easy to reason about.
+- Tutorials/early onboarding maps can run in `Neutral` seasonal mode with these modifiers disabled.
+
 ## 4. Terrain Effects (Shallow Simulation)
 
 Terrain modifies build cost and reliability risk, not full physics.
@@ -105,11 +118,11 @@ Visualization rules:
 Different zoom levels should present different levels of detail, similar to Google Maps default view behavior.
 
 1. Far zoom (national view):
-   - Show region boundaries, major transmission trunks, high-level deficits, and active critical alerts.
+   - Show region boundaries, major transmission trunks, high-level deficits, active critical alerts, and current season state.
 2. Mid zoom (regional view):
-   - Show district demand overlays, key substations, and major incidents.
+   - Show district demand overlays, key substations, major incidents, population pressure hotspots, and climate-pressure hotspots.
 3. Near zoom (local view):
-   - Show node slots, placement previews, local capacity stats, and fine routing details.
+   - Show node slots, placement previews, local capacity stats, fine routing details, district growth trend markers, and local seasonal demand contributors.
 
 At every zoom level, hide non-essential detail before reducing legibility of critical signals.
 
@@ -117,7 +130,7 @@ At every zoom level, hide non-essential detail before reducing legibility of cri
 
 1. Standard Run: handcrafted map with dynamic demand/event sequences.
 2. Campaign Missions: handcrafted curated map states and scripted hotspot pressures.
-3. Custom Game: handcrafted map selection plus modifier-driven conditions.
+3. Custom Game: handcrafted map selection plus population/season/condition modifiers.
 
 All modes should share the same base map interaction vocabulary.
 
