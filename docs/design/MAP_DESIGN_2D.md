@@ -40,6 +40,7 @@ Map content strategy:
 
 1. V1 uses handcrafted maps only.
 2. Procedural map generation is a post-v1 initiative after balance criteria are defined.
+3. Map progression scales from small fully-open layouts to large fragmented regional layouts.
 
 ## 3. Region and District Design
 
@@ -55,6 +56,26 @@ Initial target:
 
 District data includes a simple population value used for demand scaling when growth is enabled.
 Districts/regions also include a climate tag used for seasonal demand modifiers when enabled.
+
+### 3.2 Map Scale and Fragmentation Progression
+
+- Early levels:
+  - Small maps with fewer regions and all core areas unlocked.
+  - Designed for immediate readability and low camera-management burden.
+- Mid levels:
+  - Medium maps with selective locked regions.
+  - Introduce expansion timing decisions.
+- Late levels:
+  - Large maps with fragmented region groups.
+  - Require planned region acquisition to reach full-map control.
+
+### 3.3 Region Unlock Rules
+
+- Locked regions cannot be built on or routed through until purchased.
+- Region purchase cost is paid from current-level budget.
+- Unlocking a region activates new demand obligations and potential risk exposure.
+- Region unlock previews must show cost, expected demand load, and strategic value.
+- Region unlock spending does not carry forward to the next level.
 
 ### 3.1 Seasonal and Regional Demand Modifiers
 
@@ -129,7 +150,7 @@ At every zoom level, hide non-essential detail before reducing legibility of cri
 ## 9. Mission and Mode Interaction with Map
 
 1. Standard Run: handcrafted map with dynamic demand/event sequences.
-2. Campaign Missions: handcrafted curated map states and scripted hotspot pressures.
+2. Campaign Missions: handcrafted curated map states with deliberate map-size progression and fragmented-region unlock flow.
 3. Custom Game: handcrafted map selection plus population/season/condition modifiers.
 
 All modes should share the same base map interaction vocabulary.

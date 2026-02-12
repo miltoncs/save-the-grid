@@ -65,7 +65,7 @@ Primary user-facing surfaces:
 - Left: primary vertical action list.
 - Center: animated background map with live energy pulse visuals.
 - Right: rotating national bulletin with short lore snippets and patch notes.
-- Footer: profile badge, unlocked cosmetics count, and local best score.
+- Footer: profile badge and local best score.
 
 ### Menu UX Rules
 
@@ -80,7 +80,7 @@ Primary user-facing surfaces:
 - Top: campaign arc tabs (`Founding`, `Expansion`, `Transition`).
 - Center: mission cards in a horizontal progression line.
 - Right: mission briefing panel with objectives and constraints.
-- Bottom: reward preview (cosmetics only) and medals earned.
+- Bottom: next-level unlock status and medals earned.
 
 ### Mission Card Contents
 
@@ -91,6 +91,7 @@ Primary user-facing surfaces:
 5. Best score and best reliability.
 6. Population growth status tag (`Static Population` or `Growth Active`).
 7. Seasonal/regional condition status tag (`Neutral`, `Winter Pressure`, `Summer Pressure`, `Mixed`).
+8. Map scale tag (`Small`, `Medium`, `Large`) and fragmentation tag (`Open`, `Fragmented`).
 
 ### UX Rules
 
@@ -125,18 +126,19 @@ Let players tune scenario pressure for practice or challenge runs while preservi
 
 ### Information Architecture
 
-- Top bar: budget, reliability, public trust, unmet demand, run timer, population trend (when enabled), active season/condition.
+- Top bar: budget, reliability, unmet demand, run timer, population trend (when enabled), active season/condition.
 - Left tool rail: build, demolish, reroute categories.
 - Right event rail: active incidents, mission objectives, short briefings.
-- Bottom context panel: selected asset stats and action confirmations.
+- Bottom context panel: selected asset stats, region unlock costs (when relevant), and action confirmations.
 - Center: 2D overhead map as dominant interactive surface.
 
 ### Interaction Pattern
 
 1. Select tool.
 2. Hover map to preview impact (cost, capacity, risk).
-3. Commit action with one click/tap.
-4. Receive immediate visual and metric feedback.
+3. On fragmented maps, unlock targeted regions when strategic conditions allow.
+4. Commit action with one click/tap.
+5. Receive immediate visual and metric feedback.
 
 ### Alert Tiers
 
@@ -148,6 +150,8 @@ Alerts must be non-blocking and expire cleanly.
 
 Population-related warnings should use the same alert system once the mechanic is enabled.
 Seasonal/regional demand warnings should use the same alert system once the mechanic is enabled.
+Underserved-region lawsuit warnings should use the same alert system without exposing hidden trust as a direct meter.
+Locked-region and expansion-opportunity warnings should use the same alert system on fragmented maps.
 
 ### Pause Behavior (Singleplayer)
 
@@ -209,7 +213,7 @@ Onboarding rule:
 1. Final score and leaderboard placement.
 2. Reliability performance summary.
 3. Key failure or success timeline moments.
-4. Cosmetic unlock progress or rewards.
+4. Next-level unlock status (campaign levels).
 5. `Retry`, `New Run`, and `Return to Menu` actions.
 
 ### Narrative Closure

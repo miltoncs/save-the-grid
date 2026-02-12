@@ -1,11 +1,11 @@
-# Chief of Energy: Grid of Nations
+# Energy Directory: Grid of Nations
 
 Status: Draft v0.1  
 Last updated: 2026-02-12
 
 ## 1. High Concept
 
-The player is the Chief of Energy for a fictional country. In real time, they build, demolish, and reroute grid infrastructure to power a rapidly growing civilization. The game is designed as a browser-native web game: quick to pick up in seconds, but difficult to master over many runs.
+The player is the Energy Directory for a fictional country. In real time, they build, demolish, and reroute grid infrastructure to power a rapidly growing civilization. The game is designed as a browser-native web game: quick to pick up in seconds, but difficult to master over many runs.
 
 ## 2. Design Pillars
 
@@ -20,17 +20,19 @@ The player is the Chief of Energy for a fictional country. In real time, they bu
 
 1. Singleplayer only for initial release.
 2. Roguelike runs with reset gameplay state each run.
-3. Meta progression is cosmetic-only (no permanent power increase).
+3. Each level starts with a fresh economy state (no money carryover between levels).
 4. Real-time simulation with optional pause in singleplayer.
 5. Storytelling is present but lightweight and non-intrusive.
 6. Simulation depth should remain relatively shallow for readability and pace.
 7. Gameplay map perspective is 2D overhead only.
 8. Initial product includes three play surfaces: Standard Run, Campaign Missions, and Custom Game.
-9. Campaign rewards remain cosmetic-only.
+9. Completing a level unlocks the next level; there are no material completion rewards.
 10. V1 maps are handcrafted (procedural generation deferred).
 11. Visual style is flat 2D with limited color palettes and minimal gradients.
 12. Population growth is a core difficulty mechanic, introduced only after tutorial/early onboarding levels.
 13. Seasonal and regional demand conditions are core difficulty mechanics, introduced only after tutorial/early onboarding levels.
+14. Early levels use small, easy-to-read maps; later levels use larger fragmented maps.
+15. Later-map regions can require capital purchase before they can be developed or served.
 
 ## 4. Player Fantasy and Role
 
@@ -41,9 +43,10 @@ You are not an engineer placing wires in a sandbox. You are a national decision-
 1. Demand increases across regions.
 2. Build infrastructure to add capacity and coverage.
 3. Route energy through transmission paths to meet demand.
-4. Demolish or replace aging or inefficient assets.
-5. Absorb random pressures (weather, fuel shocks, policy changes).
-6. Stabilize the grid and push score before collapse conditions are reached.
+4. Buy access to additional regions on fragmented maps when strategic timing is favorable.
+5. Demolish or replace aging or inefficient assets.
+6. Absorb random pressures (weather, fuel shocks, policy changes).
+7. Stabilize the grid and push score before collapse conditions are reached.
 
 ### 5.1 Strategic Core
 
@@ -55,8 +58,10 @@ The primary strategic question is always the same: what to build, when to build 
 
 - Player begins with a starter grid, budget, and small baseline generation.
 - Initial objectives are simple to teach controls and priorities.
+- Level budget is self-contained for that level and does not carry over on completion.
 - Early onboarding runs/missions can disable population growth to avoid overload.
 - Early onboarding runs/missions can disable seasonal/regional demand modifiers to avoid overload.
+- Early onboarding maps should be small and fully visible without camera complexity.
 
 ### Mid-Run Escalation
 
@@ -65,12 +70,13 @@ The primary strategic question is always the same: what to build, when to build 
 - Seasonal and regional demand pressure comes online (outside onboarding missions).
 - Event frequency increases.
 - Grid complexity rises with bottlenecks and overloaded routes.
+- Later content introduces larger fragmented maps where region expansion must be purchased.
 
 ### End State
 
-- Run ends when collapse conditions trigger (for example, sustained blackout, budget failure, or trust collapse).
+- Run ends when collapse conditions trigger (for example, sustained blackout or bankruptcy).
 - Final score is calculated and submitted to local leaderboard.
-- Cosmetic rewards may unlock based on milestones.
+- Campaign progression unlocks the next level when completion criteria are met.
 
 ## 7. Real-Time Rules
 
@@ -87,6 +93,15 @@ The primary strategic question is always the same: what to build, when to build 
 - Country map represented as a 2D overhead layered region/network view.
 - Maps are handcrafted in v1 to ensure balanced and readable scenarios.
 - Regions have population, demand profile, and growth pressure.
+- Early missions use small maps with low region count and high at-a-glance readability.
+- Later missions use larger maps with fragmented regions that may start locked.
+
+### 8.1.1 Region Acquisition on Fragmented Maps
+
+- Some regions on advanced maps start unavailable for development.
+- The player unlocks these regions by spending current-level budget.
+- Unlocking a region grants build/routing rights and introduces new demand obligations.
+- Region acquisition should be a strategic timing decision, not a mandatory scripted click.
 
 ### 8.2 Infrastructure
 
@@ -123,10 +138,14 @@ The primary strategic question is always the same: what to build, when to build 
 - Brownout/blackout when demand is unmet beyond thresholds.
 - Cascading issues are possible but intentionally simple and legible.
 
-### 8.5 Economy and Public Response
+### 8.5 Economy and Hidden Service Pressure
 
-- Budget changes from infrastructure costs and operating burden.
-- Public trust reflects service reliability and event outcomes.
+- Budget changes from infrastructure costs, operating burden, and penalties.
+- Region unlock purchases also draw from the same level budget.
+- Level completion does not carry money into the next level.
+- Trust is a hidden system attribute, not a visible resource the player directly manages.
+- If regions remain underserved, hidden trust pressure accumulates and can trigger lawsuits against the Power Department.
+- Lawsuits apply monetary penalties and increase bankruptcy risk.
 - These values are intentionally high-level, not a deep market simulation.
 
 ## 9. Storytelling Approach (Unobtrusive)
@@ -158,8 +177,12 @@ To keep the game shallow and fast:
 ### Primary Failure Conditions
 
 - Reliability collapse (sustained unmet demand).
-- Fiscal collapse (budget floor crossed for too long).
-- Public trust collapse (major service instability over time).
+- Bankruptcy (the grid is in deficit and available cash has reached zero).
+
+### Primary Victory Conditions
+
+- Standard Run: survive and maximize score before collapse.
+- Campaign/Operation maps: achieve full-map management by acquiring and reliably serving all required regions.
 
 ### Score Drivers
 
@@ -170,9 +193,9 @@ To keep the game shallow and fast:
 
 ## 12. Progression Model
 
-- Runs grant score and cosmetic unlock progress.
-- Cosmetics can include map skins, UI themes, and insignia/badge variants.
-- No gameplay-affecting unlocks between runs.
+- Levels are unlocked sequentially through completion.
+- Completing a level unlocks the next level and does not grant material carryover.
+- Campaign progression does not provide between-level economic advantages.
 
 ## 13. MVP Scope (Design Target)
 

@@ -2,6 +2,10 @@
 
 This folder is for engineering execution details that realize the design docs.
 
+## Documents
+
+- `ARCHITECTURE.md`: Runtime architecture, module boundaries, data contracts, testing strategy, and release plan for MVP implementation.
+
 ## Intended Contents
 
 Add technical documentation here as implementation begins, for example:

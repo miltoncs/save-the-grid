@@ -10,6 +10,12 @@ This folder contains product intent, gameplay design, UX direction, and forward-
 - `MAP_DESIGN_2D.md`: 2D map model, readability constraints, and map interaction rules.
 - `MULTIPLAYER_NOTES.md`: Singleplayer-first multiplayer compatibility constraints for future phases.
 
+Current emphasis:
+
+- Early levels use small, highly readable maps.
+- Later levels scale to larger fragmented maps with region acquisition decisions.
+- Region acquisition budget is level-local; completion unlocks the next level only.
+
 ## Scope Rules
 
 Keep these docs focused on outcomes and player-facing behavior:

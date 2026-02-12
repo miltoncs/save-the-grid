@@ -55,3 +55,4 @@ Whenever a design decision is made in singleplayer implementation, append a shor
 2. Added custom game parameter screen with separate score class. Impact: positive because ruleset declarations can later become lobby presets.
 3. Locked 2D overhead map and shared interaction vocabulary across modes. Impact: positive because it avoids per-mode control fragmentation in future multiplayer UI.
 4. Added seasonal/regional demand modifiers with onboarding gating. Impact: positive if season state and climate tags are included in scenario packets for fair score comparability.
+5. Added fragmented-region acquisition with level-local economy. Impact: positive if region unlock costs, starting capital, and unlock state are fully declared in scenario packets.

@@ -18,3 +18,10 @@ Use this rule when adding or updating docs:
 - `implementation/` answers: how systems are built, integrated, tested, and shipped.
 
 If a document mixes both, split it into one design doc and one implementation doc that cross-link each other.
+
+Current gameplay direction highlights:
+
+- Early levels use small maps that keep needs and infrastructure easy to observe.
+- Later maps are larger and fragmented into regions unlocked with current-level budget.
+- Campaign victory emphasizes full-map management on advanced maps.
+- Completing a level unlocks the next level; no money or material reward carries over.
