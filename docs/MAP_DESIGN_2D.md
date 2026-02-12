@@ -15,6 +15,13 @@ Camera behavior:
 
 No isometric or 3D camera modes are in scope.
 
+Visual direction:
+
+1. Flat, clean 2D rendering.
+2. Minimal gradients.
+3. No photorealistic terrain or textures.
+4. Small functional palette similar to Google Maps default-view readability (land/water/biome differentiation).
+
 ## 2. Map Representation Model
 
 Recommended model: layered 2D region map with node-link infrastructure.
@@ -28,6 +35,11 @@ Layers:
 5. Alerts, events, and objective overlays.
 
 This keeps routing legible without deep electrical simulation complexity.
+
+Map content strategy:
+
+1. V1 uses handcrafted maps only.
+2. Procedural map generation is a post-v1 initiative after balance criteria are defined.
 
 ## 3. Region and District Design
 
@@ -88,15 +100,28 @@ Visualization rules:
 3. Distinguish district demand from infrastructure status with separate visual channels.
 4. At max zoom-out, preserve only critical signals (demand deficits, overload clusters, objectives).
 
-## 8. Mission and Mode Interaction with Map
+## 8. Zoom-Level Detail Rules
 
-1. Standard Run: procedural demand/event sequences on a fixed base map.
-2. Campaign Missions: curated map states and scripted hotspot pressures.
-3. Custom Game: seed and modifier-driven map parameterization.
+Different zoom levels should present different levels of detail, similar to Google Maps default view behavior.
+
+1. Far zoom (national view):
+   - Show region boundaries, major transmission trunks, high-level deficits, and active critical alerts.
+2. Mid zoom (regional view):
+   - Show district demand overlays, key substations, and major incidents.
+3. Near zoom (local view):
+   - Show node slots, placement previews, local capacity stats, and fine routing details.
+
+At every zoom level, hide non-essential detail before reducing legibility of critical signals.
+
+## 9. Mission and Mode Interaction with Map
+
+1. Standard Run: handcrafted map with dynamic demand/event sequences.
+2. Campaign Missions: handcrafted curated map states and scripted hotspot pressures.
+3. Custom Game: handcrafted map selection plus modifier-driven conditions.
 
 All modes should share the same base map interaction vocabulary.
 
-## 9. Example Starter Map Blueprint
+## 10. Example Starter Map Blueprint
 
 1. Central capital metro region (high baseline demand).
 2. North industrial spine (fast growth, high load volatility).
@@ -105,15 +130,15 @@ All modes should share the same base map interaction vocabulary.
 5. South agricultural grid (coverage-heavy, lower density).
 6. Frontier expansion belt (late-run growth pressure).
 
-## 10. Technical Constraints for Later Architecture
+## 11. Technical Constraints for Later Architecture
 
 1. Separate data layer (graph state) from visual layer (sprites/overlays).
 2. Keep deterministic update ticks for routing and demand.
-3. Store map as seed + authored metadata for replay and future competitive comparability.
+3. Store map as authored map ID + metadata, with room for future seed-based generation.
 4. Ensure map interactions are input-device agnostic (mouse and touch).
 
-## 11. Open Questions
+## 12. Open Questions
 
-1. Fixed handcrafted map only vs rotating map pool.
+1. Number of handcrafted maps at launch (1, 2, or 3).
 2. Maximum practical node/link count before readability drops.
 3. How aggressive event overlays should be at high zoom-out.

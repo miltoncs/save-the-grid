@@ -1,4 +1,4 @@
-# Energies Game Documentation
+# Save the Grid Documentation
 
 This folder contains the active design docs for the game concept.
 
@@ -16,7 +16,9 @@ This folder contains the active design docs for the game concept.
 - Run structure: Roguelike runs.
 - Additional mode surfaces: Campaign mission chain + custom game setup.
 - Meta progression: Cosmetic-only unlocks between runs.
-- Runtime pacing: Strict real-time once a run starts (no pause or slow-motion).
+- Runtime pacing: Real-time simulation with optional pause in singleplayer (no slow-motion).
 - Story approach: Light, unobtrusive background storytelling.
 - Simulation depth: Shallow and readable.
 - Map perspective: 2D overhead.
+- Map content strategy: Handcrafted maps in v1.
+- Web-game principle: Easy to play, hard to master.

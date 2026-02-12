@@ -11,7 +11,7 @@ The game is singleplayer-first with three player-facing play modes:
 2. `Campaign Missions` (handcrafted scenario chain).
 3. `Custom Game` (parameterized scenario builder with separate scoring class).
 
-All modes honor strict real-time gameplay once a run starts.
+All modes run in real time by default, with optional player-controlled pause in singleplayer.
 
 ## 2. Standard Run (Primary Mode)
 
@@ -46,7 +46,7 @@ Campaign missions provide curated scenarios and light national storytelling with
 
 Each mission defines:
 
-1. Fixed map seed or handcrafted layout.
+1. Handcrafted map layout and authored starting state.
 2. Starting infrastructure and budget.
 3. 2-3 explicit objectives.
 4. 1-2 constraint modifiers.
@@ -88,13 +88,13 @@ No branching dialogue trees are required for v1.
 ### Purpose
 
 - Training and experimentation mode.
-- Community challenge seed sharing.
+- Community challenge map+settings sharing.
 - Difficulty tailoring without affecting core balance.
 
 ### Customizable Parameters (Draft)
 
-1. Seed.
-2. Region count/layout variant.
+1. Handcrafted map selection.
+2. Region pressure variant.
 3. Starting budget.
 4. Base demand and growth.
 5. Event intensity.

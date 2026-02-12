@@ -5,14 +5,15 @@ Last updated: 2026-02-12
 
 ## 1. UX Direction
 
-The interface should feel like a national grid command center: operational, urgent, and readable at a glance. The tone is serious but not grim, with restrained style and clear hierarchy.
+The interface should feel like a national grid command center: operational, urgent, and readable at a glance. The game should feel browser-native and instantly playable (quick-start style similar to popular web games), while preserving long-term mastery.
 
 Design goals:
 
 1. Keep decision-critical information visible without hunting.
-2. Preserve strict real-time flow (no blocking modal walls).
-3. Deliver story flavor through short, ambient surfaces.
-4. Keep controls learnable in under five minutes.
+2. Keep controls and mechanics simple enough to learn in minutes.
+3. Deliver depth through emergent conditions and map pressure, not layered systems.
+4. Deliver story flavor through short, ambient surfaces.
+5. Preserve real-time flow with optional player-controlled pause in singleplayer.
 
 ## 2. Frontend Surface Map
 
@@ -36,7 +37,7 @@ Primary user-facing surfaces:
 
 ### Behavior
 
-1. 2-4 second animated grid pulse and country silhouette.
+1. 1-3 second animated grid pulse and country silhouette.
 2. Studio and game title lockup appears.
 3. `Press any key` skips remaining animation instantly.
 4. If loading exceeds a threshold, show a small status line (`Initializing grid simulation...`).
@@ -102,7 +103,7 @@ Let players tune scenario pressure for practice or challenge runs while preservi
 
 ### Option Categories
 
-1. Map seed and region layout variant.
+1. Handcrafted map selection.
 2. Starting budget.
 3. Demand growth rate.
 4. Event intensity.
@@ -116,12 +117,12 @@ Let players tune scenario pressure for practice or challenge runs while preservi
 - Modified settings create `Custom` runs with separate score tables.
 - Tooltip text states when a setting invalidates standard leaderboard eligibility.
 
-## 7. In-Run HUD (Strict Real-Time)
+## 7. In-Run HUD (Real-Time with Pause Option)
 
 ### Information Architecture
 
 - Top bar: budget, reliability, public trust, unmet demand, run timer.
-- Left tool rail: build, demolish, reroute, upgrade categories.
+- Left tool rail: build, demolish, reroute categories.
 - Right event rail: active incidents, mission objectives, short briefings.
 - Bottom context panel: selected asset stats and action confirmations.
 - Center: 2D overhead map as dominant interactive surface.
@@ -141,6 +142,13 @@ Let players tune scenario pressure for practice or challenge runs while preservi
 
 Alerts must be non-blocking and expire cleanly.
 
+### Pause Behavior (Singleplayer)
+
+1. `Space` toggles pause and resume.
+2. Pause freezes demand, incidents, and scoring timers.
+3. Player can inspect map state and queued priorities while paused.
+4. Story UI never auto-pauses the game.
+
 ## 8. Storytelling UI Pattern
 
 Story delivery channels:
@@ -151,7 +159,7 @@ Story delivery channels:
 
 Rules:
 
-- No pauses or forced dialogue trees.
+- No forced dialogue trees.
 - Mechanical consequence always shown next to narrative text.
 - Story copy length target: one to two lines.
 
@@ -163,9 +171,18 @@ Rules:
 4. Mouse wheel or key: zoom map.
 5. Middle mouse drag or edge pan: camera movement.
 6. `Tab`: cycle critical alerts.
-7. `Esc`: close open panel (never pause simulation).
+7. `Space`: toggle pause and resume (singleplayer only).
+8. `Esc`: close open panel.
 
-## 10. Readability and Accessibility
+## 10. Visual Style Guidelines
+
+1. Graphics are flat 2D and intentionally non-photoreal.
+2. Use few gradients and avoid rendering styles that imply realism.
+3. Map palette is limited and functional:
+   - Land, water, and biome differentiation use a small set of clear colors, similar to Google Maps default-view simplicity.
+4. UI decoration must not compete with operational map signals.
+
+## 11. Readability and Accessibility
 
 1. Color plus icon shape for all alert states (no color-only signals).
 2. Adjustable UI scale presets.
@@ -173,7 +190,7 @@ Rules:
 4. Font sizes must remain legible at 1366x768 baseline.
 5. Reduced motion toggle for non-essential animations.
 
-## 11. End-of-Run Screen
+## 12. End-of-Run Screen
 
 ### Required Content
 

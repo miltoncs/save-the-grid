@@ -30,7 +30,7 @@ These guardrails reduce rewrite risk when multiplayer design is prioritized.
 ## 5. Early Multiplayer Mode Candidates (Post-MVP)
 
 1. Asynchronous contract challenge:
-   - Same seed, same scenario, compare final score and reliability.
+   - Same handcrafted map + same scenario settings, compare final score and reliability.
 2. Weekly competitive scenario:
    - Shared constraints, leaderboard-driven competition.
 3. Live contract bidding (full multiplayer):
@@ -51,6 +51,6 @@ Whenever a design decision is made in singleplayer implementation, append a shor
 
 2026-02-12:
 
-1. Added campaign missions as fixed-scenario singleplayer content. Impact: neutral-to-positive for asynchronous multiplayer because seed/objective packets can be reused as competitive scenarios.
+1. Added campaign missions as fixed-scenario singleplayer content. Impact: neutral-to-positive for asynchronous multiplayer because authored map IDs and objective packets can be reused as competitive scenarios.
 2. Added custom game parameter screen with separate score class. Impact: positive because ruleset declarations can later become lobby presets.
 3. Locked 2D overhead map and shared interaction vocabulary across modes. Impact: positive because it avoids per-mode control fragmentation in future multiplayer UI.

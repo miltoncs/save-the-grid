@@ -5,27 +5,30 @@ Last updated: 2026-02-12
 
 ## 1. High Concept
 
-The player is the Chief of Energy for a fictional country. In real time, they build, demolish, and reroute grid infrastructure to power a rapidly growing civilization. Each run is a high-pressure systems puzzle with emergent failures and shifting demand.
+The player is the Chief of Energy for a fictional country. In real time, they build, demolish, and reroute grid infrastructure to power a rapidly growing civilization. The game is designed as a browser-native web game: quick to pick up in seconds, but difficult to master over many runs.
 
 ## 2. Design Pillars
 
-1. Real-time grid management under pressure.
-2. Clear systems with shallow simulation depth.
-3. Fast replayability via roguelike run structure.
-4. Strong role fantasy through unobtrusive narrative framing.
-5. Skill expression through planning and crisis response, not spreadsheet complexity.
+1. Web-game onboarding: click and play quickly, with minimal friction.
+2. Easy to learn, hard to master (in the spirit of `openfront.io`, `agar.io`, and `slither.io` onboarding/match flow).
+3. Simple action vocabulary: build, demolish, reroute.
+4. Shallow, readable simulation with emergent pressure.
+5. Strong role fantasy through unobtrusive narrative framing.
+6. Flat 2D visual language optimized for clarity.
 
 ## 3. Locked Product Decisions
 
 1. Singleplayer only for initial release.
 2. Roguelike runs with reset gameplay state each run.
 3. Meta progression is cosmetic-only (no permanent power increase).
-4. Strict real-time once a run starts.
+4. Real-time simulation with optional pause in singleplayer.
 5. Storytelling is present but lightweight and non-intrusive.
 6. Simulation depth should remain relatively shallow for readability and pace.
 7. Gameplay map perspective is 2D overhead only.
 8. Initial product includes three play surfaces: Standard Run, Campaign Missions, and Custom Game.
 9. Campaign rewards remain cosmetic-only.
+10. V1 maps are handcrafted (procedural generation deferred).
+11. Visual style is flat 2D with limited color palettes and minimal gradients.
 
 ## 4. Player Fantasy and Role
 
@@ -39,6 +42,10 @@ You are not an engineer placing wires in a sandbox. You are a national decision-
 4. Demolish or replace aging or inefficient assets.
 5. Absorb random pressures (weather, fuel shocks, policy changes).
 6. Stabilize the grid and push score before collapse conditions are reached.
+
+### 5.1 Strategic Core
+
+The primary strategic question is always the same: what to build, when to build it, and where to place it given current map constraints and emergent grid conditions. The design should avoid layered subsystems that distract from this core decision loop.
 
 ## 6. Run Structure (Roguelike)
 
@@ -61,7 +68,8 @@ You are not an engineer placing wires in a sandbox. You are a national decision-
 
 ## 7. Real-Time Rules
 
-- No pause button during active play.
+- Simulation runs in real time by default.
+- Singleplayer pause is allowed.
 - No tactical slow-motion.
 - No modal story interruptions that halt simulation.
 - UI and events must be readable while the simulation keeps running.
@@ -71,6 +79,7 @@ You are not an engineer placing wires in a sandbox. You are a national decision-
 ### 8.1 Map and Regions
 
 - Country map represented as a 2D overhead layered region/network view.
+- Maps are handcrafted in v1 to ensure balanced and readable scenarios.
 - Regions have population, demand profile, and growth pressure.
 
 ### 8.2 Infrastructure
@@ -112,6 +121,7 @@ To keep the game shallow and fast:
   - Plant output, demand growth, reliability pressure, basic operating costs.
   - Event-driven modifiers (for example heat wave demand spikes).
 - Exclude for v1:
+  - Layered mechanics that dilute the build/when/where strategic core.
   - Detailed fuel supply chains.
   - Unit-level labor simulation.
   - Deep policy/legal simulation trees.
@@ -142,11 +152,11 @@ To keep the game shallow and fast:
 
 1. One 2D overhead country map.
 2. 6-8 regions with distinct demand behavior.
-3. A compact asset set (generation + grid + storage).
+3. A compact asset set (generation + grid + storage), with simple readable mechanics.
 4. Real-time build/demolish/reroute controls.
 5. Lightweight event pool with short narrative text.
 6. Main menu, splash screen, and run setup flows.
-7. Campaign mission starter set.
+7. Campaign mission starter set on handcrafted maps.
 8. Custom game options with separate score classification.
 9. End-of-run scoring and local high score table.
 
@@ -167,5 +177,5 @@ See `MULTIPLAYER_NOTES.md` for forward-looking design constraints.
 1. Target run length (for example 15, 20, or 30 minutes).
 2. Exact initial asset roster for launch.
 3. Launch campaign size (8, 10, or 12 missions).
-4. Region identity model (single fixed map vs rotating map pool).
+4. Number of handcrafted maps at launch (1, 2, or 3).
 5. Event interaction model (passive events only vs fast binary choices in real time).
