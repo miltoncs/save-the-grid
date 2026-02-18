@@ -1,7 +1,7 @@
 # 2D Overhead Map Design
 
 Status: Draft v0.1  
-Last updated: 2026-02-12
+Last updated: 2026-02-18
 
 Reference: See `INSPIRATION.md` for map visual language, hierarchy, and zoom behavior targets.
 
@@ -27,15 +27,15 @@ Visual direction:
 
 ## 2. Map Representation Model
 
-Recommended model: layered 2D region map with node-link infrastructure.
+Recommended model: layered 2D map board with point-of-interest icons and lightweight network overlays.
 
 Layers:
 
-1. Base terrain and geography.
-2. Region boundaries and district demand overlays.
-3. Infrastructure nodes (plants, substations, storage).
-4. Transmission links and flow direction effects.
-5. Alerts, events, and objective overlays.
+1. Game board layer (always visible): land/water plus land type (mountain, desert, plains).
+2. Civilization layer: towns shown as point icons.
+3. Power grid layer: power stations/substations shown as point icons, with transmission links shown as connectors.
+4. Resource layer: natural resource zones, hidden by default and revealed while holding `R`.
+5. Alerts/objective layer: incidents, demand deficits, and mission markers.
 
 This keeps routing legible without deep electrical simulation complexity.
 
@@ -44,6 +44,18 @@ Map content strategy:
 1. V1 uses handcrafted maps only.
 2. Procedural map generation is a post-v1 initiative after balance criteria are defined.
 3. Map progression scales from small fully-open layouts to large fragmented regional layouts.
+4. Basic levels start mostly empty: mostly terrain, a few seeded towns, and little to no prebuilt power-grid infrastructure.
+
+### 2.1 Town Seeding and Emergence
+
+1. Runs begin with a small number of seeded towns for immediate priorities.
+2. Additional towns can emerge during a run when local conditions are favorable.
+3. Emergence requirements:
+   - Livable terrain only (not mountains or ocean tiles).
+   - Region must be unlocked.
+   - Nearby grid service must be stable (no sustained outage state).
+4. New towns start at low demand and then follow normal demand growth rules.
+5. Tutorial/onboarding maps can cap or disable emergence until core controls are learned.
 
 ## 3. Region and District Design
 
@@ -133,21 +145,32 @@ Visualization rules:
 ## 7. Map Readability Rules
 
 1. Do not let decorative terrain hide operational information.
-2. Keep selectable hit areas larger than visual icons.
-3. Distinguish district demand from infrastructure status with separate visual channels.
-4. At max zoom-out, preserve only critical signals (demand deficits, overload clusters, objectives).
-5. If pixel-edge styling is used, gameplay boundaries must still be unambiguous at all zoom levels.
+2. Distinguish district demand from infrastructure status with separate visual channels.
+3. At max zoom-out, preserve only critical signals (demand deficits, overload clusters, objectives).
+4. If pixel-edge styling is used, gameplay boundaries must still be unambiguous at all zoom levels.
 
 ## 8. Zoom-Level Detail Rules
 
 Different zoom levels should present different levels of detail, similar to Google Maps default view behavior.
 
+Point icon scale target:
+
+- Standard map zoom uses small point icons around 20x20 px for towns and power-grid nodes.
+
 1. Far zoom (national view):
-   - Show region boundaries, major transmission trunks, high-level deficits, active critical alerts, and current season state.
+   - Show game-board terrain classes, region boundaries, major transmission trunks, high-level deficits, active critical alerts, and current season state.
+   - Collapse point icons into minimal markers to avoid clutter.
 2. Mid zoom (regional view):
+   - Show town and power-station point icons at standard size.
    - Show district demand overlays, key substations, major incidents, population pressure hotspots, and climate-pressure hotspots.
 3. Near zoom (local view):
    - Show node slots, placement previews, local capacity stats, fine routing details, district growth trend markers, and local seasonal demand contributors.
+   - Show richer labels/tooltips for nearby town and station points.
+
+Resource layer visibility:
+
+- Resource zones remain hidden unless the player is holding `R`.
+- Releasing `R` returns the map to normal operational layers.
 
 At every zoom level, hide non-essential detail before reducing legibility of critical signals.
 

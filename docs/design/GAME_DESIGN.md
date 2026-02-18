@@ -1,7 +1,7 @@
 # Energy Directory: Grid of Nations
 
 Status: Draft v0.1  
-Last updated: 2026-02-12
+Last updated: 2026-02-18
 
 ## 1. High Concept
 
@@ -33,6 +33,8 @@ The player is the Energy Directory for a fictional country. In real time, they b
 13. Seasonal and regional demand conditions are core difficulty mechanics, introduced only after tutorial/early onboarding levels.
 14. Early levels use small, easy-to-read maps; later levels use larger fragmented maps.
 15. Later-map regions can require capital purchase before they can be developed or served.
+16. Basic levels start mostly empty: mostly terrain, a few towns, and little to no prebuilt power-grid infrastructure.
+17. As conditions improve, new towns can emerge on livable powered terrain during a run.
 
 ## 4. Player Fantasy and Role
 
@@ -40,13 +42,14 @@ You are not an engineer placing wires in a sandbox. You are a national decision-
 
 ## 5. Core Gameplay Loop
 
-1. Demand increases across regions.
+1. Start from a mostly terrain-first map with a few seeded towns.
 2. Build infrastructure to add capacity and coverage.
 3. Route energy through transmission paths to meet demand.
-4. Buy access to additional regions on fragmented maps when strategic timing is favorable.
-5. Demolish or replace aging or inefficient assets.
-6. Absorb random pressures (weather, fuel shocks, policy changes).
-7. Stabilize the grid and push score before collapse conditions are reached.
+4. Stabilize service quality so additional towns can emerge.
+5. Buy access to additional regions on fragmented maps when strategic timing is favorable.
+6. Demolish or replace aging or inefficient assets.
+7. Absorb random pressures (weather, fuel shocks, policy changes).
+8. Stabilize the grid and push score before collapse conditions are reached.
 
 ### 5.1 Strategic Core
 
@@ -56,7 +59,8 @@ The primary strategic question is always the same: what to build, when to build 
 
 ### Run Start
 
-- Player begins with a starter grid, budget, and small baseline generation.
+- Player begins with level-local budget, mostly visible terrain, and a few seeded towns.
+- Basic levels include little to no prebuilt power-grid infrastructure.
 - Initial objectives are simple to teach controls and priorities.
 - Level budget is self-contained for that level and does not carry over on completion.
 - Early onboarding runs/missions can disable population growth to avoid overload.
@@ -70,6 +74,7 @@ The primary strategic question is always the same: what to build, when to build 
 - Seasonal and regional demand pressure comes online (outside onboarding missions).
 - Event frequency increases.
 - Grid complexity rises with bottlenecks and overloaded routes.
+- New towns emerge in livable, stably powered areas and add fresh demand pressure.
 - Later content introduces larger fragmented maps where region expansion must be purchased.
 
 ### End State
@@ -91,6 +96,7 @@ The primary strategic question is always the same: what to build, when to build 
 ### 8.1 Map and Regions
 
 - Country map represented as a 2D overhead layered region/network view.
+- Layer model includes: base game board (land/water/land type), civilization town points, power-grid points, and resource-zone overlays.
 - Maps are handcrafted in v1 to ensure balanced and readable scenarios.
 - Regions have population, demand profile, and growth pressure.
 - Early missions use small maps with low region count and high at-a-glance readability.
@@ -131,6 +137,13 @@ The primary strategic question is always the same: what to build, when to build 
   - Warm regions in summer draw more power (cooling pressure).
 - Seasonal/regional modifiers are applied as readable demand multipliers, not deep weather simulation.
 - Seasonal/regional modifiers are disabled in tutorial/early onboarding missions and enabled in later content.
+
+### 8.3.3 Town Emergence Conditions
+
+- Towns can emerge mid-run to create readable expansion pressure.
+- Emergence requires livable terrain (not mountains or ocean) and stable nearby grid service.
+- Emergence is shallow and legible: no deep demographic simulation, only clear demand additions.
+- Tutorial/onboarding missions can run low-emergence or emergence-off presets to reduce early overload.
 
 ### 8.4 Failure and Pressure
 

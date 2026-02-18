@@ -1,7 +1,7 @@
 # Frontend and UX Design
 
 Status: Draft v0.1  
-Last updated: 2026-02-12
+Last updated: 2026-02-18
 
 Reference: See `INSPIRATION.md` for the map-first UI inspiration baseline.
 
@@ -143,6 +143,13 @@ Let players tune scenario pressure for practice or challenge runs while preservi
 4. Commit action with one click/tap.
 5. Receive immediate visual and metric feedback.
 
+### Layer Visibility Controls
+
+1. Base board, civilization points, and power-grid points are visible by default.
+2. Natural resource zones are hidden by default to reduce map noise.
+3. Hold `R` to reveal resource zones while planning builds.
+4. Releasing `R` hides resource zones immediately.
+
 ### Alert Tiers
 
 1. Advisory (blue): informational shifts.
@@ -191,7 +198,8 @@ Onboarding rule:
 5. Middle mouse drag or edge pan: camera movement.
 6. `Tab`: cycle critical alerts.
 7. `Space`: toggle pause and resume (singleplayer only).
-8. `Esc`: close open panel.
+8. Hold `R`: reveal natural resource zones on the map.
+9. `Esc`: close open panel.
 
 ## 10. Visual Style Guidelines
 

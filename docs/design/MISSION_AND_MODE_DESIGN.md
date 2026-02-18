@@ -1,7 +1,7 @@
 # Mission and Mode Design
 
 Status: Draft v0.1  
-Last updated: 2026-02-12
+Last updated: 2026-02-18
 
 ## 1. Mode Strategy
 
@@ -24,9 +24,10 @@ All modes run in real time by default, with optional player-controlled pause in 
 ### Key Rules
 
 1. Fresh economy and grid state per run.
-2. Escalating demand and event pressure.
-3. Run ends on collapse conditions.
-4. Standard Run completion has no material reward; outcome is score and records.
+2. Most runs begin from a sparse state (terrain-first map, few towns, minimal/no prebuilt grid).
+3. Escalating demand and event pressure.
+4. Run ends on collapse conditions.
+5. Standard Run completion has no material reward; outcome is score and records.
 
 ## 3. Campaign Missions
 
@@ -50,6 +51,7 @@ Onboarding rule:
 
 - First tutorial/early missions run with static population (no growth mechanic).
 - Population growth is introduced in later missions once core build/reroute controls are learned.
+- First tutorial/early missions can cap or disable spontaneous town emergence.
 - Seasonal/regional demand modifiers are introduced in later missions after baseline routing mastery.
 - First tutorial/early missions avoid region acquisition complexity.
 
@@ -58,7 +60,7 @@ Onboarding rule:
 Each mission defines:
 
 1. Handcrafted map layout and authored starting state.
-2. Starting infrastructure and budget.
+2. Starting budget and optional starter infrastructure (often minimal/none in basic scenarios).
 3. 2-3 explicit objectives.
 4. 1-2 constraint modifiers.
 5. Optional secondary objective for higher medal tier.

@@ -14,8 +14,10 @@ This folder contains product intent, gameplay design, UX direction, and forward-
 Current emphasis:
 
 - Early levels use small, highly readable maps.
+- Basic scenarios start mostly terrain-first with few towns and minimal prebuilt grid.
 - Later levels scale to larger fragmented maps with region acquisition decisions.
 - Region acquisition budget is level-local; completion unlocks the next level only.
+- New towns can emerge during runs when livable terrain has stable nearby grid service.
 - Visual direction blends map readability (Google Maps-like) with pixelated RTS map character (OpenFront-inspired).
 
 ## Scope Rules
