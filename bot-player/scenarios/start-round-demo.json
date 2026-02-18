@@ -75,7 +75,7 @@
     {
       "action": "advanceTime",
       "name": "tick-forward",
-      "ms": 500
+      "ms": 10000
     },
     {
       "action": "screenshot",

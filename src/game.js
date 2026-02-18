@@ -20,6 +20,7 @@ const TOOL_DEMOLISH = "demolish";
 const TOOL_REROUTE = "reroute";
 const ASSET_ORDER = ["plant", "substation", "storage"];
 const PRIORITY_ORDER = ["low", "normal", "high"];
+const DRAG_THRESHOLD_PX = 6;
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
@@ -226,6 +227,22 @@ class GameRuntime {
       lastMoveX: null,
       lastMoveY: null,
     };
+    this.pointerDown = {
+      active: false,
+      pointerId: null,
+      button: null,
+      startX: 0,
+      startY: 0,
+      startCamX: 0,
+      startCamY: 0,
+      dragging: false,
+    };
+    this.keyPan = {
+      up: false,
+      down: false,
+      left: false,
+      right: false,
+    };
 
     this.zoomLevels = [0.55, 0.72, 0.9, 1.1, 1.32];
     this.camera = {
@@ -248,7 +265,7 @@ class GameRuntime {
 
     this.resizeObserver = null;
     this.boundResize = () => this.resizeCanvas();
-    this.boundMouseMove = (event) => this.onPointerMove(event);
+    this.boundPointerMove = (event) => this.onPointerMove(event);
     this.boundPointerEnter = (event) => this.onPointerEnter(event);
     this.boundPointerLeave = () => this.onPointerLeave();
     this.boundPointerDown = (event) => this.onPointerDown(event);
@@ -256,6 +273,8 @@ class GameRuntime {
     this.boundWheel = (event) => this.onWheel(event);
     this.boundContextMenu = (event) => event.preventDefault();
     this.boundKeydown = (event) => this.onKeyDown(event);
+    this.boundKeyup = (event) => this.onKeyUp(event);
+    this.boundWindowBlur = () => this.onWindowBlur();
 
     this.bindInputs();
     this.resizeCanvas();
@@ -339,7 +358,7 @@ class GameRuntime {
   }
 
   bindInputs() {
-    this.canvas.addEventListener("mousemove", this.boundMouseMove);
+    this.canvas.addEventListener("pointermove", this.boundPointerMove);
     this.canvas.addEventListener("pointerenter", this.boundPointerEnter);
     this.canvas.addEventListener("pointerleave", this.boundPointerLeave);
     this.canvas.addEventListener("pointerdown", this.boundPointerDown);
@@ -347,13 +366,15 @@ class GameRuntime {
     this.canvas.addEventListener("wheel", this.boundWheel, { passive: false });
     this.canvas.addEventListener("contextmenu", this.boundContextMenu);
     window.addEventListener("keydown", this.boundKeydown);
+    window.addEventListener("keyup", this.boundKeyup);
+    window.addEventListener("blur", this.boundWindowBlur);
     window.addEventListener("resize", this.boundResize);
     this.resizeObserver = new ResizeObserver(() => this.resizeCanvas());
     this.resizeObserver.observe(this.canvas.parentElement);
   }
 
   unbindInputs() {
-    this.canvas.removeEventListener("mousemove", this.boundMouseMove);
+    this.canvas.removeEventListener("pointermove", this.boundPointerMove);
     this.canvas.removeEventListener("pointerenter", this.boundPointerEnter);
     this.canvas.removeEventListener("pointerleave", this.boundPointerLeave);
     this.canvas.removeEventListener("pointerdown", this.boundPointerDown);
@@ -361,6 +382,8 @@ class GameRuntime {
     this.canvas.removeEventListener("wheel", this.boundWheel);
     this.canvas.removeEventListener("contextmenu", this.boundContextMenu);
     window.removeEventListener("keydown", this.boundKeydown);
+    window.removeEventListener("keyup", this.boundKeyup);
+    window.removeEventListener("blur", this.boundWindowBlur);
     window.removeEventListener("resize", this.boundResize);
     if (this.resizeObserver) {
       this.resizeObserver.disconnect();
@@ -410,6 +433,7 @@ class GameRuntime {
     }
 
     this.renderPulse += dt;
+    this.handleKeyboardPan(dt);
     this.handleEdgePan(dt);
     this.render();
     this.loopHandle = requestAnimationFrame((next) => this.frame(next));
@@ -451,6 +475,8 @@ class GameRuntime {
     this.mouse.edgePanReady = false;
     this.mouse.lastMoveX = null;
     this.mouse.lastMoveY = null;
+    this.pointerDown.active = false;
+    this.pointerDown.dragging = false;
     this.camera.dragActive = false;
   }
 
@@ -468,6 +494,25 @@ class GameRuntime {
     this.mouse.lastMoveX = this.mouse.x;
     this.mouse.lastMoveY = this.mouse.y;
 
+    if (
+      this.pointerDown.active &&
+      this.pointerDown.button === 0 &&
+      !this.pointerDown.dragging
+    ) {
+      const distance = Math.hypot(
+        event.clientX - this.pointerDown.startX,
+        event.clientY - this.pointerDown.startY
+      );
+      if (distance >= DRAG_THRESHOLD_PX) {
+        this.pointerDown.dragging = true;
+        this.camera.dragActive = true;
+        this.camera.dragStartX = this.pointerDown.startX;
+        this.camera.dragStartY = this.pointerDown.startY;
+        this.camera.dragCamX = this.pointerDown.startCamX;
+        this.camera.dragCamY = this.pointerDown.startCamY;
+      }
+    }
+
     if (this.camera.dragActive) {
       const zoom = this.zoomLevels[this.camera.zoomIndex];
       const dx = (event.clientX - this.camera.dragStartX) / zoom;
@@ -480,9 +525,10 @@ class GameRuntime {
   onPointerDown(event) {
     this.syncPointerFromEvent(event);
     this.mouse.edgePanReady = true;
-    const worldPoint = this.screenToWorld(this.mouse.x, this.mouse.y);
-
-    if (event.button === 1 || (event.button === 0 && event.altKey)) {
+    if (
+      event.button === 1 ||
+      (event.button === 0 && event.altKey)
+    ) {
       this.camera.dragActive = true;
       this.camera.dragStartX = event.clientX;
       this.camera.dragStartY = event.clientY;
@@ -491,37 +537,59 @@ class GameRuntime {
       return;
     }
 
-    const region = this.findRegionAt(worldPoint.x, worldPoint.y);
-    if (!region) {
-      this.selectedRegionId = null;
-      this.pushHudUpdate();
+    if (event.button === 0) {
+      this.pointerDown.active = true;
+      this.pointerDown.pointerId = event.pointerId;
+      this.pointerDown.button = event.button;
+      this.pointerDown.startX = event.clientX;
+      this.pointerDown.startY = event.clientY;
+      this.pointerDown.startCamX = this.camera.x;
+      this.pointerDown.startCamY = this.camera.y;
+      this.pointerDown.dragging = false;
+      if (typeof this.canvas.setPointerCapture === "function") {
+        try {
+          this.canvas.setPointerCapture(event.pointerId);
+        } catch {
+          // Ignore unsupported pointer-capture environments.
+        }
+      }
       return;
     }
-
-    this.selectedRegionId = region.id;
 
     if (event.button === 2) {
-      this.handleDemolish(region);
+      this.handleSecondaryClick();
       this.pushHudUpdate();
       return;
     }
-
-    if (this.tool === TOOL_BUILD) {
-      if (!region.unlocked) {
-        this.tryUnlockRegion(region);
-      } else {
-        this.handleBuild(region);
-      }
-    } else if (this.tool === TOOL_DEMOLISH) {
-      this.handleDemolish(region);
-    } else if (this.tool === TOOL_REROUTE) {
-      this.handleReroute(region);
-    }
-
-    this.pushHudUpdate();
   }
 
-  onPointerUp() {
+  onPointerUp(event) {
+    this.syncPointerFromEvent(event);
+
+    if (
+      this.pointerDown.active &&
+      this.pointerDown.pointerId === event.pointerId &&
+      this.pointerDown.button === 0
+    ) {
+      const wasDrag = this.pointerDown.dragging || this.camera.dragActive;
+      this.pointerDown.active = false;
+      this.pointerDown.pointerId = null;
+      this.pointerDown.button = null;
+      this.pointerDown.dragging = false;
+      this.camera.dragActive = false;
+      if (typeof this.canvas.releasePointerCapture === "function") {
+        try {
+          this.canvas.releasePointerCapture(event.pointerId);
+        } catch {
+          // Ignore unsupported pointer-capture environments.
+        }
+      }
+      if (!wasDrag) {
+        this.handlePrimaryClick();
+      }
+      return;
+    }
+
     this.camera.dragActive = false;
   }
 
@@ -533,6 +601,30 @@ class GameRuntime {
 
   onKeyDown(event) {
     if (event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement) {
+      return;
+    }
+
+    if (event.code === "KeyW" || event.code === "ArrowUp") {
+      event.preventDefault();
+      this.keyPan.up = true;
+      return;
+    }
+
+    if (event.code === "KeyS" || event.code === "ArrowDown") {
+      event.preventDefault();
+      this.keyPan.down = true;
+      return;
+    }
+
+    if (event.code === "KeyA" || event.code === "ArrowLeft") {
+      event.preventDefault();
+      this.keyPan.left = true;
+      return;
+    }
+
+    if (event.code === "KeyD" || event.code === "ArrowRight") {
+      event.preventDefault();
+      this.keyPan.right = true;
       return;
     }
 
@@ -563,25 +655,13 @@ class GameRuntime {
       return;
     }
 
-    if (event.code === "KeyD") {
+    if (event.code === "KeyX") {
       this.tool = TOOL_DEMOLISH;
       this.pushHudUpdate();
       return;
     }
 
     if (event.code === "KeyR") {
-      this.tool = TOOL_REROUTE;
-      this.pushHudUpdate();
-      return;
-    }
-
-    if (event.code === "KeyA") {
-      this.tool = TOOL_DEMOLISH;
-      this.pushHudUpdate();
-      return;
-    }
-
-    if (event.code === "KeyB") {
       this.tool = TOOL_REROUTE;
       this.pushHudUpdate();
       return;
@@ -607,6 +687,34 @@ class GameRuntime {
     if (event.code === "KeyF") {
       this.toggleFullscreen();
     }
+  }
+
+  onKeyUp(event) {
+    if (event.code === "KeyW" || event.code === "ArrowUp") {
+      this.keyPan.up = false;
+      return;
+    }
+    if (event.code === "KeyS" || event.code === "ArrowDown") {
+      this.keyPan.down = false;
+      return;
+    }
+    if (event.code === "KeyA" || event.code === "ArrowLeft") {
+      this.keyPan.left = false;
+      return;
+    }
+    if (event.code === "KeyD" || event.code === "ArrowRight") {
+      this.keyPan.right = false;
+    }
+  }
+
+  onWindowBlur() {
+    this.keyPan.up = false;
+    this.keyPan.down = false;
+    this.keyPan.left = false;
+    this.keyPan.right = false;
+    this.pointerDown.active = false;
+    this.pointerDown.dragging = false;
+    this.camera.dragActive = false;
   }
 
   togglePause() {
@@ -744,6 +852,58 @@ class GameRuntime {
     this.state.score += 30;
     this.logTimeline(`Unlocked ${region.name} for ${cost} budget.`);
     this.pushAlert(`${region.name} unlocked. New demand obligations activated.`, "warning", 6);
+  }
+
+  handlePrimaryClick() {
+    const worldPoint = this.screenToWorld(this.mouse.x, this.mouse.y);
+    const region = this.findRegionAt(worldPoint.x, worldPoint.y);
+    if (!region) {
+      this.selectedRegionId = null;
+      this.pushHudUpdate();
+      return;
+    }
+
+    this.selectedRegionId = region.id;
+    if (this.tool === TOOL_BUILD) {
+      if (!region.unlocked) {
+        this.tryUnlockRegion(region);
+      } else {
+        this.handleBuild(region);
+      }
+    } else if (this.tool === TOOL_DEMOLISH) {
+      this.handleDemolish(region);
+    } else if (this.tool === TOOL_REROUTE) {
+      this.handleReroute(region);
+    }
+    this.pushHudUpdate();
+  }
+
+  handleSecondaryClick() {
+    const worldPoint = this.screenToWorld(this.mouse.x, this.mouse.y);
+    const region = this.findRegionAt(worldPoint.x, worldPoint.y);
+    if (!region) {
+      this.selectedRegionId = null;
+      this.pushHudUpdate();
+      return;
+    }
+    this.selectedRegionId = region.id;
+    this.handleDemolish(region);
+    this.pushHudUpdate();
+  }
+
+  handleKeyboardPan(dt) {
+    const panX = (this.keyPan.right ? 1 : 0) - (this.keyPan.left ? 1 : 0);
+    const panY = (this.keyPan.down ? 1 : 0) - (this.keyPan.up ? 1 : 0);
+    if (!panX && !panY) return;
+
+    const speed = 520;
+    const zoom = this.zoomLevels[this.camera.zoomIndex];
+    const magnitude = Math.hypot(panX, panY) || 1;
+    const nx = panX / magnitude;
+    const ny = panY / magnitude;
+
+    this.camera.x = clamp(this.camera.x + (nx * speed * dt) / zoom, 0, BASE_MAP.width);
+    this.camera.y = clamp(this.camera.y + (ny * speed * dt) / zoom, 0, BASE_MAP.height);
   }
 
   handleEdgePan(dt) {
@@ -1530,26 +1690,16 @@ class GameRuntime {
   }
 
   drawOverlay(ctx, width, height) {
-    ctx.fillStyle = "rgba(7, 20, 28, 0.72)";
-    ctx.fillRect(14, 12, 320, 66);
-    ctx.strokeStyle = "rgba(170, 229, 204, 0.3)";
-    ctx.strokeRect(14, 12, 320, 66);
-
-    ctx.fillStyle = "#ecf9ef";
-    ctx.font = '600 14px "IBM Plex Mono", monospace';
-    ctx.fillText(`Tool: ${this.tool.toUpperCase()} (${this.buildAssetType})`, 24, 34);
-    ctx.fillText(`Pause: Space | Fullscreen: F | Alerts: Tab`, 24, 54);
-    ctx.fillText(`Zoom ${this.camera.zoomIndex + 1}/${this.zoomLevels.length}`, 24, 72);
-
     if (this.paused) {
-      ctx.fillStyle = "rgba(8, 18, 26, 0.68)";
-      ctx.fillRect(width / 2 - 120, height / 2 - 30, 240, 60);
-      ctx.strokeStyle = "rgba(242, 246, 214, 0.4)";
-      ctx.strokeRect(width / 2 - 120, height / 2 - 30, 240, 60);
+      ctx.fillStyle = "rgba(8, 18, 26, 0.74)";
+      ctx.fillRect(width / 2 - 128, 66, 256, 56);
+      ctx.strokeStyle = "rgba(242, 246, 214, 0.42)";
+      ctx.lineWidth = 1.3;
+      ctx.strokeRect(width / 2 - 128, 66, 256, 56);
       ctx.fillStyle = "#f4f7d8";
-      ctx.font = '600 20px "Rajdhani", sans-serif';
+      ctx.font = '600 22px "Rajdhani", sans-serif';
       ctx.textAlign = "center";
-      ctx.fillText("SIMULATION PAUSED", width / 2, height / 2 + 7);
+      ctx.fillText("Simulation Paused", width / 2, 101);
       ctx.textAlign = "left";
     }
   }
@@ -1742,7 +1892,12 @@ export class SaveTheGridApp {
     window.render_game_to_text = () => this.renderGameToTextBridge();
     window.advanceTime = (ms) => this.advanceTimeBridge(ms);
 
+    this.setRunMode(false);
     this.renderSplash();
+  }
+
+  setRunMode(active) {
+    document.body.classList.toggle("run-mode", active);
   }
 
   renderGameToTextBridge() {
@@ -1769,6 +1924,7 @@ export class SaveTheGridApp {
   }
 
   renderSplash() {
+    this.setRunMode(false);
     this.cleanupRuntime();
     this.currentScreen = "splash";
     this.root.innerHTML = `
@@ -1794,6 +1950,7 @@ export class SaveTheGridApp {
   }
 
   renderMainMenu() {
+    this.setRunMode(false);
     window.clearTimeout(this.splashTimeout);
     this.cleanupSplashListeners();
     this.currentScreen = "menu";
@@ -1872,6 +2029,7 @@ export class SaveTheGridApp {
   }
 
   renderStandardSetup() {
+    this.setRunMode(false);
     this.currentScreen = "standard-setup";
 
     const presetMarkup = STANDARD_PRESETS.map((preset) => {
@@ -1915,6 +2073,7 @@ export class SaveTheGridApp {
   }
 
   renderCampaignSelect() {
+    this.setRunMode(false);
     this.currentScreen = "campaign-select";
 
     const missionCards = CAMPAIGN_MISSIONS.map((mission, index) => {
@@ -1965,6 +2124,7 @@ export class SaveTheGridApp {
   }
 
   renderCustomSetup() {
+    this.setRunMode(false);
     this.currentScreen = "custom-setup";
 
     const presetOptions = CUSTOM_PRESETS.map((preset) => {
@@ -2086,6 +2246,7 @@ export class SaveTheGridApp {
   }
 
   renderRecordsScreen() {
+    this.setRunMode(false);
     this.currentScreen = "records";
 
     const renderRows = (records) => {
@@ -2145,6 +2306,7 @@ export class SaveTheGridApp {
   }
 
   renderSettingsScreen() {
+    this.setRunMode(false);
     this.currentScreen = "settings";
 
     this.root.innerHTML = `
@@ -2192,76 +2354,159 @@ export class SaveTheGridApp {
     });
   }
 
-  startRun(runConfig) {
-    this.currentScreen = "run";
-    this.cleanupRuntime();
+  buildRunScreenMarkup(newsTickerText) {
+    return `
+      <section class="screen run-screen" data-testid="in-run-screen" data-surface="run">
+        <main class="map-shell" id="map-shell">
+          <canvas id="game-canvas" aria-label="Grid map"></canvas>
+        </main>
 
-    this.root.innerHTML = `
-      <section class="screen run-screen">
-        <header class="hud-topbar">
-          <div class="hud-metrics" id="hud-metrics">
-            <span>Budget <strong id="hud-budget">0</strong></span>
-            <span>Reliability <strong id="hud-reliability">0%</strong></span>
-            <span>Unmet <strong id="hud-unmet">0</strong></span>
-            <span>Timer <strong id="hud-timer">00:00</strong></span>
-            <span>Season <strong id="hud-season">neutral</strong></span>
-            <span>Score <strong id="hud-score">0</strong></span>
-            <span>Lawsuits <strong id="hud-lawsuits">0</strong></span>
+        <div class="floating-ui-layer">
+          <div class="floating-group floating-top-left">
+            <div class="floating-chip floating-chip-icon">GRID</div>
+            <div class="floating-chip floating-chip-label" id="hud-run-label">Standard Run</div>
           </div>
-          <div class="hud-actions">
-            <button class="ghost-btn" id="run-pause-btn">Pause</button>
-            <button class="ghost-btn" id="run-save-exit-btn">Save & Exit</button>
+
+          <div class="floating-group floating-top-right">
+            <span class="floating-chip">Time <strong id="hud-timer">00:00</strong></span>
+            <button class="ghost-btn floating-btn" id="run-pause-btn">Pause</button>
+            <button class="ghost-btn floating-btn" id="run-save-exit-btn">Save &amp; Exit</button>
           </div>
-        </header>
 
-        <div class="run-layout">
-          <aside class="tool-rail">
-            <h3>Command Tools</h3>
-            <button class="tool-btn" data-tool="build">Build</button>
-            <button class="tool-btn" data-tool="demolish">Demolish</button>
-            <button class="tool-btn" data-tool="reroute">Reroute</button>
-            <hr>
-            <button class="asset-btn" data-asset="plant">1: Plant</button>
-            <button class="asset-btn" data-asset="substation">2: Substation</button>
-            <button class="asset-btn" data-asset="storage">3: Storage</button>
-            <p class="tool-hint">Right click: quick demolish<br>Space: pause<br>Tab: cycle critical alerts<br>F: fullscreen</p>
-          </aside>
+          <section class="floating-group floating-objective floating-card">
+            <h3 id="objective-title">Objective</h3>
+            <p id="objective-text"></p>
+            <div class="objective-progress"><span id="objective-progress-fill"></span></div>
+            <p id="objective-detail" class="objective-detail"></p>
+          </section>
 
-          <main class="map-shell" id="map-shell">
-            <canvas id="game-canvas" aria-label="Grid map"></canvas>
-          </main>
+          <section class="floating-group floating-alerts floating-card">
+            <h3>Alert Rail</h3>
+            <ul id="alert-list" class="alert-list"></ul>
+          </section>
 
-          <aside class="event-rail">
-            <section class="objective-box">
-              <h3 id="objective-title">Objective</h3>
-              <p id="objective-text"></p>
-              <div class="objective-progress"><span id="objective-progress-fill"></span></div>
-              <p id="objective-detail" class="objective-detail"></p>
-            </section>
-            <section>
-              <h3>Incident Rail</h3>
-              <ul id="incident-list" class="incident-list"></ul>
-            </section>
-            <section>
-              <h3>Alert Rail</h3>
-              <ul id="alert-list" class="alert-list"></ul>
-            </section>
-          </aside>
+          <section class="floating-group floating-incidents floating-card">
+            <h3>Incident Rail</h3>
+            <ul id="incident-list" class="incident-list"></ul>
+          </section>
+
+          <div class="floating-group floating-bottom-left" id="hud-metrics">
+            <span class="floating-chip">Budget <strong id="hud-budget">0</strong></span>
+            <span class="floating-chip">Supply <strong id="hud-served">0</strong></span>
+            <span class="floating-chip">Unmet <strong id="hud-unmet">0</strong></span>
+            <span class="floating-chip">Reliability <strong id="hud-reliability">0%</strong></span>
+            <span class="floating-chip">Score <strong id="hud-score">0</strong></span>
+            <span class="floating-chip">Season <strong id="hud-season">neutral</strong></span>
+            <span class="floating-chip">Lawsuits <strong id="hud-lawsuits">0</strong></span>
+            <span class="floating-chip">Zoom <strong id="hud-zoom">1.00x</strong></span>
+          </div>
+
+          <div class="floating-group floating-bottom-center">
+            <div class="floating-dock">
+              <button class="tool-btn floating-dock-btn" data-tool="build" data-testid="tool-build">Build</button>
+              <button class="tool-btn floating-dock-btn" data-tool="demolish" data-testid="tool-demolish">Demolish</button>
+              <button class="tool-btn floating-dock-btn" data-tool="reroute" data-testid="tool-reroute">Reroute</button>
+              <span class="dock-separator" aria-hidden="true"></span>
+              <button class="asset-btn floating-dock-btn" data-asset="plant" data-testid="asset-plant">Plant (1)</button>
+              <button class="asset-btn floating-dock-btn" data-asset="substation" data-testid="asset-substation">Sub (2)</button>
+              <button class="asset-btn floating-dock-btn" data-asset="storage" data-testid="asset-storage">Storage (3)</button>
+            </div>
+          </div>
+
+          <div class="floating-group floating-map-controls">
+            <button class="floating-map-btn" id="run-zoom-in-btn" aria-label="Zoom in">+</button>
+            <button class="floating-map-btn" id="run-zoom-out-btn" aria-label="Zoom out">-</button>
+            <button class="floating-map-btn" id="run-center-btn" aria-label="Center map">Center</button>
+            <button class="floating-map-btn" id="run-fullscreen-btn" aria-label="Toggle fullscreen">Full</button>
+          </div>
+
+          <div class="floating-group floating-bottom-right">
+            <div id="region-context" class="floating-card floating-region-context">
+              <h3>Region Context</h3>
+              <p>Select a region on the map.</p>
+            </div>
+            <div class="ticker floating-ticker" id="news-ticker">${newsTickerText}</div>
+          </div>
         </div>
-
-        <footer class="context-panel" id="context-panel">
-          <div id="region-context">
-            <h3>Region Context</h3>
-            <p>Select a region on the map.</p>
-          </div>
-          <div class="ticker" id="news-ticker">National bulletin feed online.</div>
-        </footer>
       </section>
     `;
+  }
+
+  attachRunUiListeners() {
+    this.root.querySelectorAll("[data-tool]").forEach((button) => {
+      button.addEventListener("click", () => {
+        if (!this.runtime) return;
+        this.runtime.tool = button.getAttribute("data-tool");
+        this.runtime.pushHudUpdate();
+      });
+    });
+
+    this.root.querySelectorAll("[data-asset]").forEach((button) => {
+      button.addEventListener("click", () => {
+        if (!this.runtime) return;
+        this.runtime.tool = TOOL_BUILD;
+        this.runtime.buildAssetType = button.getAttribute("data-asset");
+        this.runtime.pushHudUpdate();
+      });
+    });
+
+    this.root.querySelector("#run-pause-btn")?.addEventListener("click", () => {
+      if (!this.runtime) return;
+      this.runtime.togglePause();
+    });
+
+    this.root.querySelector("#run-save-exit-btn")?.addEventListener("click", () => {
+      if (!this.runtime) return;
+      const snapshot = this.runtime.serializeForSuspend();
+      this.suspendedRun = snapshot;
+      writeJsonStorage(STORAGE_KEYS.suspendedRun, snapshot);
+      this.pushToast("Run suspended. Continue Run is now available from menu.");
+      this.renderMainMenu();
+    });
+
+    this.root.querySelector("#run-zoom-in-btn")?.addEventListener("click", () => {
+      if (!this.runtime) return;
+      this.runtime.camera.zoomIndex = clamp(
+        this.runtime.camera.zoomIndex + 1,
+        0,
+        this.runtime.zoomLevels.length - 1
+      );
+      this.runtime.pushHudUpdate();
+      this.runtime.render();
+    });
+
+    this.root.querySelector("#run-zoom-out-btn")?.addEventListener("click", () => {
+      if (!this.runtime) return;
+      this.runtime.camera.zoomIndex = clamp(
+        this.runtime.camera.zoomIndex - 1,
+        0,
+        this.runtime.zoomLevels.length - 1
+      );
+      this.runtime.pushHudUpdate();
+      this.runtime.render();
+    });
+
+    this.root.querySelector("#run-center-btn")?.addEventListener("click", () => {
+      if (!this.runtime) return;
+      this.runtime.camera.x = BASE_MAP.width / 2;
+      this.runtime.camera.y = BASE_MAP.height / 2;
+      this.runtime.pushHudUpdate();
+      this.runtime.render();
+    });
+
+    this.root.querySelector("#run-fullscreen-btn")?.addEventListener("click", () => {
+      if (!this.runtime) return;
+      this.runtime.toggleFullscreen();
+    });
+  }
+
+  startRun(runConfig) {
+    this.setRunMode(true);
+    this.currentScreen = "run";
+    this.cleanupRuntime();
+    this.root.innerHTML = this.buildRunScreenMarkup("National bulletin feed online.");
 
     const canvas = this.root.querySelector("#game-canvas");
-    const pauseButton = this.root.querySelector("#run-pause-btn");
-    const saveExitButton = this.root.querySelector("#run-save-exit-btn");
 
     this.runtime = new GameRuntime({
       canvas,
@@ -2279,34 +2524,7 @@ export class SaveTheGridApp {
     });
 
     this.runtime.start();
-
-    this.root.querySelectorAll("[data-tool]").forEach((button) => {
-      button.addEventListener("click", () => {
-        this.runtime.tool = button.getAttribute("data-tool");
-        this.runtime.pushHudUpdate();
-      });
-    });
-
-    this.root.querySelectorAll("[data-asset]").forEach((button) => {
-      button.addEventListener("click", () => {
-        this.runtime.tool = TOOL_BUILD;
-        this.runtime.buildAssetType = button.getAttribute("data-asset");
-        this.runtime.pushHudUpdate();
-      });
-    });
-
-    pauseButton?.addEventListener("click", () => {
-      this.runtime.togglePause();
-      pauseButton.textContent = this.runtime.paused ? "Resume" : "Pause";
-    });
-
-    saveExitButton?.addEventListener("click", () => {
-      const snapshot = this.runtime.serializeForSuspend();
-      this.suspendedRun = snapshot;
-      writeJsonStorage(STORAGE_KEYS.suspendedRun, snapshot);
-      this.pushToast("Run suspended. Continue Run is now available from menu.");
-      this.renderMainMenu();
-    });
+    this.attachRunUiListeners();
   }
 
   startRunFromSnapshot(snapshot) {
@@ -2318,71 +2536,10 @@ export class SaveTheGridApp {
       return;
     }
 
+    this.setRunMode(true);
     this.currentScreen = "run";
     this.cleanupRuntime();
-
-    this.root.innerHTML = `
-      <section class="screen run-screen">
-        <header class="hud-topbar">
-          <div class="hud-metrics" id="hud-metrics">
-            <span>Budget <strong id="hud-budget">0</strong></span>
-            <span>Reliability <strong id="hud-reliability">0%</strong></span>
-            <span>Unmet <strong id="hud-unmet">0</strong></span>
-            <span>Timer <strong id="hud-timer">00:00</strong></span>
-            <span>Season <strong id="hud-season">neutral</strong></span>
-            <span>Score <strong id="hud-score">0</strong></span>
-            <span>Lawsuits <strong id="hud-lawsuits">0</strong></span>
-          </div>
-          <div class="hud-actions">
-            <button class="ghost-btn" id="run-pause-btn">Pause</button>
-            <button class="ghost-btn" id="run-save-exit-btn">Save & Exit</button>
-          </div>
-        </header>
-
-        <div class="run-layout">
-          <aside class="tool-rail">
-            <h3>Command Tools</h3>
-            <button class="tool-btn" data-tool="build">Build</button>
-            <button class="tool-btn" data-tool="demolish">Demolish</button>
-            <button class="tool-btn" data-tool="reroute">Reroute</button>
-            <hr>
-            <button class="asset-btn" data-asset="plant">1: Plant</button>
-            <button class="asset-btn" data-asset="substation">2: Substation</button>
-            <button class="asset-btn" data-asset="storage">3: Storage</button>
-            <p class="tool-hint">Right click: quick demolish<br>Space: pause<br>Tab: cycle critical alerts<br>F: fullscreen</p>
-          </aside>
-
-          <main class="map-shell" id="map-shell">
-            <canvas id="game-canvas" aria-label="Grid map"></canvas>
-          </main>
-
-          <aside class="event-rail">
-            <section class="objective-box">
-              <h3 id="objective-title">Objective</h3>
-              <p id="objective-text"></p>
-              <div class="objective-progress"><span id="objective-progress-fill"></span></div>
-              <p id="objective-detail" class="objective-detail"></p>
-            </section>
-            <section>
-              <h3>Incident Rail</h3>
-              <ul id="incident-list" class="incident-list"></ul>
-            </section>
-            <section>
-              <h3>Alert Rail</h3>
-              <ul id="alert-list" class="alert-list"></ul>
-            </section>
-          </aside>
-        </div>
-
-        <footer class="context-panel" id="context-panel">
-          <div id="region-context">
-            <h3>Region Context</h3>
-            <p>Select a region on the map.</p>
-          </div>
-          <div class="ticker" id="news-ticker">Resuming archived session...</div>
-        </footer>
-      </section>
-    `;
+    this.root.innerHTML = this.buildRunScreenMarkup("Resuming archived session...");
 
     const canvas = this.root.querySelector("#game-canvas");
 
@@ -2404,59 +2561,51 @@ export class SaveTheGridApp {
 
     this.runtime.hydrateRuntimeState(snapshot);
     this.runtime.start();
-
-    this.root.querySelectorAll("[data-tool]").forEach((button) => {
-      button.addEventListener("click", () => {
-        this.runtime.tool = button.getAttribute("data-tool");
-        this.runtime.pushHudUpdate();
-      });
-    });
-
-    this.root.querySelectorAll("[data-asset]").forEach((button) => {
-      button.addEventListener("click", () => {
-        this.runtime.tool = TOOL_BUILD;
-        this.runtime.buildAssetType = button.getAttribute("data-asset");
-        this.runtime.pushHudUpdate();
-      });
-    });
-
-    this.root.querySelector("#run-pause-btn")?.addEventListener("click", () => {
-      this.runtime.togglePause();
-    });
-
-    this.root.querySelector("#run-save-exit-btn")?.addEventListener("click", () => {
-      const nextSnapshot = this.runtime.serializeForSuspend();
-      this.suspendedRun = nextSnapshot;
-      writeJsonStorage(STORAGE_KEYS.suspendedRun, nextSnapshot);
-      this.pushToast("Run suspended. Continue Run is available from menu.");
-      this.renderMainMenu();
-    });
-
+    this.attachRunUiListeners();
     this.suspendedRun = snapshot;
   }
 
   updateRunHud(payload) {
     const $ = (selector) => this.root.querySelector(selector);
 
+    const runLabelNode = $("#hud-run-label");
     const budgetNode = $("#hud-budget");
+    const servedNode = $("#hud-served");
     const reliabilityNode = $("#hud-reliability");
     const unmetNode = $("#hud-unmet");
     const timerNode = $("#hud-timer");
     const seasonNode = $("#hud-season");
     const scoreNode = $("#hud-score");
     const lawsuitsNode = $("#hud-lawsuits");
+    const zoomNode = $("#hud-zoom");
+    const pauseNode = $("#run-pause-btn");
 
-    if (!budgetNode || !reliabilityNode || !unmetNode || !timerNode || !seasonNode || !scoreNode || !lawsuitsNode) {
+    if (
+      !budgetNode ||
+      !servedNode ||
+      !reliabilityNode ||
+      !unmetNode ||
+      !timerNode ||
+      !seasonNode ||
+      !scoreNode ||
+      !lawsuitsNode
+    ) {
       return;
     }
 
+    if (runLabelNode) runLabelNode.textContent = payload.runLabel;
     budgetNode.textContent = Math.round(payload.budget).toString();
+    servedNode.textContent = payload.servedDemand.toFixed(1);
     reliabilityNode.textContent = `${payload.reliability.toFixed(1)}%`;
     unmetNode.textContent = payload.unmetDemand.toFixed(1);
     timerNode.textContent = formatTime(payload.timer);
     seasonNode.textContent = payload.season.toUpperCase();
     scoreNode.textContent = Math.round(payload.score).toString();
     lawsuitsNode.textContent = String(payload.lawsuits);
+    if (zoomNode && this.runtime) {
+      zoomNode.textContent = `${this.runtime.zoomLevels[this.runtime.camera.zoomIndex].toFixed(2)}x`;
+    }
+    if (pauseNode) pauseNode.textContent = payload.paused ? "Resume" : "Pause";
 
     const toolButtons = this.root.querySelectorAll(".tool-btn");
     toolButtons.forEach((button) => {
@@ -2484,7 +2633,7 @@ export class SaveTheGridApp {
     if (incidentList) {
       incidentList.innerHTML = payload.incidents.length
         ? payload.incidents
-            .slice(0, 5)
+            .slice(0, 3)
             .map((incident) => {
               const level = ALERT_LEVELS[incident.level] || ALERT_LEVELS.advisory;
               return `<li style="--level:${level.color}"><strong>${incident.title}</strong><span>${incident.body}</span></li>`;
@@ -2497,7 +2646,7 @@ export class SaveTheGridApp {
     if (alertList) {
       alertList.innerHTML = payload.alerts.length
         ? payload.alerts
-            .slice(0, 7)
+            .slice(0, 4)
             .map((alert) => {
               const level = ALERT_LEVELS[alert.level] || ALERT_LEVELS.advisory;
               return `<li data-alert-id="${alert.id}" style="--level:${level.color}"><strong>${level.label}</strong><span>${alert.text}</span></li>`;
@@ -2506,29 +2655,25 @@ export class SaveTheGridApp {
         : "<li><span>No active alerts.</span></li>";
     }
 
-    const contextPanel = $("#context-panel");
-    if (contextPanel) {
-      const regionContext = contextPanel.querySelector("#region-context");
-      const selected = payload.selectedRegion;
-      if (!selected) {
-        if (regionContext) {
-          regionContext.innerHTML = "<h3>Region Context</h3><p>Select a region on the map.</p>";
-        }
-      } else {
-        const unlockCost = Math.ceil(selected.unlockCost * this.runtime.config.unlockCostMultiplier);
-        const selectedHtml = `
-          <h3>${selected.name}</h3>
-          <p>${selected.districtType} | ${selected.climate} climate | ${selected.terrain} terrain</p>
-          <p>Priority ${selected.priority.toUpperCase()} | Population ${selected.population.toFixed(1)}</p>
-          <p>Demand ${selected.demand.toFixed(1)} | Served ${selected.served.toFixed(1)} | Unmet ${selected.unmet.toFixed(1)}</p>
-          <p>Assets P${selected.assets.plant} S${selected.assets.substation} B${selected.assets.storage}</p>
-          <p>${selected.unlocked ? "Region active" : `Unlock cost: ${unlockCost}`}</p>
-        `;
-        if (regionContext) {
-          regionContext.innerHTML = selectedHtml;
-        }
-      }
+    const regionContext = $("#region-context");
+    const selected = payload.selectedRegion;
+    if (!regionContext) return;
+
+    if (!selected) {
+      regionContext.innerHTML = "<h3>Region Context</h3><p>Select a region on the map.</p>";
+      return;
     }
+
+    const unlockCost = Math.ceil(selected.unlockCost * this.runtime.config.unlockCostMultiplier);
+    const selectedHtml = `
+      <h3>${selected.name}</h3>
+      <p>${selected.districtType} | ${selected.climate} climate | ${selected.terrain} terrain</p>
+      <p>Priority ${selected.priority.toUpperCase()} | Population ${selected.population.toFixed(1)}</p>
+      <p>Demand ${selected.demand.toFixed(1)} | Served ${selected.served.toFixed(1)} | Unmet ${selected.unmet.toFixed(1)}</p>
+      <p>Assets P${selected.assets.plant} S${selected.assets.substation} B${selected.assets.storage}</p>
+      <p>${selected.unlocked ? "Region active" : `Unlock cost: ${unlockCost}`}</p>
+    `;
+    regionContext.innerHTML = selectedHtml;
   }
 
   highlightAlert(alertId) {
@@ -2589,6 +2734,7 @@ export class SaveTheGridApp {
   }
 
   renderEndScreen(summary, recordEntry) {
+    this.setRunMode(false);
     this.currentScreen = "end";
 
     const rankingBucket = summary.leaderboardEligible ? summary.runClass : "custom";

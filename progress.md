@@ -87,3 +87,56 @@ Original prompt: Develop the game MVP based on all provided documentation
   - `output/repro-pan-after/`: camera remained stable at run start with no intentional pointer input (`y=700` across iterations).
   - `output/repro-pan-intentional/`: intentional top-edge interaction still pans as designed (`y` reaches `0`).
   - No console/page errors in these verification runs.
+- 2026-02-18: Ran `bot-player/scenarios/start-round-demo.json` with `advanceTime=10000` and captured a 10-seconds-into-round screenshot (`Timer 00:10`) at `bot-player/artifacts/2026-02-18T16-05-09-218Z-round-started.png`.
+- Fixed run-screen layout growth/scrollbar bug causing viewport overflow during gameplay.
+  - Added `body.run-mode { overflow: hidden; }` and screen-mode toggling in app transitions.
+  - Locked run screen to viewport (`height/min-height: 100dvh`) and prevented page-level overflow.
+  - Updated run layout rows to `auto minmax(0,1fr) auto` and removed map-shell fixed min-height pressure.
+  - Constrained side rails to internal scrolling instead of expanding page height.
+- Verification:
+  - Document metrics remained stable across time in run mode (`scrollHeight == clientHeight`, `scrollY == 0`).
+  - Camera remained stable at run start with no input (`camera.y == 700` across checks).
+
+## 2026-02-18 (Floating HUD Iteration)
+- Replaced in-round DOM layout from docked `header + side rails + footer` panels to a full-screen map with floating controls layered on top.
+- Added a shared run-screen template method (`buildRunScreenMarkup`) used by both fresh runs and resumed runs.
+- Added shared run UI wiring (`attachRunUiListeners`) for:
+  - floating tool/asset controls,
+  - pause/save actions,
+  - map zoom in/out,
+  - map recenter,
+  - fullscreen toggle.
+- Updated `updateRunHud` for the new floating UI nodes:
+  - added run label, served-demand chip, zoom chip, and pause button label syncing.
+  - kept objective, alerts, incidents, and region-context updates with compact list sizes.
+- Simplified canvas overlay to only show a pause badge (removed top-left embedded canvas HUD panel).
+- Reworked run-mode CSS to:
+  - make map/canvas fill the full viewport,
+  - position controls as floating chips/cards/dock/buttons,
+  - remove dependency on old `run-layout`, `tool-rail`, `event-rail`, `context-panel` structures,
+  - provide mobile responsive behavior for floating controls.
+
+### Validation
+- Syntax checks:
+  - `node --check src/game.js`
+  - `node --check src/main.js`
+- Develop-web-game Playwright client:
+  - `node /Users/mstafford/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js --url http://127.0.0.1:5173 --actions-file /Users/mstafford/.codex/skills/develop-web-game/references/action_payloads.json --click-selector "#start-btn" --iterations 3 --pause-ms 250 --screenshot-dir output/web-game-floating`
+  - Verified screenshots/state output generated with no runtime failures.
+- Full-page visual check of floating HUD:
+  - `node bot-player/run-bot.mjs --url http://127.0.0.1:5173 --scenario bot-player/scenarios/start-round-demo.json`
+  - Reviewed screenshot: `bot-player/bot-player/artifacts/2026-02-18T16-23-49-089Z-round-started.png`.
+- Regression smoke:
+  - `node bot-player/run-bot.mjs --url http://127.0.0.1:5173 --scenario bot-player/scenarios/smoke-controls.json`
+  - Completed all steps including save/exit back to menu with no console/page errors.
+  - `node bot-player/run-bot.mjs --url http://127.0.0.1:5173 --scenario bot-player/scenarios/smoke-menu-to-run.json`
+  - Completed end-to-end run entry/autoplay/save-exit path (19/20 due one optional splash-skip step timing out, expected fallback succeeded).
+
+## 2026-02-18 (Floating HUD Re-Validation)
+- Re-validated the implemented floating in-round HUD on latest working tree.
+- Checks run:
+  - `node --check src/game.js`
+  - `node --check src/main.js`
+  - `node bot-player/run-bot.mjs --url http://127.0.0.1:5173 --scenario bot-player/scenarios/start-round-demo.json`
+- Latest verification screenshot:
+  - `bot-player/bot-player/artifacts/2026-02-18T20-49-26-234Z-round-started.png`

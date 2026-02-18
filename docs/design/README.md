@@ -16,6 +16,7 @@ Current emphasis:
 - Early levels use small, highly readable maps.
 - Later levels scale to larger fragmented maps with region acquisition decisions.
 - Region acquisition budget is level-local; completion unlocks the next level only.
+- Visual direction blends map readability (Google Maps-like) with pixelated RTS map character (OpenFront-inspired).
 
 ## Scope Rules
 
