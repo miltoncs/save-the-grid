@@ -184,8 +184,8 @@ function buildRunConfigFromCustom(customState) {
   return {
     mode: "custom",
     label: "Custom Game",
-    leaderboardClass: customState.leaderboardEligible ? "standard" : "custom",
-    leaderboardEligible: !!customState.leaderboardEligible,
+    leaderboardClass: "custom",
+    leaderboardEligible: false,
     demandGrowthMultiplier: customState.demandGrowthMultiplier,
     eventIntensity: normalizeEventIntensity(customState.eventIntensity),
     seasonalProfile: customState.seasonalProfile,
@@ -218,7 +218,14 @@ class GameRuntime {
     this.lastFrame = 0;
     this.renderPulse = 0;
     this.loopHandle = 0;
-    this.mouse = { x: 0, y: 0, inside: false };
+    this.mouse = {
+      x: 0,
+      y: 0,
+      inside: false,
+      edgePanReady: false,
+      lastMoveX: null,
+      lastMoveY: null,
+    };
 
     this.zoomLevels = [0.55, 0.72, 0.9, 1.1, 1.32];
     this.camera = {
@@ -242,6 +249,8 @@ class GameRuntime {
     this.resizeObserver = null;
     this.boundResize = () => this.resizeCanvas();
     this.boundMouseMove = (event) => this.onPointerMove(event);
+    this.boundPointerEnter = (event) => this.onPointerEnter(event);
+    this.boundPointerLeave = () => this.onPointerLeave();
     this.boundPointerDown = (event) => this.onPointerDown(event);
     this.boundPointerUp = (event) => this.onPointerUp(event);
     this.boundWheel = (event) => this.onWheel(event);
@@ -331,6 +340,8 @@ class GameRuntime {
 
   bindInputs() {
     this.canvas.addEventListener("mousemove", this.boundMouseMove);
+    this.canvas.addEventListener("pointerenter", this.boundPointerEnter);
+    this.canvas.addEventListener("pointerleave", this.boundPointerLeave);
     this.canvas.addEventListener("pointerdown", this.boundPointerDown);
     window.addEventListener("pointerup", this.boundPointerUp);
     this.canvas.addEventListener("wheel", this.boundWheel, { passive: false });
@@ -343,6 +354,8 @@ class GameRuntime {
 
   unbindInputs() {
     this.canvas.removeEventListener("mousemove", this.boundMouseMove);
+    this.canvas.removeEventListener("pointerenter", this.boundPointerEnter);
+    this.canvas.removeEventListener("pointerleave", this.boundPointerLeave);
     this.canvas.removeEventListener("pointerdown", this.boundPointerDown);
     window.removeEventListener("pointerup", this.boundPointerUp);
     this.canvas.removeEventListener("wheel", this.boundWheel);
@@ -415,7 +428,7 @@ class GameRuntime {
     return Promise.resolve();
   }
 
-  onPointerMove(event) {
+  syncPointerFromEvent(event) {
     const rect = this.canvas.getBoundingClientRect();
     this.mouse.x = event.clientX - rect.left;
     this.mouse.y = event.clientY - rect.top;
@@ -424,6 +437,36 @@ class GameRuntime {
       this.mouse.y >= 0 &&
       this.mouse.x <= rect.width &&
       this.mouse.y <= rect.height;
+  }
+
+  onPointerEnter(event) {
+    this.syncPointerFromEvent(event);
+    this.mouse.edgePanReady = false;
+    this.mouse.lastMoveX = this.mouse.x;
+    this.mouse.lastMoveY = this.mouse.y;
+  }
+
+  onPointerLeave() {
+    this.mouse.inside = false;
+    this.mouse.edgePanReady = false;
+    this.mouse.lastMoveX = null;
+    this.mouse.lastMoveY = null;
+    this.camera.dragActive = false;
+  }
+
+  onPointerMove(event) {
+    this.syncPointerFromEvent(event);
+    if (this.mouse.lastMoveX != null && this.mouse.lastMoveY != null) {
+      const moveDistance = Math.hypot(
+        this.mouse.x - this.mouse.lastMoveX,
+        this.mouse.y - this.mouse.lastMoveY
+      );
+      if (moveDistance > 0.5) {
+        this.mouse.edgePanReady = true;
+      }
+    }
+    this.mouse.lastMoveX = this.mouse.x;
+    this.mouse.lastMoveY = this.mouse.y;
 
     if (this.camera.dragActive) {
       const zoom = this.zoomLevels[this.camera.zoomIndex];
@@ -435,6 +478,8 @@ class GameRuntime {
   }
 
   onPointerDown(event) {
+    this.syncPointerFromEvent(event);
+    this.mouse.edgePanReady = true;
     const worldPoint = this.screenToWorld(this.mouse.x, this.mouse.y);
 
     if (event.button === 1 || (event.button === 0 && event.altKey)) {
@@ -530,8 +575,25 @@ class GameRuntime {
       return;
     }
 
+    if (event.code === "KeyA") {
+      this.tool = TOOL_DEMOLISH;
+      this.pushHudUpdate();
+      return;
+    }
+
+    if (event.code === "KeyB") {
+      this.tool = TOOL_REROUTE;
+      this.pushHudUpdate();
+      return;
+    }
+
     if (event.code === "Tab") {
       event.preventDefault();
+      this.cycleCriticalAlert();
+      return;
+    }
+
+    if (event.code === "Enter") {
       this.cycleCriticalAlert();
       return;
     }
@@ -685,7 +747,7 @@ class GameRuntime {
   }
 
   handleEdgePan(dt) {
-    if (!this.mouse.inside || this.camera.dragActive) return;
+    if (!this.mouse.inside || !this.mouse.edgePanReady || this.camera.dragActive) return;
     const edge = 28;
     const speed = 340;
     const width = this.canvas.clientWidth;
@@ -1675,6 +1737,7 @@ export class SaveTheGridApp {
 
     this.splashTimeout = 0;
     this.boundSkipSplash = () => this.renderMainMenu();
+    this.splashListenersActive = false;
 
     window.render_game_to_text = () => this.renderGameToTextBridge();
     window.advanceTime = (ms) => this.advanceTimeBridge(ms);
@@ -1723,6 +1786,7 @@ export class SaveTheGridApp {
 
     window.addEventListener("keydown", this.boundSkipSplash, { once: true });
     window.addEventListener("pointerdown", this.boundSkipSplash, { once: true });
+    this.splashListenersActive = true;
 
     this.splashTimeout = window.setTimeout(() => {
       this.renderMainMenu();
@@ -1731,6 +1795,7 @@ export class SaveTheGridApp {
 
   renderMainMenu() {
     window.clearTimeout(this.splashTimeout);
+    this.cleanupSplashListeners();
     this.currentScreen = "menu";
     this.cleanupRuntime();
 
@@ -1744,6 +1809,7 @@ export class SaveTheGridApp {
             <p class="menu-copy">Direct national power strategy through build, demolish, and reroute decisions.</p>
             <div class="menu-actions">
               ${hasContinue ? '<button class="action-btn" id="menu-continue">Continue Run</button>' : ""}
+              <button class="action-btn action-btn-primary" id="start-btn">Quick Start</button>
               <button class="action-btn action-btn-primary" id="menu-new-run">New Run</button>
               <button class="action-btn" id="menu-campaign">Campaign Missions</button>
               <button class="action-btn" id="menu-custom">Custom Game</button>
@@ -1777,6 +1843,10 @@ export class SaveTheGridApp {
       });
     }
 
+    this.root.querySelector("#start-btn")?.addEventListener("click", () => {
+      const config = buildRunConfigFromStandardPreset(this.selectedStandardPresetId);
+      this.startRun(config);
+    });
     this.root.querySelector("#menu-new-run")?.addEventListener("click", () => this.renderStandardSetup());
     this.root.querySelector("#menu-campaign")?.addEventListener("click", () => this.renderCampaignSelect());
     this.root.querySelector("#menu-custom")?.addEventListener("click", () => this.renderCustomSetup());
@@ -1785,6 +1855,13 @@ export class SaveTheGridApp {
     this.root.querySelector("#menu-exit")?.addEventListener("click", () => {
       this.pushToast("Exit is disabled in browser builds. Close the tab to leave.");
     });
+  }
+
+  cleanupSplashListeners() {
+    if (!this.splashListenersActive) return;
+    window.removeEventListener("keydown", this.boundSkipSplash);
+    window.removeEventListener("pointerdown", this.boundSkipSplash);
+    this.splashListenersActive = false;
   }
 
   bestScoreOverall() {
@@ -1900,7 +1977,7 @@ export class SaveTheGridApp {
           <h2>Custom Game</h2>
           <button class="ghost-btn" id="custom-back">Back to Menu</button>
         </header>
-        <p class="setup-copy">Tune scenario pressure. Modified settings go to the Custom records table.</p>
+        <p class="setup-copy">Tune scenario pressure. All Custom Game runs record in the separate Custom records table.</p>
         <form class="custom-form" id="custom-form">
           <label>
             Preset
@@ -1966,10 +2043,6 @@ export class SaveTheGridApp {
               ${CUSTOM_OPTIONS.runTargetMinutes.map((value) => `<option value="${value}" ${this.customConfig.runTargetMinutes === value ? "selected" : ""}>${value}</option>`).join("")}
             </select>
           </label>
-          <label class="checkbox-row">
-            <input type="checkbox" name="leaderboardEligible" ${this.customConfig.leaderboardEligible ? "checked" : ""}>
-            Mark as leaderboard-eligible preset
-          </label>
           <footer class="setup-actions">
             <button class="action-btn action-btn-primary" type="submit">Launch Custom Game</button>
           </footer>
@@ -2005,7 +2078,6 @@ export class SaveTheGridApp {
         regionFragmentation: formData.get("regionFragmentation"),
         unlockCostProfile: formData.get("unlockCostProfile"),
         runTargetMinutes: Number(formData.get("runTargetMinutes")),
-        leaderboardEligible: !!formData.get("leaderboardEligible"),
       };
 
       const config = buildRunConfigFromCustom(this.customConfig);

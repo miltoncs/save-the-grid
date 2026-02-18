@@ -1,7 +1,7 @@
 # Save the Grid Architecture
 
 Status: Draft v0.1  
-Last updated: 2026-02-12
+Last updated: 2026-02-18
 
 ## 1. Purpose and Scope
 
@@ -199,15 +199,19 @@ src/
 
 All authored gameplay content is data-driven:
 
-- `data/maps/*.json`
+- `data/maps/index.json`
+- `data/maps/*.map.json`
 - `data/missions/*.json`
 - `data/presets/*.json`
+
+Map storage details (including resource zones) are specified in `MAP_STORAGE_AND_RESOURCE_ZONES.md`.
 
 ### 8.2 Schema Validation
 
 Each content type is validated at load time with zod schemas:
 
 - `MapSchema`
+- `ResourceZoneSchema`
 - `MissionSchema`
 - `ScenarioPresetSchema`
 

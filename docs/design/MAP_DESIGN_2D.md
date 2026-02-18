@@ -3,6 +3,8 @@
 Status: Draft v0.1  
 Last updated: 2026-02-12
 
+Reference: See `INSPIRATION.md` for map visual language, hierarchy, and zoom behavior targets.
+
 ## 1. Perspective and Camera
 
 The game uses a 2D overhead map only.
@@ -21,6 +23,7 @@ Visual direction:
 2. Minimal gradients.
 3. No photorealistic terrain or textures.
 4. Small functional palette similar to Google Maps default-view readability (land/water/biome differentiation).
+5. Optional pixel-stepped coastlines/region borders inspired by OpenFront-style map silhouettes.
 
 ## 2. Map Representation Model
 
@@ -133,6 +136,7 @@ Visualization rules:
 2. Keep selectable hit areas larger than visual icons.
 3. Distinguish district demand from infrastructure status with separate visual channels.
 4. At max zoom-out, preserve only critical signals (demand deficits, overload clusters, objectives).
+5. If pixel-edge styling is used, gameplay boundaries must still be unambiguous at all zoom levels.
 
 ## 8. Zoom-Level Detail Rules
 

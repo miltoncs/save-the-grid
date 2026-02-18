@@ -53,3 +53,37 @@ Original prompt: Develop the game MVP based on all provided documentation
 - Updated bot scenarios to target current real UI selectors (`#menu-new-run`, `#start-standard-run`, `#game-canvas`, `#run-save-exit-btn`) so runs are deterministic with existing MVP implementation.
 - Added a menu priming click step in scenarios to tolerate a stale splash pointer listener in current game implementation.
 - Validated `smoke-menu-to-run` and `smoke-controls` end-to-end against local HTTP server (`http://127.0.0.1:4273`): both now complete and return to menu after save/exit.
+- Added `#start-btn` quick-start action on main menu to support one-click automated entry into gameplay (required for deterministic Playwright loop).
+- Fixed splash-to-menu listener leak: stale splash key/pointer handlers were intercepting first menu click, preventing `Quick Start` automation from entering gameplay.
+- Added additional keyboard mappings for automation coverage:
+  - `A` => demolish tool
+  - `B` => reroute tool
+  - `Enter` => cycle critical alerts
+- Enforced design integrity policy: all Custom Game runs now always record as `custom` class (no leaderboard-eligibility toggle in custom setup).
+- Captured full-page validation screenshots for menu/setup/custom/run surfaces under `output/fullpage/`.
+- Confirmed zero console/page runtime errors during full-page navigation smoke run.
+
+## Final Verification Summary (this pass)
+- Verified deterministic gameplay entry via `#start-btn` using the `develop-web-game` Playwright client.
+- Verified `window.render_game_to_text()` and `window.advanceTime(ms)` output/behavior in active run states.
+- Verified core controls in automation loop:
+  - Build via map click.
+  - Demolish via `A` tool mapping + map click.
+  - Reroute via `B` tool mapping + map click (priority cycles).
+  - Pause via `Space` (state reports `paused: true`).
+  - Alert cycle via `Enter` mapping.
+- Verified no runtime console/page errors in automated runs.
+- Verified full-page mobile/desktop-friendly surface rendering for menu/setup/custom/run flows.
+
+### Remaining TODO / Suggestions
+- Add campaign-mode targeted Playwright scenarios for mission completion and medal grading checks.
+- Add custom-setup form automation paths to assert end-of-run summary + record insertion for custom class.
+- Tune balance values (economy/reliability/demand) after first human playtest pass.
+- Fixed startup auto-pan bug in camera controls.
+  - Added explicit pointer lifecycle handling (`pointerenter`/`pointerleave`) to prevent stale `mouse.inside` state.
+  - Added `edgePanReady` gating so edge-pan activates only after deliberate pointer movement/interaction on the canvas.
+  - Synced pointer coordinates on `pointerdown` to avoid stale click-position state on first interaction.
+- Validation:
+  - `output/repro-pan-after/`: camera remained stable at run start with no intentional pointer input (`y=700` across iterations).
+  - `output/repro-pan-intentional/`: intentional top-edge interaction still pans as designed (`y` reaches `0`).
+  - No console/page errors in these verification runs.

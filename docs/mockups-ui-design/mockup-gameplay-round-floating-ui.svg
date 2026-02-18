@@ -1,0 +1,116 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="1080" viewBox="0 0 1800 1080">
+  <defs>
+    <linearGradient id="map-vignette" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#001017" stop-opacity="0.08" />
+      <stop offset="100%" stop-color="#001017" stop-opacity="0.22" />
+    </linearGradient>
+    <linearGradient id="chip-bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#112533" stop-opacity="0.88" />
+      <stop offset="100%" stop-color="#0a1620" stop-opacity="0.74" />
+    </linearGradient>
+    <linearGradient id="chip-muted" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#203745" stop-opacity="0.82" />
+      <stop offset="100%" stop-color="#132633" stop-opacity="0.76" />
+    </linearGradient>
+    <linearGradient id="chip-active" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00b6a6" stop-opacity="0.96" />
+      <stop offset="100%" stop-color="#0d8ca9" stop-opacity="0.92" />
+    </linearGradient>
+    <filter id="shadow-soft" x="-25%" y="-25%" width="150%" height="150%">
+      <feDropShadow dx="0" dy="5" stdDeviation="8" flood-color="#04101a" flood-opacity="0.36" />
+    </filter>
+    <filter id="shadow-fab" x="-25%" y="-25%" width="150%" height="150%">
+      <feDropShadow dx="0" dy="7" stdDeviation="10" flood-color="#04101a" flood-opacity="0.42" />
+    </filter>
+  </defs>
+
+  <image href="mockup-terrain-map.png" x="0" y="0" width="1800" height="1080" preserveAspectRatio="xMidYMid slice" />
+  <rect width="1800" height="1080" fill="url(#map-vignette)" />
+
+  <g id="map-selection">
+    <circle cx="1075" cy="560" r="20" fill="#d7fbf4" fill-opacity="0.34" />
+    <circle cx="1075" cy="560" r="36" fill="none" stroke="#88ebdb" stroke-opacity="0.55" stroke-width="4" />
+    <circle cx="1075" cy="560" r="56" fill="none" stroke="#7fdcca" stroke-opacity="0.24" stroke-width="3" />
+  </g>
+
+  <g id="top-left-controls" filter="url(#shadow-soft)">
+    <rect x="22" y="20" width="58" height="58" rx="16" fill="url(#chip-bg)" stroke="#4f6978" stroke-opacity="0.5" />
+    <g stroke="#e9f5ff" stroke-linecap="round" stroke-width="4">
+      <line x1="42" y1="40" x2="60" y2="40" />
+      <line x1="42" y1="49" x2="60" y2="49" />
+      <line x1="42" y1="58" x2="60" y2="58" />
+    </g>
+
+    <rect x="94" y="20" width="184" height="58" rx="29" fill="url(#chip-bg)" stroke="#4f6978" stroke-opacity="0.5" />
+    <text x="186" y="57" text-anchor="middle" fill="#eff8ff" font-size="28" font-family="'Avenir Next', 'Helvetica Neue', sans-serif">Round 07</text>
+  </g>
+
+  <g id="top-right-controls" filter="url(#shadow-soft)">
+    <rect x="1350" y="20" width="426" height="58" rx="29" fill="url(#chip-bg)" stroke="#4f6978" stroke-opacity="0.5" />
+    <text x="1400" y="57" fill="#f1f8ff" font-size="30" font-family="'Avenir Next', 'Helvetica Neue', sans-serif">00:03</text>
+
+    <rect x="1475" y="30" width="34" height="34" rx="9" fill="url(#chip-muted)" />
+    <rect x="1519" y="30" width="34" height="34" rx="9" fill="url(#chip-active)" />
+    <rect x="1563" y="30" width="34" height="34" rx="9" fill="url(#chip-muted)" />
+    <rect x="1607" y="30" width="58" height="34" rx="17" fill="url(#chip-muted)" />
+    <rect x="1675" y="30" width="34" height="34" rx="9" fill="url(#chip-muted)" />
+    <rect x="1719" y="30" width="34" height="34" rx="9" fill="url(#chip-muted)" />
+
+    <text x="1492" y="53" text-anchor="middle" fill="#d8e9f5" font-size="22" font-family="'Avenir Next', 'Helvetica Neue', sans-serif">||</text>
+    <text x="1536" y="54" text-anchor="middle" fill="#f4fcff" font-size="22" font-family="'Avenir Next', 'Helvetica Neue', sans-serif">PLAY</text>
+    <text x="1580" y="53" text-anchor="middle" fill="#d8e9f5" font-size="20" font-family="'Avenir Next', 'Helvetica Neue', sans-serif">FAST</text>
+    <text x="1636" y="54" text-anchor="middle" fill="#d8e9f5" font-size="20" font-family="'Avenir Next', 'Helvetica Neue', sans-serif">2x</text>
+    <text x="1692" y="54" text-anchor="middle" fill="#d8e9f5" font-size="18" font-family="'Avenir Next', 'Helvetica Neue', sans-serif">CFG</text>
+    <text x="1736" y="53" text-anchor="middle" fill="#d8e9f5" font-size="17" font-family="'Avenir Next', 'Helvetica Neue', sans-serif">FULL</text>
+  </g>
+
+  <g id="floating-status-chips" filter="url(#shadow-soft)">
+    <rect x="26" y="932" width="244" height="56" rx="28" fill="url(#chip-bg)" stroke="#4f6978" stroke-opacity="0.5" />
+    <text x="66" y="968" fill="#d3e6f4" font-size="24" font-family="'Avenir Next', 'Helvetica Neue', sans-serif">Demand</text>
+    <text x="252" y="968" text-anchor="end" fill="#eff9ff" font-size="24" font-family="'Avenir Next', 'Helvetica Neue', sans-serif">512 MW</text>
+
+    <rect x="282" y="932" width="248" height="56" rx="28" fill="url(#chip-bg)" stroke="#4f6978" stroke-opacity="0.5" />
+    <text x="322" y="968" fill="#d3e6f4" font-size="24" font-family="'Avenir Next', 'Helvetica Neue', sans-serif">Supply</text>
+    <text x="510" y="968" text-anchor="end" fill="#29d487" font-size="24" font-family="'Avenir Next', 'Helvetica Neue', sans-serif">540 MW</text>
+
+    <rect x="542" y="932" width="226" height="56" rx="28" fill="url(#chip-bg)" stroke="#4f6978" stroke-opacity="0.5" />
+    <text x="582" y="968" fill="#d3e6f4" font-size="24" font-family="'Avenir Next', 'Helvetica Neue', sans-serif">Budget</text>
+    <text x="748" y="968" text-anchor="end" fill="#eff9ff" font-size="24" font-family="'Avenir Next', 'Helvetica Neue', sans-serif">$642</text>
+  </g>
+
+  <g id="bottom-center-tool-dock" filter="url(#shadow-soft)">
+    <rect x="712" y="1006" width="656" height="56" rx="28" fill="url(#chip-bg)" stroke="#4f6978" stroke-opacity="0.55" />
+    <rect x="726" y="1016" width="110" height="36" rx="18" fill="url(#chip-active)" />
+    <text x="781" y="1040" text-anchor="middle" fill="#f6ffff" font-size="20" font-family="'Avenir Next', 'Helvetica Neue', sans-serif">Build</text>
+    <text x="901" y="1040" text-anchor="middle" fill="#d1e2ee" font-size="20" font-family="'Avenir Next', 'Helvetica Neue', sans-serif">Lines</text>
+    <text x="1028" y="1040" text-anchor="middle" fill="#d1e2ee" font-size="20" font-family="'Avenir Next', 'Helvetica Neue', sans-serif">Storage</text>
+    <text x="1165" y="1040" text-anchor="middle" fill="#d1e2ee" font-size="20" font-family="'Avenir Next', 'Helvetica Neue', sans-serif">Dispatch</text>
+    <text x="1299" y="1040" text-anchor="middle" fill="#d1e2ee" font-size="20" font-family="'Avenir Next', 'Helvetica Neue', sans-serif">Intel</text>
+  </g>
+
+  <g id="right-stack-map-controls" filter="url(#shadow-soft)">
+    <rect x="1718" y="772" width="58" height="58" rx="16" fill="url(#chip-bg)" stroke="#4f6978" stroke-opacity="0.5" />
+    <rect x="1718" y="840" width="58" height="58" rx="16" fill="url(#chip-bg)" stroke="#4f6978" stroke-opacity="0.5" />
+    <rect x="1718" y="908" width="58" height="58" rx="16" fill="url(#chip-bg)" stroke="#4f6978" stroke-opacity="0.5" />
+    <rect x="1718" y="976" width="58" height="58" rx="16" fill="url(#chip-bg)" stroke="#4f6978" stroke-opacity="0.5" />
+
+    <text x="1747" y="808" text-anchor="middle" fill="#e7f3fc" font-size="34" font-family="'Avenir Next', 'Helvetica Neue', sans-serif">+</text>
+    <text x="1747" y="876" text-anchor="middle" fill="#e7f3fc" font-size="34" font-family="'Avenir Next', 'Helvetica Neue', sans-serif">-</text>
+    <text x="1747" y="944" text-anchor="middle" fill="#e7f3fc" font-size="18" font-family="'Avenir Next', 'Helvetica Neue', sans-serif">LOC</text>
+    <text x="1747" y="1012" text-anchor="middle" fill="#e7f3fc" font-size="18" font-family="'Avenir Next', 'Helvetica Neue', sans-serif">LYR</text>
+  </g>
+
+  <g id="build-fab" filter="url(#shadow-fab)">
+    <circle cx="1676" cy="954" r="52" fill="url(#chip-active)" stroke="#8be2d6" stroke-opacity="0.4" stroke-width="3" />
+    <text x="1676" y="946" text-anchor="middle" fill="#f5ffff" font-size="20" font-family="'Avenir Next', 'Helvetica Neue', sans-serif">Build</text>
+    <text x="1676" y="972" text-anchor="middle" fill="#f5ffff" font-size="20" font-family="'Avenir Next', 'Helvetica Neue', sans-serif">+</text>
+  </g>
+
+  <g id="selection-tooltip" filter="url(#shadow-soft)">
+    <path d="M1025 607 L1011 640 L1040 624 Z" fill="#0d1f2b" fill-opacity="0.84" />
+    <rect x="868" y="608" width="286" height="118" rx="18" fill="url(#chip-bg)" stroke="#4f6978" stroke-opacity="0.55" />
+    <text x="894" y="647" fill="#eff9ff" font-size="27" font-family="'Avenir Next', 'Helvetica Neue', sans-serif">Delta Corridor</text>
+    <text x="894" y="681" fill="#d4e6f2" font-size="22" font-family="'Avenir Next', 'Helvetica Neue', sans-serif">Wind 78% | Solar 52%</text>
+    <text x="894" y="712" fill="#ffd493" font-size="22" font-family="'Avenir Next', 'Helvetica Neue', sans-serif">Line load warning: 91%</text>
+  </g>
+</svg>

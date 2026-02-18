@@ -3,6 +3,8 @@
 Status: Draft v0.1  
 Last updated: 2026-02-12
 
+Reference: See `INSPIRATION.md` for the map-first UI inspiration baseline.
+
 ## 1. UX Direction
 
 The interface should feel like a national grid command center: operational, urgent, and readable at a glance. The game should feel browser-native and instantly playable (quick-start style similar to popular web games), while preserving long-term mastery.
@@ -14,6 +16,7 @@ Design goals:
 3. Deliver depth through emergent conditions and map pressure, not layered systems.
 4. Deliver story flavor through short, ambient surfaces.
 5. Preserve real-time flow with optional player-controlled pause in singleplayer.
+6. Keep real-time strategy pacing clear: frequent small decisions on a map-first screen.
 
 ## 2. Frontend Surface Map
 
@@ -197,6 +200,7 @@ Onboarding rule:
 3. Map palette is limited and functional:
    - Land, water, and biome differentiation use a small set of clear colors, similar to Google Maps default-view simplicity.
 4. UI decoration must not compete with operational map signals.
+5. Pixel-inspired map-edge treatment is allowed when it improves identity without harming readability.
 
 ## 11. Readability and Accessibility
 

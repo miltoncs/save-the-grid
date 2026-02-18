@@ -1,0 +1,86 @@
+{
+  "name": "start-round-demo",
+  "description": "Enter a standard run and capture a screenshot right after round start.",
+  "options": {
+    "timeoutMs": 7000,
+    "stepDelayMs": 220,
+    "failOnConsoleError": true
+  },
+  "steps": [
+    {
+      "action": "wait",
+      "name": "initial-load-wait",
+      "ms": 500
+    },
+    {
+      "action": "click",
+      "name": "skip-splash-if-visible",
+      "optional": true,
+      "targets": [
+        { "text": "Press any key" }
+      ]
+    },
+    {
+      "action": "press",
+      "name": "fallback-enter",
+      "optional": true,
+      "key": "Enter"
+    },
+    {
+      "action": "waitFor",
+      "name": "wait-for-main-menu",
+      "targets": [
+        { "selector": "#menu-new-run" }
+      ]
+    },
+    {
+      "action": "click",
+      "name": "prime-first-click",
+      "optional": true,
+      "timeoutMs": 600,
+      "targets": [
+        { "selector": ".menu-screen" },
+        { "selector": "body" }
+      ]
+    },
+    {
+      "action": "click",
+      "name": "open-standard-setup",
+      "targets": [
+        { "selector": "#menu-new-run" }
+      ]
+    },
+    {
+      "action": "waitFor",
+      "name": "wait-for-setup",
+      "targets": [
+        { "selector": "#start-standard-run" }
+      ]
+    },
+    {
+      "action": "click",
+      "name": "start-standard-run",
+      "targets": [
+        { "selector": "#start-standard-run" }
+      ]
+    },
+    {
+      "action": "waitFor",
+      "name": "wait-for-round-canvas",
+      "targets": [
+        { "selector": "#game-canvas" },
+        { "selector": ".run-screen" }
+      ]
+    },
+    {
+      "action": "advanceTime",
+      "name": "tick-forward",
+      "ms": 500
+    },
+    {
+      "action": "screenshot",
+      "name": "round-started",
+      "fullPage": true
+    }
+  ]
+}
