@@ -140,3 +140,161 @@ Original prompt: Develop the game MVP based on all provided documentation
   - `node bot-player/run-bot.mjs --url http://127.0.0.1:5173 --scenario bot-player/scenarios/start-round-demo.json`
 - Latest verification screenshot:
   - `bot-player/bot-player/artifacts/2026-02-18T20-49-26-234Z-round-started.png`
+
+## 2026-02-18 (Map + Metadata Integration)
+- Replaced abstract in-round backdrop with the generated terrain map image:
+  - `docs/mockups-ui-design/mockup-terrain-map.png`
+- Added runtime metadata loading from:
+  - `docs/mockups-ui-design/mockup-terrain-map.metadata.json`
+- Implemented metadata-to-world projection:
+  - Polygon points authored in image pixel coordinates are scaled into game world coordinates.
+- Added resource-zone runtime model (`wind`, `sun`, `natural_gas`) and coverage estimation per region.
+- Applied zone influence to simulation:
+  - Plant/storage generation multipliers now incorporate region resource coverage.
+  - Plant operating costs and reliability bonuses now include zone-based effects.
+- Added resource-zone rendering overlays and labels directly on top of the terrain map during rounds.
+- Extended in-round context + text output:
+  - Region context panel now shows resource percentages (W/S/G).
+  - `render_game_to_text` now includes terrain-map source info, zone counts, zone centroids, and per-region resource profiles.
+
+### Validation
+- `node --check src/game.js` (syntax ok).
+- Develop-web-game client run:
+  - `node /Users/mstafford/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js --url http://127.0.0.1:5173 --actions-file /Users/mstafford/.codex/skills/develop-web-game/references/action_payloads.json --click-selector "#start-btn" --iterations 3 --pause-ms 250 --screenshot-dir output/web-game-mapzones`
+  - Verified map image and zone overlays in `output/web-game-mapzones/shot-2.png`.
+  - Verified `state-2.json` includes loaded terrain metadata and region resource profiles.
+- Mode coverage checks (floating UI + map backdrop active in-round):
+  - Campaign run screenshot: `bot-player/bot-player/artifacts/2026-02-18T21-21-28-782Z-campaign-round.png`
+  - Custom run screenshot: `bot-player/bot-player/artifacts/2026-02-18T21-21-44-643Z-custom-round.png`
+- Added map pan controls per request:
+  - Click-and-drag panning with threshold (prevents accidental drag on normal clicks).
+  - Keyboard panning via `W`, `A`, `S`, `D` (and arrow keys), with keyup + blur reset to prevent stuck movement.
+- Refactored pointer click handling:
+  - Left click actions (build/select/reroute) now execute on pointer-up if no drag occurred.
+  - Right click quick-demolish remains supported.
+- Added runtime validation:
+  - Build click still works (`capital plant: 2 -> 3`).
+  - Drag pan changes camera (`y: 700 -> 1050`).
+  - WASD pan changes camera (`W` moved up `y: 1050 -> 761.11`, `D` moved right `x: 1100 -> 1393.68`).
+  - No runtime console/page errors in checks.
+
+## 2026-02-18 (Viewport-Aware Map Camera Clamp)
+- Fixed map camera bounds to be viewport-aware so the in-round view stays anchored to the terrain map and no off-map space appears during drag/WASD/edge pan/zoom.
+- Added `clampCameraToMap()` in runtime and applied it in:
+  - resize,
+  - drag pan,
+  - wheel zoom,
+  - keyboard/edge pan,
+  - render pass,
+  - snapshot hydration,
+  - floating map controls (`+`, `-`, `Center`).
+- Improved resource-zone label rendering:
+  - labels now clamp inside viewport and skip when fully off-screen, preventing clipped half-label artifacts at map edges.
+
+### Validation
+- `node --check src/game.js`
+- `node /Users/mstafford/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js --url http://127.0.0.1:5173 --actions-file /Users/mstafford/.codex/skills/develop-web-game/references/action_payloads.json --click-selector "#start-btn" --iterations 3 --pause-ms 250 --screenshot-dir output/web-game-mapzones-clamped`
+- `node bot-player/run-bot.mjs --url http://127.0.0.1:5173 --scenario /tmp/campaign-round-check.json`
+- `node bot-player/run-bot.mjs --url http://127.0.0.1:5173 --scenario /tmp/custom-round-check.json`
+- Verified screenshots:
+  - `/Users/mstafford/Projects/local/save-the-grid/bot-player/artifacts/2026-02-18T21-31-55-114Z-campaign-round.png`
+  - `/Users/mstafford/Projects/local/save-the-grid/bot-player/artifacts/2026-02-18T21-31-55-258Z-custom-round.png`
+  - `/Users/mstafford/Projects/local/energies-game/output/web-game-mapzones-clamped/shot-0.png`
+
+## 2026-02-18 (Out-of-Bounds Color Tweak)
+- Updated map out-of-bounds/background fill to off-black during map draw:
+  - `#0d1216` when terrain map is loaded.
+- Updated map-load fallback gradient to dark off-black tones:
+  - `#131a20 -> #090d11`.
+
+### Validation
+- `node --check src/game.js`
+- `node bot-player/run-bot.mjs --url http://127.0.0.1:5173 --scenario /tmp/oob-color-check.json`
+- Verified screenshot:
+  - `/Users/mstafford/Projects/local/save-the-grid/bot-player/artifacts/2026-02-18T21-39-05-461Z-oob-offblack.png`
+
+## 2026-02-18 (Circular Icon Pack)
+- Added a new icon-design folder: `docs/icons-circular`.
+- Created a cohesive 96x96 circular SVG icon set for towns and powerplants with shared geometry/stroke pattern.
+- Added town icons:
+  - `town-hamlet.svg`, `town-city.svg`, `town-capital.svg`
+- Added powerplant icons:
+  - `plant-solar.svg`, `plant-wind.svg`, `plant-hydro.svg`, `plant-gas.svg`, `plant-nuclear.svg`, `plant-coal.svg`, `plant-geothermal.svg`
+- Added support files:
+  - `docs/icons-circular/README.md`
+  - `docs/icons-circular/preview.html`
+
+## 2026-02-18 (Docs Sync: Sparse Start + Town Emergence + Hold-R Resource Layer)
+- Implemented latest docs commit (`16e0e62`) gameplay deltas in runtime:
+  - Sparse-start run policy across modes (terrain-first feel, few seeded towns, minimal starter infrastructure).
+  - Added town model per region (`townCount`, `townCap`) and demand anchoring to town saturation.
+  - Added dynamic town emergence system with gating:
+    - region must be unlocked,
+    - terrain must be livable (`plains`/`river`; excludes mountains/coast/ocean-like zones),
+    - nearby grid service must be stable,
+    - onboarding-sensitive emergence mode (`off`/`low`/`normal`) by run mode and campaign mission index.
+  - Updated campaign onboarding behavior:
+    - earliest missions now run with emergence disabled or capped.
+  - Resource zones are now hidden by default and only drawn while holding `R`.
+  - Reassigned keyboard reroute shortcut from `R` to `E`/`B` to avoid control conflict.
+- Updated in-run UI and telemetry:
+  - Added HUD chips for resource-layer visibility and town-emergence summary.
+  - Added town counters/markers in map region rendering.
+  - Added town stability/outage context in region detail panel.
+  - Extended `render_game_to_text()` with:
+    - `townEmergence` state,
+    - `terrainMap.resourceLayerVisible`,
+    - per-region town/stability fields.
+- Updated main menu bulletin copy to reflect sparse-start direction.
+
+### Validation
+- Syntax:
+  - `node --check src/game.js`
+  - `node --check src/main.js`
+  - `node --check src/data.js`
+- Develop-web-game loop:
+  - `node /Users/mstafford/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js --url http://127.0.0.1:5173 --actions-file /Users/mstafford/.codex/skills/develop-web-game/references/action_payloads.json --click-selector "#start-btn" --iterations 4 --pause-ms 300 --screenshot-dir output/web-game-docsync`
+  - Verified sparse start state in `output/web-game-docsync/state-0.json` (`resourceLayerVisible=false`, seeded town distribution, playable reliability).
+- Targeted Playwright assertions:
+  - advanced simulation produced emergence (`advancedTownsEmerged: 1` after `advanceTime(120000)`).
+  - hold-`R` toggled resource-layer visibility (`true` while held, `false` after release).
+  - artifacts:
+    - `output/web-game-docsync/docsync-check.json`
+    - `output/web-game-docsync/hold-r-reveal.png`
+- Regression smoke:
+  - `node bot-player/run-bot.mjs --url http://127.0.0.1:5173 --scenario bot-player/scenarios/smoke-menu-to-run.json`
+  - `node bot-player/run-bot.mjs --url http://127.0.0.1:5173 --scenario bot-player/scenarios/smoke-controls.json`
+  - Both scenarios completed with no console/page errors.
+- Camera regression quick-check:
+  - Verified WASD and drag still move camera (x/y changed as expected).
+
+### Remaining TODO / Suggestions
+- If needed, expose `townEmergenceMode` directly in Custom Game setup for explicit player control.
+- Tune emergence pacing and sparse-start asset balance per mission objective difficulty after human playtests.
+
+## 2026-02-18 (Icon Pack Integration: docs/icons-circular)
+- Integrated the new circular SVG icon set into canvas rendering.
+- Added runtime icon preload cache (`ICON_SET_URLS` + `loadIconSet`) for:
+  - Town icons: hamlet/city/capital.
+  - Resource icons: wind/solar/gas.
+- Replaced placeholder town marker dots with circular town SVGs in region rendering.
+- Replaced resource-zone text label placeholders with circular resource SVGs when holding `R`.
+  - Kept text fallback only if icon load fails.
+- Tuned icon scaling for map readability at gameplay zoom levels.
+- Extended `render_game_to_text()` terrain payload with `iconSetLoaded` flags for testing/automation visibility.
+
+### Validation
+- `node --check src/game.js`
+- Develop-web-game screenshot pass:
+  - `node /Users/mstafford/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js --url http://127.0.0.1:5173 --actions-file /Users/mstafford/.codex/skills/develop-web-game/references/action_payloads.json --click-selector "#start-btn" --iterations 3 --pause-ms 250 --screenshot-dir output/web-game-icons`
+- Targeted Playwright assertions:
+  - default/hold/release visibility check in `output/web-game-icons/icons-check-visibility.json`.
+  - screenshots:
+    - `output/web-game-icons/icons-check-default.png`
+    - `output/web-game-icons/icons-check-hold-r.png`
+- Regression smoke:
+  - `node bot-player/run-bot.mjs --url http://127.0.0.1:5173 --scenario bot-player/scenarios/smoke-menu-to-run.json`
+  - `node bot-player/run-bot.mjs --url http://127.0.0.1:5173 --scenario bot-player/scenarios/smoke-controls.json`
+  - both passed (`smoke-ok`).
+- 2026-02-19: Re-verified bot round-start reliability by running `start-round-demo` three consecutive times against `http://127.0.0.1:4373`; all runs completed `11/11` steps and entered active in-game round state.
+- Latest visual confirmation screenshot: `bot-player/artifacts/2026-02-19T16-14-11-608Z-round-started.png` (timer at `00:10`).
