@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96" fill="none">
+  <defs>
+    <radialGradient id="core-town-capital" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(38 32) rotate(50) scale(62)">
+      <stop offset="0" stop-color="#1b2a3a"/>
+      <stop offset="1" stop-color="#101821"/>
+    </radialGradient>
+  </defs>
+  <circle cx="48" cy="48" r="44" fill="#0b1118"/>
+  <circle cx="48" cy="48" r="39" fill="url(#core-town-capital)" stroke="#8ea4ba" stroke-width="1.5"/>
+  <circle cx="48" cy="48" r="31" stroke="#ffd27d" stroke-opacity="0.45" stroke-width="1.5"/>
+  <g stroke="#e8f2ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <path d="M30 58H66"/>
+    <path d="M34 58V52H62V58"/>
+    <path d="M34 52C34 44 62 44 62 52"/>
+    <path d="M48 52V41"/>
+    <path d="M46 42H50"/>
+    <path d="M48 39L49.5 41.7H46.5L48 39Z" fill="#e8f2ff" stroke="none"/>
+  </g>
+</svg>

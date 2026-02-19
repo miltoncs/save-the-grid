@@ -73,7 +73,7 @@
 
   <text x="780" y="628" fill="#9ec1d2" font-size="19" font-family="'Segoe UI', sans-serif">03:10 - Major heat wave contained</text>
   <text x="780" y="662" fill="#9ec1d2" font-size="19" font-family="'Segoe UI', sans-serif">06:45 - North line rerouted, overload avoided</text>
-  <text x="780" y="696" fill="#9ec1d2" font-size="19" font-family="'Segoe UI', sans-serif">14:20 - Demand spike missed in one region</text>
+  <text x="780" y="696" fill="#9ec1d2" font-size="19" font-family="'Segoe UI', sans-serif">14:20 - Demand spike missed in one town cluster</text>
 
   <rect x="440" y="790" width="260" height="72" rx="14" fill="#173046" stroke="#47687f" stroke-width="1.5" />
   <text x="570" y="835" text-anchor="middle" fill="#d7edf8" font-size="28" font-family="'Segoe UI', sans-serif">Main Menu</text>

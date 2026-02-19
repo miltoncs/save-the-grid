@@ -1,7 +1,7 @@
 # Energy Directory: Grid of Nations
 
 Status: Draft v0.1  
-Last updated: 2026-02-18
+Last updated: 2026-02-19
 
 ## 1. High Concept
 
@@ -30,11 +30,13 @@ The player is the Energy Directory for a fictional country. In real time, they b
 10. V1 maps are handcrafted (procedural generation deferred).
 11. Visual style is flat 2D with limited color palettes and minimal gradients.
 12. Population growth is a core difficulty mechanic, introduced only after tutorial/early onboarding levels.
-13. Seasonal and regional demand conditions are core difficulty mechanics, introduced only after tutorial/early onboarding levels.
-14. Early levels use small, easy-to-read maps; later levels use larger fragmented maps.
-15. Later-map regions can require capital purchase before they can be developed or served.
+13. Seasonal and local-climate demand conditions are core difficulty mechanics, introduced only after tutorial/early onboarding levels.
+14. Early levels use small, easy-to-read maps; later levels use larger maps with longer routing distances and denser town networks.
+15. There are no map-area unlock systems; the full map is available from run start.
 16. Basic levels start mostly empty: mostly terrain, a few towns, and little to no prebuilt power-grid infrastructure.
 17. As conditions improve, new towns can emerge on livable powered terrain during a run.
+18. Large player-built power routing is handled by a single tool named `Line`.
+19. Substations power all towns within radius and automatically generate short orthogonal town-connection lines.
 
 ## 4. Player Fantasy and Role
 
@@ -43,13 +45,12 @@ You are not an engineer placing wires in a sandbox. You are a national decision-
 ## 5. Core Gameplay Loop
 
 1. Start from a mostly terrain-first map with a few seeded towns.
-2. Build infrastructure to add capacity and coverage.
-3. Route energy through transmission paths to meet demand.
+2. Build power plants and substations to create supply and local coverage.
+3. Build manual `Lines` to connect plants and substations across distance.
 4. Stabilize service quality so additional towns can emerge.
-5. Buy access to additional regions on fragmented maps when strategic timing is favorable.
-6. Demolish or replace aging or inefficient assets.
-7. Absorb random pressures (weather, fuel shocks, policy changes).
-8. Stabilize the grid and push score before collapse conditions are reached.
+5. Demolish or replace aging or inefficient assets.
+6. Absorb random pressures (weather, fuel shocks, policy changes).
+7. Stabilize the grid and push score before collapse conditions are reached.
 
 ### 5.1 Strategic Core
 
@@ -64,18 +65,18 @@ The primary strategic question is always the same: what to build, when to build 
 - Initial objectives are simple to teach controls and priorities.
 - Level budget is self-contained for that level and does not carry over on completion.
 - Early onboarding runs/missions can disable population growth to avoid overload.
-- Early onboarding runs/missions can disable seasonal/regional demand modifiers to avoid overload.
+- Early onboarding runs/missions can disable seasonal/local-climate demand modifiers to avoid overload.
 - Early onboarding maps should be small and fully visible without camera complexity.
 
 ### Mid-Run Escalation
 
 - Demand growth accelerates.
 - Population growth pressure comes online (outside onboarding missions).
-- Seasonal and regional demand pressure comes online (outside onboarding missions).
+- Seasonal and local-climate demand pressure comes online (outside onboarding missions).
 - Event frequency increases.
-- Grid complexity rises with bottlenecks and overloaded routes.
+- Grid complexity rises with longer `Line` routes, overloaded links, and substation coverage constraints.
 - New towns emerge in livable, stably powered areas and add fresh demand pressure.
-- Later content introduces larger fragmented maps where region expansion must be purchased.
+- Later content introduces larger maps that force longer-distance routing and tighter reliability planning.
 
 ### End State
 
@@ -93,78 +94,85 @@ The primary strategic question is always the same: what to build, when to build 
 
 ## 8. Core Systems
 
-### 8.1 Map and Regions
+### 8.1 Map and Spatial Layout
 
-- Country map represented as a 2D overhead layered region/network view.
-- Layer model includes: base game board (land/water/land type), civilization town points, power-grid points, and resource-zone overlays.
+- Country map represented as a 2D overhead layered board/network view.
+- Layer model includes: base game board (land/water/land type), civilization town points, power-grid points, player-built `Line` network, and resource-zone overlays.
 - Maps are handcrafted in v1 to ensure balanced and readable scenarios.
-- Regions have population, demand profile, and growth pressure.
-- Early missions use small maps with low region count and high at-a-glance readability.
-- Later missions use larger maps with fragmented regions that may start locked.
+- Towns are the primary demand entities and carry growth pressure.
+- Early missions use small maps with low town count and high at-a-glance readability.
+- Later missions use larger maps with more separated town clusters and longer routing distances.
 
-### 8.1.1 Region Acquisition on Fragmented Maps
+### 8.1.1 Connectivity Model
 
-- Some regions on advanced maps start unavailable for development.
-- The player unlocks these regions by spending current-level budget.
-- Unlocking a region grants build/routing rights and introduces new demand obligations.
-- Region acquisition should be a strategic timing decision, not a mandatory scripted click.
+- There are no locked map areas or area-purchase systems.
+- Strategic challenge comes from distance, terrain costs, line congestion, and demand spikes.
+- The player can route anywhere on valid terrain from run start.
 
 ### 8.2 Infrastructure
 
 - Generation assets: a small starter set of plant types.
-- Grid assets: substations, transmission links, storage.
+- Grid assets: substations, `Lines`, storage.
+- `Line` connections can be built between:
+  - power plant to power plant,
+  - power plant to substation,
+  - substation to substation,
+  - substation to power plant.
+- Substations provide circular service radius for nearby towns.
+- When a town is in range of a powered substation, a short orthogonal service line is auto-generated between them.
 - Actions: build, demolish, reroute priorities.
 
 ### 8.3 Demand and Supply
 
 - Demand updates continuously in coarse ticks.
 - Supply is simplified to capacity and availability values.
-- Routing is based on connectivity and line capacity.
+- Backbone routing is based on manual `Line` connectivity and line capacity.
+- Town service is based on powered-substation coverage radius.
+- Auto-generated orthogonal town service lines represent local distribution links and are not manually routed.
 
 ### 8.3.1 Population Growth as Difficulty Driver
 
-- Districts track population as a lightweight value that influences demand growth.
+- Towns track population as a lightweight value that influences demand growth.
 - When population grows, baseline demand and peak stress both increase.
 - Growth rates are tuned to be readable and strategically meaningful, not simulation-heavy.
 - Population growth is disabled in tutorial/early onboarding missions and enabled in later content.
 
-### 8.3.2 Seasonal and Regional Demand Conditions
+### 8.3.2 Seasonal and Local-Climate Demand Conditions
 
-- Regions have simple climate tags (for example cold, temperate, warm) that modify demand by season.
+- Map areas carry simple climate tags (for example cold, temperate, warm) that modify town demand by season.
 - Seasonal demand effects are intentionally high-level and transparent to the player.
 - Example demand effects:
-  - Cold regions in winter draw more power (heating pressure).
-  - Warm regions in summer draw more power (cooling pressure).
-- Seasonal/regional modifiers are applied as readable demand multipliers, not deep weather simulation.
-- Seasonal/regional modifiers are disabled in tutorial/early onboarding missions and enabled in later content.
+  - Cold areas in winter draw more power (heating pressure).
+  - Warm areas in summer draw more power (cooling pressure).
+- Seasonal/local-climate modifiers are applied as readable demand multipliers, not deep weather simulation.
+- Seasonal/local-climate modifiers are disabled in tutorial/early onboarding missions and enabled in later content.
 
 ### 8.3.3 Town Emergence Conditions
 
 - Towns can emerge mid-run to create readable expansion pressure.
-- Emergence requires livable terrain (not mountains or ocean) and stable nearby grid service.
+- Emergence requires livable terrain (not mountains or ocean) and stable nearby powered coverage.
 - Emergence is shallow and legible: no deep demographic simulation, only clear demand additions.
 - Tutorial/onboarding missions can run low-emergence or emergence-off presets to reduce early overload.
 
 ### 8.4 Failure and Pressure
 
-- Overload when routed power exceeds line/substation limits.
-- Brownout/blackout when demand is unmet beyond thresholds.
+- Overload when routed power exceeds manual line/substation limits.
+- Brownout/blackout when town demand is unmet beyond thresholds.
 - Cascading issues are possible but intentionally simple and legible.
 
 ### 8.5 Economy and Hidden Service Pressure
 
 - Budget changes from infrastructure costs, operating burden, and penalties.
-- Region unlock purchases also draw from the same level budget.
 - Level completion does not carry money into the next level.
 - Trust is a hidden system attribute, not a visible resource the player directly manages.
-- If regions remain underserved, hidden trust pressure accumulates and can trigger lawsuits against the Power Department.
+- If towns remain underserved, hidden trust pressure accumulates and can trigger lawsuits against the Power Department.
 - Lawsuits apply monetary penalties and increase bankruptcy risk.
 - These values are intentionally high-level, not a deep market simulation.
 
 ## 9. Storytelling Approach (Unobtrusive)
 
 - Short cabinet briefings and news-ticker style updates.
-- Flavor text tied to mechanical events and region changes.
+- Flavor text tied to mechanical events, town growth, and grid incidents.
 - No long cutscenes, dialogue trees, or heavy narrative branching in v1.
 - Story delivery should enhance context without interrupting control flow.
 
@@ -174,8 +182,10 @@ To keep the game shallow and fast:
 
 - Include:
   - Plant output, demand growth, reliability pressure, basic operating costs.
+  - Substation coverage radius and auto-generated orthogonal town links.
+  - Manual `Line` routing between plants and substations.
   - Population growth pressure as a simple demand multiplier once onboarding is complete.
-  - Seasonal and regional demand modifiers as simple, visible multipliers once onboarding is complete.
+  - Seasonal and local-climate demand modifiers as simple, visible multipliers once onboarding is complete.
   - Event-driven modifiers (for example heat wave demand spikes).
 - Exclude for v1:
   - Layered mechanics that dilute the build/when/where strategic core.
@@ -195,7 +205,7 @@ To keep the game shallow and fast:
 ### Primary Victory Conditions
 
 - Standard Run: survive and maximize score before collapse.
-- Campaign/Operation maps: achieve full-map management by acquiring and reliably serving all required regions.
+- Campaign/Operation maps: achieve full-map management by reliably serving required town-demand targets and mission objectives.
 
 ### Score Drivers
 
@@ -203,6 +213,7 @@ To keep the game shallow and fast:
 - Reliability consistency.
 - Efficient capital use.
 - Crisis recovery performance.
+- Effective town expansion support.
 
 ## 12. Progression Model
 
@@ -213,8 +224,8 @@ To keep the game shallow and fast:
 ## 13. MVP Scope (Design Target)
 
 1. One 2D overhead country map.
-2. 6-8 regions with distinct demand behavior.
-3. A compact asset set (generation + grid + storage), with simple readable mechanics.
+2. A town set with distinct demand behavior and growth potential.
+3. A compact asset set (generation + substations + `Lines` + storage), with simple readable mechanics.
 4. Real-time build/demolish/reroute controls.
 5. Lightweight event pool with short narrative text.
 6. Main menu, splash screen, and run setup flows.
@@ -232,7 +243,7 @@ See `MULTIPLAYER_NOTES.md` for forward-looking design constraints.
 
 - `FRONTEND_AND_UX.md`: Splash screen, main menu, campaign/custom flow UX, and in-run HUD.
 - `MISSION_AND_MODE_DESIGN.md`: Mode definitions, campaign mission structure, and custom game policy.
-- `MAP_DESIGN_2D.md`: 2D overhead map interaction, region design, and routing readability rules.
+- `MAP_DESIGN_2D.md`: 2D overhead map interaction, town/substation coverage model, and line-routing readability rules.
 
 ## 16. Open Design Questions
 
@@ -243,3 +254,5 @@ See `MULTIPLAYER_NOTES.md` for forward-looking design constraints.
 5. Event interaction model (passive events only vs fast binary choices in real time).
 6. Population growth curve tuning after onboarding (gentle, moderate, or steep).
 7. Seasonal demand model shape (fixed season per run vs season shifts during long runs).
+8. Substation coverage-radius tuning by mission tier.
+9. `Line` cost and maintenance scaling for long-distance routing.

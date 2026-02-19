@@ -1,7 +1,7 @@
 # Map Storage and Resource Zone Spec
 
 Status: Draft v0.1  
-Last updated: 2026-02-18
+Last updated: 2026-02-19
 
 ## 1. Decision Summary
 
@@ -29,7 +29,7 @@ data/
     index.json
     national_core.map.json
     expansion_north.map.json
-    resilience_fragmented.map.json
+    resilience_peak.map.json
 ```
 
 ### 2.1 `index.json`
@@ -47,7 +47,7 @@ Example:
       "file": "national_core.map.json",
       "displayName": "National Core",
       "sizeClass": "small",
-      "fragmentation": "open"
+      "routingComplexity": "simple"
     }
   ]
 }
@@ -72,12 +72,12 @@ type MapDocument = {
     zoomLevels: number[];
     boundsPadding: number;
   };
-  regions: RegionRecord[];
-  districts: DistrictRecord[];
+  townSeeds: TownSeedRecord[];
+  townSpawnAnchors: TownSpawnAnchorRecord[];
   nodeSlots: NodeSlotRecord[];
   starterInfrastructure: StarterInfrastructureRecord[];
   terrainZones: TerrainZoneRecord[];
-  transmissionCorridors: TransmissionCorridorRecord[];
+  climateZones: ClimateZoneRecord[];
   resourceZones: ResourceZoneRecord[];
   authoredEvents?: AuthoredEventRecord[];
 };
@@ -120,10 +120,6 @@ type ResourceZoneRecord = {
     | "uranium"
     | "biomass";
   geometry: GeometryShape;
-  regionIds: string[];
-  districtIds?: string[];
-  unlockedByDefault: boolean;
-  discoveryMode: "visible" | "hidden_until_region_unlock";
   compatibility: {
     allowedPlantTags: string[];
     minCoverageRatio: number;
@@ -171,7 +167,7 @@ To preserve shallow simulation:
 At map load time:
 
 1. Validate map JSON with `MapSchema` and `ResourceZoneSchema`.
-2. Build a spatial index for `terrainZones`, `regions`, and `resourceZones`.
+2. Build a spatial index for `terrainZones`, `townSeeds`, and `resourceZones`.
 3. Precompute slot-to-zone influence map for all `nodeSlots`.
 4. Store resolved results in immutable runtime map state.
 
@@ -187,12 +183,11 @@ At command execution (`build`):
 `ResourceZoneSchema` should enforce:
 
 1. `id` uniqueness within map.
-2. Valid `regionIds` and `districtIds` references.
-3. `minCoverageRatio` in range `[0, 1]`.
-4. Multipliers greater than `0`.
-5. `reliabilityDelta` in bounded range (recommended `[-1, 1]`).
-6. `reserveMWh` required only for `depletable` zones.
-7. No invalid geometry (self-intersection, zero-area polygons, out-of-bounds points).
+2. `minCoverageRatio` in range `[0, 1]`.
+3. Multipliers greater than `0`.
+4. `reliabilityDelta` in bounded range (recommended `[-1, 1]`).
+5. `reserveMWh` required only for `depletable` zones.
+6. No invalid geometry (self-intersection, zero-area polygons, out-of-bounds points).
 
 ## 8. Example Map Snippet
 
@@ -202,6 +197,16 @@ At command execution (`build`):
   "mapId": "national_core",
   "displayName": "National Core",
   "world": { "width": 2400, "height": 1400, "coordinateSystem": "origin_top_left_y_down" },
+  "townSeeds": [
+    {
+      "id": "town_alpha",
+      "name": "Alpha",
+      "position": [460, 520],
+      "baseDemandMW": 18,
+      "population": 12000,
+      "climateTag": "temperate"
+    }
+  ],
   "resourceZones": [
     {
       "id": "rz_west_hydro_basin",
@@ -210,9 +215,6 @@ At command execution (`build`):
         "kind": "polygon",
         "points": [[280, 420], [520, 390], [580, 620], [300, 650]]
       },
-      "regionIds": ["west_corridor"],
-      "unlockedByDefault": true,
-      "discoveryMode": "visible",
       "compatibility": {
         "allowedPlantTags": ["hydro", "storage_pumped"],
         "minCoverageRatio": 0.35

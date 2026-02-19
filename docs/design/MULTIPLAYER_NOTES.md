@@ -1,7 +1,7 @@
 # Multiplayer Notes (Future Mode)
 
 Status: Parking lot for future design updates  
-Last updated: 2026-02-12
+Last updated: 2026-02-19
 
 ## 1. Intent
 
@@ -15,7 +15,7 @@ Ship singleplayer first while preserving a clean path to future multiplayer mode
 
 ## 3. Candidate Future Multiplayer Fantasy
 
-Multiple energy companies compete to win and keep regional supply contracts. Performance, reliability, and pricing determine who controls each contract over time.
+Multiple energy companies compete to win and keep town-cluster supply contracts. Performance, reliability, and pricing determine who controls each contract over time.
 
 ## 4. Design Guardrails to Preserve During Singleplayer Development
 
@@ -54,5 +54,5 @@ Whenever a design decision is made in singleplayer implementation, append a shor
 1. Added campaign missions as fixed-scenario singleplayer content. Impact: neutral-to-positive for asynchronous multiplayer because authored map IDs and objective packets can be reused as competitive scenarios.
 2. Added custom game parameter screen with separate score class. Impact: positive because ruleset declarations can later become lobby presets.
 3. Locked 2D overhead map and shared interaction vocabulary across modes. Impact: positive because it avoids per-mode control fragmentation in future multiplayer UI.
-4. Added seasonal/regional demand modifiers with onboarding gating. Impact: positive if season state and climate tags are included in scenario packets for fair score comparability.
-5. Added fragmented-region acquisition with level-local economy. Impact: positive if region unlock costs, starting capital, and unlock state are fully declared in scenario packets.
+4. Added seasonal/local-climate demand modifiers with onboarding gating. Impact: positive if season state and climate tags are included in scenario packets for fair score comparability.
+5. Added manual long-distance `Line` routing plus substation-radius town service. Impact: positive if line rules, coverage-radius values, and auto-link behavior are fully declared in scenario packets.

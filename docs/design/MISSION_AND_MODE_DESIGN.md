@@ -1,7 +1,7 @@
 # Mission and Mode Design
 
 Status: Draft v0.1  
-Last updated: 2026-02-18
+Last updated: 2026-02-19
 
 ## 1. Mode Strategy
 
@@ -43,17 +43,17 @@ Campaign missions provide curated scenarios and light national storytelling with
   2. Industrial Expansion.
   3. Transition and Resilience.
 - Map scaling by arc:
-  1. Founding: small, fully open maps for fast readability.
-  2. Expansion: medium maps with selective regional lockouts.
-  3. Transition and Resilience: large fragmented maps with staged region acquisition.
+  1. Founding: small maps for fast readability and control learning.
+  2. Expansion: medium maps with separated town clusters and longer line-planning demands.
+  3. Transition and Resilience: large maps with high demand density and severe stress scenarios.
 
 Onboarding rule:
 
 - First tutorial/early missions run with static population (no growth mechanic).
 - Population growth is introduced in later missions once core build/reroute controls are learned.
 - First tutorial/early missions can cap or disable spontaneous town emergence.
-- Seasonal/regional demand modifiers are introduced in later missions after baseline routing mastery.
-- First tutorial/early missions avoid region acquisition complexity.
+- Seasonal/local-climate demand modifiers are introduced in later missions after baseline routing mastery.
+- First tutorial/early missions avoid long-distance routing overload.
 
 ### Mission Format
 
@@ -65,8 +65,8 @@ Each mission defines:
 4. 1-2 constraint modifiers.
 5. Optional secondary objective for higher medal tier.
 6. Population growth mode (`off` for onboarding, `on` for standard and advanced missions).
-7. Seasonal/regional condition mode (`off` for onboarding, `on` for standard and advanced missions).
-8. Region availability mode (`fully-open` for onboarding/small maps, `fragmented` for later maps).
+7. Seasonal/local-climate condition mode (`off` for onboarding, `on` for standard and advanced missions).
+8. Town emergence mode (`off`, `limited`, `normal`).
 
 ### Objective Types
 
@@ -74,19 +74,19 @@ Each mission defines:
 2. Maintain reliability above a target.
 3. Survive an event sequence.
 4. Limit budget overspend.
-5. Reach electrification coverage in target regions.
+5. Reach electrification coverage for a target number of towns.
 6. Stabilize service during population-driven demand acceleration.
 7. Maintain reliability through seasonal demand spikes.
-8. Acquire and stabilize all required fragmented regions.
+8. Build and maintain a stable long-distance `Line` backbone.
 
 ### Constraint Examples
 
 1. Limited generation type availability.
-2. Higher line construction costs.
+2. Higher `Line` construction costs.
 3. Increased weather event frequency.
 4. Restricted demolition refunds.
-5. Regional winter/summer demand surges.
-6. Region unlock costs that force expansion timing tradeoffs.
+5. Strong winter/summer demand surges.
+6. Reduced substation radius forcing denser station planning.
 
 ### Mission Completion and Rewards
 
@@ -106,7 +106,7 @@ No branching dialogue trees are required for v1.
 
 ### 4.1 In-Level Capital Rule
 
-- Region acquisition is funded only by money earned within the current mission.
+- All build, maintenance, and penalty costs are funded only by money earned within the current mission.
 - On mission completion, budget resets for the next mission.
 
 ## 5. Custom Game
@@ -120,19 +120,19 @@ No branching dialogue trees are required for v1.
 ### Customizable Parameters (Draft)
 
 1. Handcrafted map selection.
-2. Region pressure variant.
-3. Starting budget.
-4. Base demand and growth.
-5. Event intensity.
-6. Infrastructure price multiplier.
-7. Reliability failure tolerance.
-8. Underserved-region lawsuit sensitivity.
-9. Run duration target band.
-10. Population growth strength (`off`, `normal`, `high`).
-11. Seasonal profile (`neutral`, `winter-peak`, `summer-peak`, `mixed`).
-12. Regional climate intensity (`low`, `normal`, `high`).
-13. Region fragmentation level (`none`, `moderate`, `high`).
-14. Region unlock cost profile (`low`, `standard`, `high`).
+2. Starting budget.
+3. Base demand and growth.
+4. Event intensity.
+5. Seasonal profile.
+6. Local-climate intensity.
+7. Infrastructure price multiplier.
+8. Reliability failure tolerance.
+9. Underserved-town lawsuit sensitivity.
+10. Run duration target band.
+11. Population growth strength (`off`, `normal`, `high`).
+12. Town emergence intensity (`off`, `limited`, `normal`, `high`).
+13. Substation radius profile (`wide`, `standard`, `tight`).
+14. `Line` maintenance profile (`low`, `standard`, `high`).
 
 ### Integrity Policy
 
@@ -146,28 +146,29 @@ Difficulty should scale through a small set of readable knobs:
 
 1. Demand ramp speed.
 2. Population growth pressure.
-3. Seasonal/regional demand pressure.
+3. Seasonal/local-climate demand pressure.
 4. Incident frequency.
 5. Economic pressure.
 6. Failure threshold strictness.
-7. Region acquisition pressure (fragmentation + unlock costs).
+7. Routing pressure (distance + terrain cost + line congestion).
+8. Coverage pressure (substation radius and town emergence rate).
 
 Avoid hidden multipliers that reduce player confidence in outcomes.
 
 ## 7. Suggested Launch Mission Set (Example)
 
-1. `Cold Start`: bootstrap power to capital and one rural region on a small fully-open map.
+1. `Cold Start`: bootstrap power to a starter town cluster on a small map.
 2. `Rolling Summer`: survive heat-wave demand spikes.
 3. `Fuel Shock`: maintain service with cost surge penalties.
 4. `Coastal Storm`: recover from repeated line disruptions.
-5. `Industrial Push`: support heavy growth in one corridor.
+5. `Industrial Push`: support heavy growth in a factory-dense town belt.
 6. `Dry Season`: low hydro availability constraint.
 7. `Night Surge`: manage steep evening demand profile.
-8. `Election Quarter`: keep underserved-region lawsuit exposure low under mixed events.
-9. `Grid Retrofit`: replace inefficient plants with strict budget cap on a medium fragmented map.
-10. `Cross-Country Link`: establish stable long-haul transmission path while buying access to new regions.
-11. `Green Mandate`: meet demand with limited fossil capacity across a large fragmented map.
-12. `National Peak`: final full-map management scenario with mandatory region acquisition.
+8. `Election Quarter`: keep underserved-town lawsuit exposure low under mixed events.
+9. `Grid Retrofit`: replace inefficient plants with strict budget cap on a medium map.
+10. `Cross-Country Link`: establish stable long-haul `Line` paths between distant supply and demand clusters.
+11. `Green Mandate`: meet demand with limited fossil capacity across a large map.
+12. `National Peak`: final full-map management scenario with high town density and peak seasonal stress.
 
 ## 8. Open Questions
 

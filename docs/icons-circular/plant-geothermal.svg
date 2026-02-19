@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96" fill="none">
+  <defs>
+    <radialGradient id="core-plant-geothermal" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(38 32) rotate(50) scale(62)">
+      <stop offset="0" stop-color="#1b2a3a"/>
+      <stop offset="1" stop-color="#101821"/>
+    </radialGradient>
+  </defs>
+  <circle cx="48" cy="48" r="44" fill="#0b1118"/>
+  <circle cx="48" cy="48" r="39" fill="url(#core-plant-geothermal)" stroke="#8ea4ba" stroke-width="1.5"/>
+  <circle cx="48" cy="48" r="31" stroke="#e595a6" stroke-opacity="0.45" stroke-width="1.5"/>
+  <g stroke="#e8f2ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <path d="M34 58L43 47L48 52L54 44L62 58"/>
+    <path d="M48 52V58"/>
+    <path d="M42 40C42 36 45 35 45 32"/>
+    <path d="M49 39C49 35 52 34 52 31"/>
+    <path d="M56 40C56 36 59 35 59 32"/>
+  </g>
+</svg>

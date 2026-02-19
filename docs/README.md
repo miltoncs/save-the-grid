@@ -26,6 +26,8 @@ Current gameplay direction highlights:
 
 - Early levels use small maps that keep needs and infrastructure easy to observe.
 - Basic level starts are intentionally sparse: mostly terrain, few towns, little/no prebuilt grid.
-- Later maps are larger and fragmented into regions unlocked with current-level budget.
-- Campaign victory emphasizes full-map management on advanced maps.
+- Later maps are larger and focus on longer routing distances and denser town networks.
+- Substations power towns by radius with auto-generated orthogonal town service links.
+- Players build manual long-distance powerlines with the in-game `Line` tool.
+- Campaign victory emphasizes full-map management on advanced maps through reliable town service.
 - Completing a level unlocks the next level; no money or material reward carries over.

@@ -1,7 +1,7 @@
 # Save the Grid Architecture
 
 Status: Draft v0.1  
-Last updated: 2026-02-18
+Last updated: 2026-02-19
 
 ## 1. Purpose and Scope
 
@@ -152,7 +152,7 @@ src/
 
 1. Rule updates must use tick delta from fixed clock, never frame delta.
 2. Random events use seeded RNG captured in save snapshots.
-3. All player actions are normalized into intent commands (`build`, `demolish`, `reroute`, `unlock_region`, `pause_toggle`).
+3. All player actions are normalized into intent commands (`build`, `demolish`, `reroute`, `pause_toggle`).
 4. Simulation outputs are pure functions of prior state + command queue + seed.
 
 ### 6.3 System Order per Tick
@@ -170,17 +170,17 @@ src/
 
 ### Grid and routing domain
 
-- Models nodes, links, capacities, stress tiers, and district service coverage.
+- Models nodes, links, capacities, stress tiers, and town service coverage.
 - Exposes read models for rendering line thickness, pulse intensity, and overload color state.
 
 ### Demand domain
 
-- Computes district demand from baseline, population pressure, seasonal profile, climate tags, and event modifiers.
+- Computes town demand from baseline, population pressure, seasonal profile, climate tags, and event modifiers.
 - Supports onboarding toggles for disabling growth and seasonal pressure.
 
 ### Economy domain
 
-- Tracks budget, build/demolish costs, operating burden, penalties, and region unlock expenses.
+- Tracks budget, build/demolish costs, operating burden, penalties, and line construction/maintenance expenses.
 - Enforces level-local economy reset rules across runs/missions.
 
 ### Incident/story domain
@@ -326,7 +326,7 @@ In support of `../design/MULTIPLAYER_NOTES.md`:
 2. Keep RNG seedable and serializable.
 3. Keep scoring formulas explicit and data-driven.
 4. Avoid frame-rate-dependent simulation outcomes.
-5. Keep scenario packets fully declared (map ID + modifiers + unlock costs + objective set).
+5. Keep scenario packets fully declared (map ID + modifiers + line/coverage parameters + objective set).
 
 ## 14. Open Implementation Decisions
 

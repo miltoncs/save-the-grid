@@ -47,7 +47,7 @@
 
   <rect x="112" y="690" width="474" height="112" rx="16" fill="#0e2639" stroke="#314f65" stroke-width="1.5" />
   <text x="140" y="730" fill="#a9d9df" font-size="20" font-family="'Segoe UI', sans-serif">Daily Signal</text>
-  <text x="140" y="764" fill="#dcf5ff" font-size="24" font-family="'Segoe UI', sans-serif">Storm fronts on East Coast Trade Line</text>
+  <text x="140" y="764" fill="#dcf5ff" font-size="24" font-family="'Segoe UI', sans-serif">Storm fronts on East Coast Settlements</text>
   <text x="140" y="790" fill="#ffcb7c" font-size="19" font-family="'Segoe UI', sans-serif">Expected load volatility: +18%</text>
 
   <rect x="690" y="108" width="840" height="690" rx="26" fill="#091725" stroke="#3b6075" stroke-width="2" />

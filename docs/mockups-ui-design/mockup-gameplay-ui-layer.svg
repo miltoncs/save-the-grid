@@ -72,9 +72,9 @@
     <text x="1515" y="852" text-anchor="middle" fill="#eff8ff" font-size="34" font-family="'Trebuchet MS', 'Segoe UI', sans-serif">Hide</text>
   </g>
 
-  <g id="ui-region-tooltip" filter="url(#ui-shadow)">
+  <g id="ui-map-tooltip" filter="url(#ui-shadow)">
     <rect x="782" y="510" width="292" height="104" rx="10" fill="url(#ui-panel)" stroke="#304655" stroke-width="1.1" />
-    <text x="802" y="544" fill="#eaf4fa" font-size="33" font-family="'Trebuchet MS', 'Segoe UI', sans-serif">Capital Metro</text>
+    <text x="802" y="544" fill="#eaf4fa" font-size="33" font-family="'Trebuchet MS', 'Segoe UI', sans-serif">Central Town Cluster</text>
     <text x="802" y="576" fill="#d4e5ef" font-size="28" font-family="'Trebuchet MS', 'Segoe UI', sans-serif">Demand 95 | Served 87</text>
     <text x="802" y="604" fill="#f8bf7c" font-size="28" font-family="'Trebuchet MS', 'Segoe UI', sans-serif">Line saturation risk: 91%</text>
   </g>

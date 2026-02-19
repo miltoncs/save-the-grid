@@ -1,7 +1,7 @@
 # Frontend and UX Design
 
 Status: Draft v0.1  
-Last updated: 2026-02-18
+Last updated: 2026-02-19
 
 Reference: See `INSPIRATION.md` for the map-first UI inspiration baseline.
 
@@ -93,8 +93,8 @@ Primary user-facing surfaces:
 4. Completion medal state (none, bronze, silver, gold).
 5. Best score and best reliability.
 6. Population growth status tag (`Static Population` or `Growth Active`).
-7. Seasonal/regional condition status tag (`Neutral`, `Winter Pressure`, `Summer Pressure`, `Mixed`).
-8. Map scale tag (`Small`, `Medium`, `Large`) and fragmentation tag (`Open`, `Fragmented`).
+7. Seasonal/local-climate condition status tag (`Neutral`, `Winter Pressure`, `Summer Pressure`, `Mixed`).
+8. Map scale tag (`Small`, `Medium`, `Large`) and routing complexity tag (`Simple`, `Moderate`, `Intense`).
 
 ### UX Rules
 
@@ -114,7 +114,7 @@ Let players tune scenario pressure for practice or challenge runs while preservi
 3. Demand growth rate.
 4. Event intensity.
 5. Seasonal profile.
-6. Regional climate intensity.
+6. Local climate intensity.
 7. Infrastructure costs.
 8. Failure strictness thresholds.
 9. Run target duration band.
@@ -132,14 +132,14 @@ Let players tune scenario pressure for practice or challenge runs while preservi
 - Top bar: budget, reliability, unmet demand, run timer, population trend (when enabled), active season/condition.
 - Left tool rail: build, demolish, reroute categories.
 - Right event rail: active incidents, mission objectives, short briefings.
-- Bottom context panel: selected asset stats, region unlock costs (when relevant), and action confirmations.
+- Bottom context panel: selected asset stats, `Line` path cost/capacity preview, substation coverage radius impact, and action confirmations.
 - Center: 2D overhead map as dominant interactive surface.
 
 ### Interaction Pattern
 
 1. Select tool.
 2. Hover map to preview impact (cost, capacity, risk).
-3. On fragmented maps, unlock targeted regions when strategic conditions allow.
+3. Place plants/substations or draw manual `Line` paths based on current demand and terrain.
 4. Commit action with one click/tap.
 5. Receive immediate visual and metric feedback.
 
@@ -159,9 +159,9 @@ Let players tune scenario pressure for practice or challenge runs while preservi
 Alerts must be non-blocking and expire cleanly.
 
 Population-related warnings should use the same alert system once the mechanic is enabled.
-Seasonal/regional demand warnings should use the same alert system once the mechanic is enabled.
-Underserved-region lawsuit warnings should use the same alert system without exposing hidden trust as a direct meter.
-Locked-region and expansion-opportunity warnings should use the same alert system on fragmented maps.
+Seasonal/local-climate demand warnings should use the same alert system once the mechanic is enabled.
+Underserved-town lawsuit warnings should use the same alert system without exposing hidden trust as a direct meter.
+Line-overload and substation-coverage-gap warnings should use the same alert system in all map sizes.
 
 ### Pause Behavior (Singleplayer)
 
@@ -176,7 +176,7 @@ Story delivery channels:
 
 1. News ticker (ambient, single-line updates).
 2. Cabinet ping cards (short prompts in right rail).
-3. Region callouts (brief flavor text attached to map hotspots).
+3. Map callouts (brief flavor text attached to town clusters or infrastructure hotspots).
 
 Rules:
 
@@ -187,7 +187,7 @@ Rules:
 Onboarding rule:
 
 - Tutorial and early levels hide population-growth UI elements until the mechanic is introduced.
-- Tutorial and early levels hide seasonal/regional condition UI elements until the mechanic is introduced.
+- Tutorial and early levels hide seasonal/local-climate condition UI elements until the mechanic is introduced.
 
 ## 9. Input and Control Mapping (Draft)
 

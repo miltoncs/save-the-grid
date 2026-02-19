@@ -1,7 +1,7 @@
 # Visual and UX Inspiration
 
 Status: Draft v0.1  
-Last updated: 2026-02-12
+Last updated: 2026-02-19
 
 ## 1. Primary References
 
@@ -10,7 +10,7 @@ Two direct visual references are currently guiding design:
 1. Google Maps screenshot:
    - Inspires readability, layering, zoom-driven detail reveal, and floating map controls.
 2. OpenFront.io screenshot:
-   - Inspires real-time strategy pacing, map-first focus, and pixelated coastline/region presentation.
+   - Inspires real-time strategy pacing, map-first focus, and pixelated coastline/terrain presentation.
 
 References are for interaction and visual direction only, not brand imitation.
 
@@ -32,12 +32,12 @@ References are for interaction and visual direction only, not brand imitation.
   - Water: light cyan/blue.
   - Land: muted light green.
   - Urban/settlement zones: light neutral tones.
-  - Roads/links: soft blue-gray lines.
-- Use accent colors only for gameplay-critical signals (overload, unmet demand, locked region).
+  - Routes/lines: soft blue-gray lines.
+- Use accent colors only for gameplay-critical signals (overload, unmet demand, outage risk).
 
 ### 3.1.1 Pixel Treatment (OpenFront-Inspired)
 
-- Coastlines and region borders can use a pixel-stepped silhouette treatment.
+- Coastlines and major terrain transitions can use a pixel-stepped silhouette treatment.
 - Pixel treatment should communicate style, not reduce readability.
 - Keep pixel scale consistent (no mixed-resolution terrain artifacts).
 - Preserve smooth camera motion even with pixel-art map edges.
@@ -45,13 +45,13 @@ References are for interaction and visual direction only, not brand imitation.
 ### 3.2 Layer Hierarchy
 
 1. Terrain and water first.
-2. Region boundaries and labels second.
+2. Towns and fixed points second.
 3. Infrastructure network third.
 4. Demand/alert overlays on top.
 
 ### 3.3 Line and Label Behavior
 
-- Thin baseline lines with selective emphasis for major routes.
+- Thin baseline lines with selective emphasis for important player-built `Line` routes.
 - Avoid heavy strokes and high-contrast outlines by default.
 - Show only labels relevant to current zoom level.
 
@@ -68,9 +68,9 @@ References are for interaction and visual direction only, not brand imitation.
 1. Pan-first navigation with smooth movement.
 2. Scroll/gesture zoom with stable focal point.
 3. Progressive disclosure by zoom level:
-   - Far zoom: region and high-level status.
-   - Mid zoom: district and major infrastructure.
-   - Near zoom: local nodes, capacity, and placement details.
+   - Far zoom: town clusters and high-level status.
+   - Mid zoom: town points and major infrastructure.
+   - Near zoom: local nodes, capacity, placement details, and coverage status.
 4. Non-disruptive overlays that can be toggled quickly.
 5. Continuous RTS-like pressure where decisions are frequent and spatially grounded.
 
@@ -78,11 +78,10 @@ References are for interaction and visual direction only, not brand imitation.
 
 1. Keep the map as the dominant surface in all gameplay states.
 2. Use restrained map colors so power-grid alerts read instantly.
-3. Treat region lock/unlock state as map overlays, not separate screens.
-4. Ensure fragmented late-game maps remain readable through zoom-level filtering.
-5. Keep onboarding maps visually simple with minimal overlays.
-6. Use pixel-stepped coastlines/region boundaries as a stylistic layer on top of the map readability system.
-7. Preserve fast, scan-friendly real-time decision flow in all HUD layouts.
+3. Keep onboarding maps visually simple with minimal overlays.
+4. Use pixel-stepped coastlines/terrain transitions as a stylistic layer on top of the map readability system.
+5. Preserve fast, scan-friendly real-time decision flow in all HUD layouts.
+6. Distinguish manual long-distance `Line` routes from auto-generated short orthogonal town service links.
 
 ## 7. Non-Goals
 
@@ -108,4 +107,4 @@ These are approximate starting points for implementation experimentation:
 Optional pixel-edge accents:
 
 - `--map-coast-pixel-edge: #6f8ff0`
-- `--map-region-pixel-edge: #7fa2ff`
+- `--map-grid-pixel-edge: #7fa2ff`
