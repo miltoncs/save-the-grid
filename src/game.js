@@ -22,18 +22,18 @@ const TOOL_LINE = "line";
 const ASSET_ORDER = ["plant", "substation", "storage"];
 const PRIORITY_ORDER = ["low", "normal", "high"];
 const DRAG_THRESHOLD_PX = 6;
-const TERRAIN_MAP_IMAGE_URL = "/docs/mockups-ui-design/mockup-terrain-map.png";
-const TERRAIN_MAP_METADATA_URL = "/docs/mockups-ui-design/mockup-terrain-map.metadata.json";
+const TERRAIN_MAP_IMAGE_URL = "/assets/maps/terrain/mockup-terrain-map.png";
+const TERRAIN_MAP_METADATA_URL = "/data/maps/terrain/mockup-terrain-map.metadata.json";
 const ICON_SET_URLS = {
   town: {
-    hamlet: "/docs/icons-circular/town-hamlet.svg",
-    city: "/docs/icons-circular/town-city.svg",
-    capital: "/docs/icons-circular/town-capital.svg",
+    hamlet: "/assets/icons/circular/town-hamlet.svg",
+    city: "/assets/icons/circular/town-city.svg",
+    capital: "/assets/icons/circular/town-capital.svg",
   },
   resource: {
-    wind: "/docs/icons-circular/plant-wind.svg",
-    sun: "/docs/icons-circular/plant-solar.svg",
-    natural_gas: "/docs/icons-circular/plant-gas.svg",
+    wind: "/assets/icons/circular/plant-wind.svg",
+    sun: "/assets/icons/circular/plant-solar.svg",
+    natural_gas: "/assets/icons/circular/plant-gas.svg",
   },
 };
 const LIVABLE_TERRAINS = new Set(["plains", "river"]);
@@ -175,10 +175,6 @@ function toOrdinal(index) {
   return `${n}th`;
 }
 
-function unlockedByFragmentation(fragmentation, regionId) {
-  return true;
-}
-
 function normalizePopulationMode(mode) {
   if (mode === "off") {
     return { enabled: false, strength: 0 };
@@ -210,12 +206,6 @@ function normalizeFailureStrictness(value) {
   return 1;
 }
 
-function normalizeUnlockProfile(value) {
-  if (value === "low") return 0.82;
-  if (value === "high") return 1.3;
-  return 1;
-}
-
 function normalizeTownEmergenceMode(value, populationEnabled = true) {
   if (value === "off") return "off";
   if (value === "limited" || value === "low") return "low";
@@ -234,11 +224,9 @@ function normalizeLineMaintenanceProfile(value) {
   return "standard";
 }
 
-function getMissionTownEmergenceMode(missionId) {
-  const missionIndex = CAMPAIGN_MISSIONS.findIndex((mission) => mission.id === missionId);
-  if (missionIndex >= 0 && missionIndex <= 2) return "off";
-  if (missionIndex >= 0 && missionIndex <= 4) return "low";
-  return "normal";
+function getMissionTownEmergenceMode(mission, populationEnabled) {
+  if (!mission) return populationEnabled ? "normal" : "off";
+  return normalizeTownEmergenceMode(mission.townEmergenceMode, populationEnabled);
 }
 
 function getMissionSubstationRadiusProfile(mission) {
@@ -311,7 +299,7 @@ function buildRunConfigFromCampaignMission(missionId) {
     mission,
     sourceMissionId: mission.id,
     sparseStart: true,
-    townEmergenceMode: getMissionTownEmergenceMode(mission.id),
+    townEmergenceMode: getMissionTownEmergenceMode(mission, population.enabled),
   };
 }
 
@@ -503,8 +491,7 @@ class GameRuntime {
     return TOWN_CAP_BY_DISTRICT[region.districtType] || 4;
   }
 
-  getSeededTownCount(region, unlocked, townCap) {
-    if (!unlocked) return 0;
+  getSeededTownCount(region, townCap) {
     if (this.config.sparseStart) {
       const seeded = SPARSE_START_SEEDED_TOWNS[region.id] || 0;
       return clamp(seeded, 0, townCap);
@@ -512,10 +499,7 @@ class GameRuntime {
     return clamp(Math.max(1, Math.round(townCap * 0.65)), 0, townCap);
   }
 
-  getStarterAssetsForRegion(region, unlocked, seededTowns) {
-    if (!unlocked) {
-      return { plant: 0, substation: 0, storage: 0 };
-    }
+  getStarterAssetsForRegion(region, seededTowns) {
     if (!this.config.sparseStart) {
       return deepClone(region.starterAssets);
     }
@@ -645,14 +629,12 @@ class GameRuntime {
 
   createFreshState() {
     const regions = BASE_MAP.regions.map((region) => {
-      const unlocked = true;
       const townCap = this.getTownCapForRegion(region);
-      const townCount = this.getSeededTownCount(region, unlocked, townCap);
-      const assets = this.getStarterAssetsForRegion(region, unlocked, townCount);
-      const demandAnchor = unlocked ? this.getDemandAnchorForRegion({ ...region, townCap, townCount }) : 0;
+      const townCount = this.getSeededTownCount(region, townCap);
+      const assets = this.getStarterAssetsForRegion(region, townCount);
+      const demandAnchor = this.getDemandAnchorForRegion({ ...region, townCap, townCount });
       return {
         ...deepClone(region),
-        unlocked,
         priority: "normal",
         townCount,
         townCap,
@@ -676,20 +658,30 @@ class GameRuntime {
       };
     });
 
-    const links = BASE_MAP.links.map((link) => ({
-      ...deepClone(link),
-      built: false,
-      length: Math.hypot(
-        (findBaseRegion(link.a)?.x || 0) - (findBaseRegion(link.b)?.x || 0),
-        (findBaseRegion(link.a)?.y || 0) - (findBaseRegion(link.b)?.y || 0)
-      ),
-      lineBuildCost: 0,
-      used: 0,
-      safeCapacity: 0,
-      hardCapacity: 0,
-      stress: 0,
-      overload: false,
-    }));
+    const seededTownIds = new Set(
+      regions.filter((region) => (region.townCount || 0) > 0).map((region) => region.id)
+    );
+
+    const links = BASE_MAP.links.map((link) => {
+      const touchesCapital = link.a === "capital" || link.b === "capital";
+      const otherEndpointId = link.a === "capital" ? link.b : link.a;
+      const sparseStarterBackbone = touchesCapital && seededTownIds.has(otherEndpointId);
+      const built = this.config.sparseStart ? sparseStarterBackbone : true;
+      return {
+        ...deepClone(link),
+        built,
+        length: Math.hypot(
+          (findBaseRegion(link.a)?.x || 0) - (findBaseRegion(link.b)?.x || 0),
+          (findBaseRegion(link.a)?.y || 0) - (findBaseRegion(link.b)?.y || 0)
+        ),
+        lineBuildCost: 0,
+        used: 0,
+        safeCapacity: 0,
+        hardCapacity: 0,
+        stress: 0,
+        overload: false,
+      };
+    });
 
     return {
       runtimeSeconds: 0,
@@ -733,7 +725,6 @@ class GameRuntime {
     safe.incidents = safe.incidents || [];
     safe.timeline = safe.timeline || [];
     for (const region of safe.regions) {
-      region.unlocked = true;
       region.townCap = Math.max(1, Number(region.townCap) || this.getTownCapForRegion(region));
       const fallbackTownCount = 1;
       region.townCount = clamp(
@@ -1599,12 +1590,7 @@ class GameRuntime {
     const intervalBase = randomRange(24, 40);
     this.state.nextEventAt = this.state.runtimeSeconds + intervalBase / this.config.eventIntensity;
 
-    const unlockedRegions = this.state.regions.filter(
-      (region) => region.unlocked && (region.townCount || 0) > 0
-    );
-    const activeRegions = unlockedRegions.length
-      ? unlockedRegions
-      : this.state.regions.filter((region) => region.unlocked);
+    const activeRegions = this.state.regions.filter((region) => (region.townCount || 0) > 0);
     if (!activeRegions.length) {
       return;
     }
@@ -1619,7 +1605,7 @@ class GameRuntime {
       const target = pickRandom(warmRegions);
       events.push({
         title: `Heat wave in ${target.name}`,
-        body: "Cooling demand surges in warm regions.",
+        body: "Cooling demand surges across warm climate zones.",
         level: "warning",
         duration: 22,
         type: "demand_boost",
@@ -1632,7 +1618,7 @@ class GameRuntime {
       const target = pickRandom(coldRegions);
       events.push({
         title: `Cold snap in ${target.name}`,
-        body: "Heating pressure increases cold-region load.",
+        body: "Heating pressure increases cold-climate town load.",
         level: "warning",
         duration: 20,
         type: "demand_boost",
@@ -1645,7 +1631,7 @@ class GameRuntime {
       const target = pickRandom(coastRegions);
       events.push({
         title: `Coastal storm near ${target.name}`,
-        body: "Transmission resilience is reduced in coastal links.",
+        body: "Manual line resilience is reduced around coastal routes.",
         level: "critical",
         duration: 18,
         type: "line_cap",
@@ -1690,15 +1676,6 @@ class GameRuntime {
     const seasonProfile = CLIMATE_MULTIPLIERS[seasonLabel] || CLIMATE_MULTIPLIERS.neutral;
 
     for (const region of this.state.regions) {
-      if (!region.unlocked) {
-        region.demand = 0;
-        region.targetDemand = 0;
-        region.served = 0;
-        region.unmet = 0;
-        region.utilization = 0;
-        continue;
-      }
-
       if (this.config.populationEnabled) {
         region.population += region.growthRate * this.config.populationStrength * dt;
       }
@@ -1942,10 +1919,10 @@ class GameRuntime {
       link.hardCapacity = link.safeCapacity * 1.15;
     }
 
-    const unlocked = this.state.regions;
+    const regions = this.state.regions;
     let pool = 0;
 
-    for (const region of unlocked) {
+    for (const region of regions) {
       const resource = region.resourceProfile || this.createEmptyResourceProfile();
       const plantBoostMultiplier = clamp(
         1 + resource.wind * 0.16 + resource.sun * 0.14 + resource.natural_gas * 0.2,
@@ -1964,7 +1941,7 @@ class GameRuntime {
     }
 
     const prioritySort = { high: 0, normal: 1, low: 2 };
-    const targets = unlocked
+    const targets = regions
       .filter((region) => region.unmet > 0 && region.coveredBySubstation)
       .sort((a, b) => {
         const p = prioritySort[a.priority] - prioritySort[b.priority];
@@ -2002,14 +1979,14 @@ class GameRuntime {
       }
     }
 
-    for (const region of unlocked) {
+    for (const region of regions) {
       region.unmet = clamp(region.unmet, 0, region.demand);
       region.utilization = region.demand > 0 ? region.served / region.demand : 1;
     }
 
-    this.state.totalDemand = unlocked.reduce((acc, region) => acc + region.demand, 0);
-    this.state.totalServed = unlocked.reduce((acc, region) => acc + region.served, 0);
-    this.state.totalUnmet = unlocked.reduce((acc, region) => acc + region.unmet, 0);
+    this.state.totalDemand = regions.reduce((acc, region) => acc + region.demand, 0);
+    this.state.totalServed = regions.reduce((acc, region) => acc + region.served, 0);
+    this.state.totalUnmet = regions.reduce((acc, region) => acc + region.unmet, 0);
   }
 
   findPath(startId, endId) {
@@ -2041,9 +2018,9 @@ class GameRuntime {
   }
 
   updateEconomyAndReliability(dt) {
-    const unlocked = this.state.regions;
+    const regions = this.state.regions;
 
-    const operatingBase = unlocked.reduce((acc, region) => {
+    const operatingBase = regions.reduce((acc, region) => {
       const resource = region.resourceProfile || this.createEmptyResourceProfile();
       const plantOperatingMultiplier = clamp(
         1 - resource.natural_gas * 0.12 - resource.wind * 0.05 - resource.sun * 0.04,
@@ -2084,7 +2061,7 @@ class GameRuntime {
         ? this.state.links.filter((link) => link.overload).length / this.state.links.length
         : 0;
 
-    const assetReliabilityBonus = unlocked.reduce((acc, region) => {
+    const assetReliabilityBonus = regions.reduce((acc, region) => {
       const resource = region.resourceProfile || this.createEmptyResourceProfile();
       const resourceReliability =
         (resource.wind * 0.26 + resource.sun * 0.2 + resource.natural_gas * 0.18) *
@@ -2117,7 +2094,7 @@ class GameRuntime {
     }
 
     let trustPressure = 0;
-    for (const region of unlocked) {
+    for (const region of regions) {
       const unmetShare = region.demand > 0 ? region.unmet / region.demand : 0;
       if (unmetShare > 0.35) {
         trustPressure += unmetShare * 2.1;
@@ -2202,6 +2179,8 @@ class GameRuntime {
     if (this.config.mode === "campaign" && this.config.mission) {
       if (this.state.runtimeSeconds >= this.config.runTargetSec) {
         const mission = this.config.mission;
+        const requiredStableTowns =
+          mission.objective.requiredStableTowns ?? mission.objective.requiredUnlocked ?? 0;
         const servedTowns = this.state.regions.filter(
           (region) =>
             (region.townCount || 0) > 0 &&
@@ -2211,7 +2190,7 @@ class GameRuntime {
         const objective = mission.objective;
         const objectivePass =
           this.state.reliability >= objective.reliabilityFloor &&
-          servedTowns >= (objective.requiredUnlocked || 0) &&
+          servedTowns >= requiredStableTowns &&
           (objective.budgetFloor == null || this.state.budget >= objective.budgetFloor) &&
           (objective.maxLawsuits == null || this.state.lawsuits <= objective.maxLawsuits);
 
@@ -2577,7 +2556,7 @@ class GameRuntime {
 
       if (icon) {
         ctx.save();
-        ctx.globalAlpha = region.unlocked ? 0.96 : 0.72;
+        ctx.globalAlpha = 0.96;
         ctx.drawImage(icon, tx - iconSize / 2, ty - iconSize / 2, iconSize, iconSize);
         ctx.restore();
       } else {
@@ -2589,7 +2568,7 @@ class GameRuntime {
 
         ctx.beginPath();
         ctx.arc(tx, ty, markerRadius, 0, Math.PI * 2);
-        ctx.fillStyle = region.unlocked ? "rgba(227, 245, 232, 0.9)" : "rgba(205, 223, 214, 0.72)";
+        ctx.fillStyle = "rgba(227, 245, 232, 0.9)";
         ctx.fill();
       }
     }
@@ -2711,6 +2690,7 @@ class GameRuntime {
       resourceLayerVisible: this.resourceRevealHeld,
       townEmergenceMode: this.config.townEmergenceMode,
       townsEmerged: this.state.townsEmerged || 0,
+      substationRadius: this.config.substationRadius || 0,
       nextTownEmergenceIn: Math.max(
         0,
         (this.state.nextTownEmergenceAt || this.state.runtimeSeconds) - this.state.runtimeSeconds
@@ -2725,6 +2705,8 @@ class GameRuntime {
   buildObjectiveStatus() {
     if (this.config.mode === "campaign" && this.config.mission) {
       const mission = this.config.mission;
+      const requiredStableTowns =
+        mission.objective.requiredStableTowns ?? mission.objective.requiredUnlocked ?? 0;
       const servedTowns = this.state.regions.filter(
         (region) =>
           (region.townCount || 0) > 0 &&
@@ -2736,7 +2718,7 @@ class GameRuntime {
         title: mission.codename,
         text: mission.objective.description,
         progress,
-        detail: `Towns stable ${servedTowns}/${mission.objective.requiredUnlocked} | Reliability ${this.state.reliability.toFixed(1)}%`,
+        detail: `Towns stable ${servedTowns}/${requiredStableTowns} | Reliability ${this.state.reliability.toFixed(1)}%`,
       };
     }
 
@@ -2867,7 +2849,6 @@ class GameRuntime {
         name: region.name,
         x: Number(region.x.toFixed(1)),
         y: Number(region.y.toFixed(1)),
-        unlocked: region.unlocked,
         priority: region.priority,
         climate: region.climate,
         terrain: region.terrain,
@@ -3028,7 +3009,7 @@ export class SaveTheGridApp {
         <div class="menu-layout">
           <aside class="menu-column">
             <h2>Command Console</h2>
-            <p class="menu-copy">Direct national power strategy through build, demolish, and reroute decisions.</p>
+            <p class="menu-copy">Direct national power strategy through build, demolish, reroute, and line-routing decisions.</p>
             <div class="menu-actions">
               ${hasContinue ? '<button class="action-btn" id="menu-continue">Continue Run</button>' : ""}
               <button class="action-btn action-btn-primary" id="start-btn">Quick Start</button>
@@ -3052,7 +3033,7 @@ export class SaveTheGridApp {
               <li>Early maps stay compact for fast readability.</li>
               <li>Basic runs begin sparse: terrain-first with few seeded towns.</li>
               <li>Population pressure activates in later missions.</li>
-              <li>Fragmented regions require in-level capital to unlock.</li>
+              <li>Substations cover towns by radius; manual Lines handle long routes.</li>
               <li>Completion unlocks progression, with no money carryover.</li>
             </ul>
           </aside>
@@ -3105,7 +3086,7 @@ export class SaveTheGridApp {
           <h3>${preset.label}</h3>
           <p>${preset.description}</p>
           <p>Growth x${preset.demandGrowthMultiplier.toFixed(2)} | Event x${preset.eventIntensity.toFixed(2)}</p>
-          <p>Budget ${preset.budget} | Fragmentation ${preset.regionFragmentation}</p>
+          <p>Budget ${preset.budget} | Routing ${preset.routingComplexity}</p>
         </button>
       `;
     }).join("");
@@ -3153,7 +3134,7 @@ export class SaveTheGridApp {
           <p class="mission-tags">
             <span>${mission.difficulty}</span>
             <span>${mission.mapScale}</span>
-            <span>${mission.fragmentation}</span>
+            <span>${mission.routingComplexity || "Moderate"}</span>
             <span>${mission.populationMode === "off" ? "Static Population" : "Growth Active"}</span>
             <span>${mission.seasonalMode === "off" ? "Neutral" : "Mixed Conditions"}</span>
           </p>
@@ -3194,7 +3175,7 @@ export class SaveTheGridApp {
     this.currentScreen = "custom-setup";
 
     const presetOptions = CUSTOM_PRESETS.map((preset) => {
-      return `<option value="${preset.id}">${preset.label}</option>`;
+      return `<option value="${preset.id}" ${preset.id === this.customConfig.presetId ? "selected" : ""}>${preset.label}</option>`;
     }).join("");
 
     this.root.innerHTML = `
@@ -3236,9 +3217,27 @@ export class SaveTheGridApp {
             </select>
           </label>
           <label>
-            Climate Intensity
+            Local Climate Intensity
             <select name="climateIntensity">
               ${CUSTOM_OPTIONS.climateIntensity.map((value) => `<option value="${value}" ${this.customConfig.climateIntensity === value ? "selected" : ""}>${value}</option>`).join("")}
+            </select>
+          </label>
+          <label>
+            Town Emergence Intensity
+            <select name="townEmergenceIntensity">
+              ${CUSTOM_OPTIONS.townEmergenceIntensity.map((value) => `<option value="${value}" ${this.customConfig.townEmergenceIntensity === value ? "selected" : ""}>${value}</option>`).join("")}
+            </select>
+          </label>
+          <label>
+            Substation Radius Profile
+            <select name="substationRadiusProfile">
+              ${CUSTOM_OPTIONS.substationRadiusProfile.map((value) => `<option value="${value}" ${this.customConfig.substationRadiusProfile === value ? "selected" : ""}>${value}</option>`).join("")}
+            </select>
+          </label>
+          <label>
+            Line Maintenance Profile
+            <select name="lineMaintenanceProfile">
+              ${CUSTOM_OPTIONS.lineMaintenanceProfile.map((value) => `<option value="${value}" ${this.customConfig.lineMaintenanceProfile === value ? "selected" : ""}>${value}</option>`).join("")}
             </select>
           </label>
           <label>
@@ -3249,18 +3248,6 @@ export class SaveTheGridApp {
             Failure Strictness
             <select name="failureStrictness">
               ${CUSTOM_OPTIONS.failureStrictness.map((value) => `<option value="${value}" ${String(this.customConfig.failureStrictness) === value ? "selected" : ""}>${value}</option>`).join("")}
-            </select>
-          </label>
-          <label>
-            Region Fragmentation
-            <select name="regionFragmentation">
-              ${CUSTOM_OPTIONS.regionFragmentation.map((value) => `<option value="${value}" ${this.customConfig.regionFragmentation === value ? "selected" : ""}>${value}</option>`).join("")}
-            </select>
-          </label>
-          <label>
-            Region Unlock Cost Profile
-            <select name="unlockCostProfile">
-              ${CUSTOM_OPTIONS.unlockCostProfile.map((value) => `<option value="${value}" ${this.customConfig.unlockCostProfile === value ? "selected" : ""}>${value}</option>`).join("")}
             </select>
           </label>
           <label>
@@ -3299,10 +3286,11 @@ export class SaveTheGridApp {
         seasonalProfile: formData.get("seasonalProfile"),
         populationMode: formData.get("populationMode"),
         climateIntensity: formData.get("climateIntensity"),
+        townEmergenceIntensity: formData.get("townEmergenceIntensity"),
+        substationRadiusProfile: formData.get("substationRadiusProfile"),
+        lineMaintenanceProfile: formData.get("lineMaintenanceProfile"),
         infraCostMultiplier: Number(formData.get("infraCostMultiplier")),
         failureStrictness: formData.get("failureStrictness"),
-        regionFragmentation: formData.get("regionFragmentation"),
-        unlockCostProfile: formData.get("unlockCostProfile"),
         runTargetMinutes: Number(formData.get("runTargetMinutes")),
       };
 
@@ -3654,6 +3642,7 @@ export class SaveTheGridApp {
     const zoomNode = $("#hud-zoom");
     const resourceLayerNode = $("#hud-resource-visibility");
     const townEmergenceNode = $("#hud-town-emergence");
+    const substationRadiusNode = $("#hud-substation-radius");
     const pauseNode = $("#run-pause-btn");
 
     if (
@@ -3687,6 +3676,9 @@ export class SaveTheGridApp {
     if (townEmergenceNode) {
       const modeLabel = String(payload.townEmergenceMode || "normal").toUpperCase();
       townEmergenceNode.textContent = `${payload.townsEmerged} emerged (${modeLabel})`;
+    }
+    if (substationRadiusNode) {
+      substationRadiusNode.textContent = `${Math.round(payload.substationRadius || 0)}u`;
     }
     if (pauseNode) pauseNode.textContent = payload.paused ? "Resume" : "Pause";
 

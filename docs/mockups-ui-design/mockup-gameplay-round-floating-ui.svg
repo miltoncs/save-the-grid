@@ -24,7 +24,7 @@
     </filter>
   </defs>
 
-  <image href="mockup-terrain-map.png" x="0" y="0" width="1800" height="1080" preserveAspectRatio="xMidYMid slice" />
+  <image href="../../assets/maps/terrain/mockup-terrain-map.png" x="0" y="0" width="1800" height="1080" preserveAspectRatio="xMidYMid slice" />
   <rect width="1800" height="1080" fill="url(#map-vignette)" />
 
   <g id="map-selection">

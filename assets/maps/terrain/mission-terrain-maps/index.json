@@ -1,6 +1,6 @@
 {
-  "source_generator": "docs/mockups-ui-design/generate_terrain_map_png.py",
-  "output_directory": "docs/mockups-ui-design/mission-terrain-maps",
+  "source_generator": "tools/terrain/generate_terrain_map_png.py",
+  "output_directory": "assets/maps/terrain/mission-terrain-maps",
   "image": {
     "width": 1800,
     "height": 1080

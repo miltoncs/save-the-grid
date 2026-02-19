@@ -298,3 +298,49 @@ Original prompt: Develop the game MVP based on all provided documentation
   - both passed (`smoke-ok`).
 - 2026-02-19: Re-verified bot round-start reliability by running `start-round-demo` three consecutive times against `http://127.0.0.1:4373`; all runs completed `11/11` steps and entered active in-game round state.
 - Latest visual confirmation screenshot: `bot-player/artifacts/2026-02-19T16-14-11-608Z-round-started.png` (timer at `00:10`).
+
+## 2026-02-19 (Docs Sync Completion: Town-Line Model)
+- Continued and completed implementation of docs shift from fragmented-region unlock gameplay to town/line routing gameplay (`f3cf91c` + subsequent docs updates).
+- Updated mission/preset data model in `src/data.js`:
+  - Removed legacy region `unlockCost` fields from map records.
+  - Campaign missions now use `routingComplexity` tags instead of fragmentation tags.
+  - Campaign missions now define `townEmergenceMode` (`off`/`limited`/`normal`) explicitly.
+  - Mission objective thresholds migrated to `requiredStableTowns` (with town-service wording updates).
+- Completed runtime/UI migration in `src/game.js`:
+  - Removed legacy unlock helpers and unlock-gated simulation branches.
+  - Campaign mission config now reads mission-authored `townEmergenceMode`.
+  - Custom Game setup now matches docs knobs:
+    - `townEmergenceIntensity`
+    - `substationRadiusProfile`
+    - `lineMaintenanceProfile`
+    - removed old `regionFragmentation` and `unlockCostProfile` controls.
+  - Updated Standard/Campaign setup labels and tags to routing-complexity language.
+  - Updated menu bulletin copy to substation-radius + manual-line model.
+  - Added HUD binding for `Substation Radius` chip.
+  - Updated incident language to local-climate / line-routing terminology.
+  - `render_game_to_text` no longer emits legacy `unlocked` region flag.
+- Fixed startup playability regression introduced by sparse start + manual lines:
+  - Sparse runs now prebuild a minimal starter backbone from `capital` to seeded-town endpoints.
+  - Prevents immediate collapse from uncovered seeded demand at `t=0`.
+
+### Validation
+- Syntax checks:
+  - `node --check src/data.js`
+  - `node --check src/game.js`
+  - `node --check src/main.js`
+- Develop-web-game Playwright loop:
+  - `node /Users/mstafford/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js --url http://127.0.0.1:5173 --actions-file /Users/mstafford/.codex/skills/develop-web-game/references/action_payloads.json --click-selector "#start-btn" --iterations 3 --pause-ms 250 --screenshot-dir output/web-game-docsync-final2`
+  - Verified from `state-*.json`: startup reliability remains stable (`~100%`), unmet demand `0.0` in early seconds.
+- Bot smoke scenarios:
+  - `node bot-player/run-bot.mjs --url http://127.0.0.1:5173 --scenario bot-player/scenarios/smoke-controls.json` (19/19)
+  - `node bot-player/run-bot.mjs --url http://127.0.0.1:5173 --scenario bot-player/scenarios/smoke-menu-to-run.json` (19/20 with expected optional splash step timeout)
+  - `node bot-player/run-bot.mjs --url http://127.0.0.1:5173 --scenario bot-player/scenarios/start-round-demo.json` (11/11)
+- Additional targeted UI checks:
+  - Custom setup screenshot confirms new controls are rendered:
+    - `/Users/mstafford/Projects/local/save-the-grid/bot-player/artifacts/2026-02-19T20-00-17-138Z-custom-setup.png`
+  - Campaign screen screenshot confirms `routingComplexity` tags:
+    - `/Users/mstafford/Projects/local/save-the-grid/bot-player/artifacts/2026-02-19T20-01-45-405Z-campaign-select.png`
+
+### Follow-up TODO
+- Optional: migrate mission objective field name usage fully (remove `requiredUnlocked` fallback after old snapshots are no longer needed).
+- Optional: revisit sparse-start baseline balance now that starter backbone links exist (line maintenance/economy tuning).

@@ -40,6 +40,8 @@ Screenshots are saved to:
 
 `/Users/mstafford/Projects/local/save-the-grid/bot-player/artifacts`
 
+You can override this with `--screenshot-dir <path>`.
+
 Current starter scenarios:
 
 - `smoke-menu-to-run.json`: menu -> standard run -> short autoplay -> save & exit.

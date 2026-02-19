@@ -23,7 +23,7 @@ Optional:
   --timeout <ms>            Default timeout in milliseconds (default: 7000)
   --step-delay <ms>         Delay between steps in milliseconds (default: 250)
   --slow-mo <ms>            Playwright slow-motion delay
-  --screenshot-dir <path>   Output directory for screenshots (default: ./bot-player/artifacts)
+  --screenshot-dir <path>   Output directory for screenshots (default: ./artifacts)
   --fail-on-console-error   Exit non-zero if console errors are captured (default: true)
   --no-final-screenshot     Skip the final screenshot
   --help                    Show this help output
@@ -442,10 +442,11 @@ async function main() {
     timeoutMs: Math.max(250, toNumber(args.timeout, toNumber(options.timeoutMs, 7000))),
     stepDelayMs: Math.max(0, toNumber(args["step-delay"], toNumber(options.stepDelayMs, 250))),
     slowMoMs: Math.max(0, toNumber(args["slow-mo"], 0)),
-    screenshotDir: path.resolve(
-      process.cwd(),
-      args["screenshot-dir"] || options.screenshotDir || "./bot-player/artifacts",
-    ),
+    screenshotDir: args["screenshot-dir"]
+      ? path.resolve(process.cwd(), args["screenshot-dir"])
+      : options.screenshotDir
+        ? path.resolve(process.cwd(), options.screenshotDir)
+        : path.join(__dirname, "artifacts"),
     failOnConsoleError: toBoolean(
       args["fail-on-console-error"],
       toBoolean(options.failOnConsoleError, true),

@@ -1,6 +1,6 @@
 # Circular Icon Set (Towns + Powerplants)
 
-All icons in this folder follow one system:
+All icons in `/assets/icons/circular/` follow one system:
 
 - Format: SVG
 - Size: 96 x 96 px (`viewBox="0 0 96 96"`)
@@ -25,5 +25,5 @@ All icons in this folder follow one system:
 
 ## Notes
 
-- All files are standalone and can be dropped directly into UI code.
+- All files are standalone and can be referenced directly by runtime URL paths under `/assets/icons/circular/`.
 - If you need sprite usage later, these can be converted into `<symbol>` entries without redrawing.

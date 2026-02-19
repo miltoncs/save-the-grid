@@ -7,6 +7,7 @@ from pathlib import Path
 
 WIDTH = 1800
 HEIGHT = 1080
+ROOT = Path(__file__).resolve().parents[2]
 
 WATER_DEEP = (61, 128, 182)
 WATER_SHALLOW = (98, 166, 214)
@@ -280,9 +281,10 @@ def main():
             blend_pixel(pixels, x, y, (210, 229, 244), fog)
 
     rows = [bytes(pixels[y * WIDTH * 3 : (y + 1) * WIDTH * 3]) for y in range(HEIGHT)]
-    out_path = Path("docs/mockups-ui-design/mockup-terrain-map.png")
+    out_path = ROOT / "assets/maps/terrain/mockup-terrain-map.png"
+    out_path.parent.mkdir(parents=True, exist_ok=True)
     save_png(out_path, rows)
-    print(f"wrote {out_path}")
+    print(f"wrote {out_path.relative_to(ROOT)}")
 
 
 if __name__ == "__main__":

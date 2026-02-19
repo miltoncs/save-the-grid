@@ -2,10 +2,10 @@
 """Generate one unique terrain map PNG per campaign mission.
 
 This script reuses the procedural terrain functions from:
-- docs/mockups-ui-design/generate_terrain_map_png.py
+- tools/terrain/generate_terrain_map_png.py
 
 It does not modify existing files; it writes new outputs under:
-- docs/mockups-ui-design/mission-terrain-maps/
+- assets/maps/terrain/mission-terrain-maps/
 """
 
 from __future__ import annotations
@@ -19,9 +19,9 @@ import zlib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-SOURCE_GENERATOR = ROOT / "docs/mockups-ui-design/generate_terrain_map_png.py"
+SOURCE_GENERATOR = ROOT / "tools/terrain/generate_terrain_map_png.py"
 MISSION_SOURCE = ROOT / "src/data.js"
-OUTPUT_DIR = ROOT / "docs/mockups-ui-design/mission-terrain-maps"
+OUTPUT_DIR = ROOT / "assets/maps/terrain/mission-terrain-maps"
 
 
 def load_generator_module():

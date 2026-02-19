@@ -2,7 +2,7 @@
   "map_id": "mockup-terrain-map-v1",
   "display_name": "Terrain Mockup Map",
   "image": {
-    "file": "mockup-terrain-map.png",
+    "file": "/assets/maps/terrain/mockup-terrain-map.png",
     "width": 1800,
     "height": 1080
   },

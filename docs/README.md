@@ -1,16 +1,24 @@
 # Save the Grid Documentation
 
-This directory is organized into three documentation tracks:
+This directory is documentation-only and is organized into three tracks:
 
 - `design/`: game design and design philosophy.
 - `implementation/`: engineering and delivery documentation.
-- `mockups-ui-design/`: visual mockups and screen composition explorations.
+- `mockups-ui-design/`: visual mockups and screen composition references.
 
 ## Quick Index
 
 - `design/README.md`: Design doc index, scope, and ownership.
 - `implementation/README.md`: Implementation doc index and technical doc conventions.
-- `mockups-ui-design/README.md`: SVG-only visual mockups for look-and-feel iteration.
+- `mockups-ui-design/README.md`: Visual mockup artifacts and composition guidance.
+
+## Project Structure (Outside `docs/`)
+
+- `src/`: gameplay runtime and UI code.
+- `assets/`: runtime static assets (icons, terrain images, etc.).
+- `data/`: runtime metadata/content files.
+- `tools/`: utility/generation scripts.
+- `bot-player/`: Playwright bot runner and scenarios.
 
 ## Documentation Boundary
 
@@ -19,6 +27,9 @@ Use this rule when adding or updating docs:
 - `design/` answers: what the player experience should be and why.
 - `implementation/` answers: how systems are built, integrated, tested, and shipped.
 - `mockups-ui-design/` answers: how key screens can look before implementation decisions.
+
+Do not store runtime assets or generation scripts under `docs/`.
+Keep executable tools under `tools/` and game-consumed files under `assets/` or `data/`.
 
 If a document mixes both, split it into one design doc and one implementation doc that cross-link each other.
 
