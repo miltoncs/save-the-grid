@@ -4,18 +4,13 @@ const starterAssets = (plant = 1, substation = 1, storage = 0) => ({
   storage,
 });
 
-export const BASE_MAP = {
-  id: "national-grid-v1",
-  name: "National Grid Core",
-  width: 2200,
-  height: 1400,
-  regions: [
+const BASE_TOWNS = [
     {
       id: "capital",
       name: "Capital Metro",
       x: 1040,
       y: 640,
-      radius: 120,
+      radius: 64,
       districtType: "Urban Core",
       terrain: "plains",
       climate: "temperate",
@@ -30,7 +25,7 @@ export const BASE_MAP = {
       name: "North Industrial Spine",
       x: 1060,
       y: 290,
-      radius: 105,
+      radius: 58,
       districtType: "Industrial Belt",
       terrain: "mountains",
       climate: "cold",
@@ -42,10 +37,10 @@ export const BASE_MAP = {
     },
     {
       id: "west_hydro",
-      name: "West Hydro Corridor",
+      name: "West Hydro Town",
       x: 620,
       y: 560,
-      radius: 98,
+      radius: 56,
       districtType: "Rural Cluster",
       terrain: "river",
       climate: "temperate",
@@ -57,10 +52,10 @@ export const BASE_MAP = {
     },
     {
       id: "east_coast",
-      name: "East Coast Trade Line",
+      name: "East Coast Port",
       x: 1550,
       y: 610,
-      radius: 102,
+      radius: 58,
       districtType: "Coastal Corridor",
       terrain: "coast",
       climate: "warm",
@@ -72,10 +67,10 @@ export const BASE_MAP = {
     },
     {
       id: "south_farms",
-      name: "South Agricultural Grid",
+      name: "South Agricultural Town",
       x: 980,
       y: 1030,
-      radius: 100,
+      radius: 56,
       districtType: "Rural Cluster",
       terrain: "plains",
       climate: "warm",
@@ -90,7 +85,7 @@ export const BASE_MAP = {
       name: "Delta Port",
       x: 1340,
       y: 1090,
-      radius: 88,
+      radius: 54,
       districtType: "Coastal Corridor",
       terrain: "coast",
       climate: "warm",
@@ -105,7 +100,7 @@ export const BASE_MAP = {
       name: "Central Highlands",
       x: 760,
       y: 820,
-      radius: 95,
+      radius: 56,
       districtType: "Urban Core",
       terrain: "mountains",
       climate: "cold",
@@ -117,10 +112,10 @@ export const BASE_MAP = {
     },
     {
       id: "frontier_belt",
-      name: "Frontier Expansion Belt",
+      name: "Frontier Town",
       x: 1710,
       y: 310,
-      radius: 112,
+      radius: 60,
       districtType: "Urban Core",
       terrain: "plains",
       climate: "cold",
@@ -130,20 +125,16 @@ export const BASE_MAP = {
       starterAssets: starterAssets(0, 1, 0),
       strategicValue: "Late-run growth pressure and scoring upside",
     },
-  ],
-  links: [
-    { id: "ln-1", a: "capital", b: "north_industry", baseCapacity: 125 },
-    { id: "ln-2", a: "capital", b: "west_hydro", baseCapacity: 95 },
-    { id: "ln-3", a: "capital", b: "east_coast", baseCapacity: 108 },
-    { id: "ln-4", a: "capital", b: "south_farms", baseCapacity: 94 },
-    { id: "ln-5", a: "capital", b: "central_highlands", baseCapacity: 100 },
-    { id: "ln-6", a: "south_farms", b: "delta_port", baseCapacity: 88 },
-    { id: "ln-7", a: "east_coast", b: "frontier_belt", baseCapacity: 96 },
-    { id: "ln-8", a: "north_industry", b: "frontier_belt", baseCapacity: 85 },
-    { id: "ln-9", a: "west_hydro", b: "central_highlands", baseCapacity: 84 },
-    { id: "ln-10", a: "central_highlands", b: "south_farms", baseCapacity: 86 },
-    { id: "ln-11", a: "east_coast", b: "delta_port", baseCapacity: 84 },
-  ],
+];
+
+export const BASE_MAP = {
+  id: "national-grid-v1",
+  name: "National Grid Core",
+  width: 2200,
+  height: 1400,
+  towns: BASE_TOWNS,
+  regions: BASE_TOWNS,
+  links: [],
 };
 
 export const STANDARD_PRESETS = [

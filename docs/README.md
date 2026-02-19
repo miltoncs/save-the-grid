@@ -38,6 +38,8 @@ Current gameplay direction highlights:
 - Early levels use small maps that keep needs and infrastructure easy to observe.
 - Basic level starts are intentionally sparse: mostly terrain, few towns, little/no prebuilt grid.
 - Later maps are larger and focus on longer routing distances and denser town networks.
+- There are no region-level service hubs; towns are direct map entities.
+- There are no pre-authored major transmission corridors in play.
 - Substations power towns by radius with auto-generated orthogonal town service links.
 - Players build manual long-distance powerlines with the in-game `Line` tool.
 - Campaign victory emphasizes full-map management on advanced maps through reliable town service.

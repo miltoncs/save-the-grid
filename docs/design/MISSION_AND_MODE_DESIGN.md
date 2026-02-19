@@ -60,13 +60,15 @@ Onboarding rule:
 Each mission defines:
 
 1. Handcrafted map layout and authored starting state.
-2. Starting budget and optional starter infrastructure (often minimal/none in basic scenarios).
-3. 2-3 explicit objectives.
-4. 1-2 constraint modifiers.
-5. Optional secondary objective for higher medal tier.
-6. Population growth mode (`off` for onboarding, `on` for standard and advanced missions).
-7. Seasonal/local-climate condition mode (`off` for onboarding, `on` for standard and advanced missions).
-8. Town emergence mode (`off`, `limited`, `normal`).
+2. Town-only topology (no region-level service hubs).
+3. No pre-authored major transmission corridors; backbone routing starts from player-built `Line` actions.
+4. Starting budget and optional starter infrastructure (often minimal/none in basic scenarios).
+5. 2-3 explicit objectives.
+6. 1-2 constraint modifiers.
+7. Optional secondary objective for higher medal tier.
+8. Population growth mode (`off` for onboarding, `on` for standard and advanced missions).
+9. Seasonal/local-climate condition mode (`off` for onboarding, `on` for standard and advanced missions).
+10. Town emergence mode (`off`, `limited`, `normal`).
 
 ### Objective Types
 

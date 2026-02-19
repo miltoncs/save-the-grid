@@ -139,9 +139,11 @@ Let players tune scenario pressure for practice or challenge runs while preservi
 
 1. Select tool.
 2. Hover map to preview impact (cost, capacity, risk).
-3. Place plants/substations or draw manual `Line` paths based on current demand and terrain.
+3. Place plants/substations or draw manual `Line` paths (`plant<->plant`, `plant<->substation`, `substation<->substation`) based on current demand and terrain.
 4. Commit action with one click/tap.
 5. Receive immediate visual and metric feedback.
+
+No region-unlock or corridor-purchase action should exist in this flow.
 
 ### Layer Visibility Controls
 
@@ -193,7 +195,7 @@ Onboarding rule:
 
 1. Left click/tap: select/place.
 2. Right click or key modifier: demolish mode quick toggle.
-3. Number keys: quick-select major build categories.
+3. Number keys: quick-select major build categories (`1-3`) and `Line` tool (`4`).
 4. Mouse wheel or key: zoom map.
 5. Middle mouse drag or edge pan: camera movement.
 6. `Tab`: cycle critical alerts.

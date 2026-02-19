@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Terrain Lab</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <canvas id="terrain-canvas" aria-label="Generated terrain map"></canvas>
+
+    <section class="floating-controls" aria-label="Terrain controls">
+      <header class="controls-header">
+        <div>
+          <h1>Terrain Lab</h1>
+          <p>Interactive topology preview</p>
+        </div>
+        <button id="regenerate-btn" type="button">Re-generate</button>
+      </header>
+
+      <label class="control-row" for="smoothness-slider">
+        <span>Smoothness</span>
+        <strong id="smoothness-value">55</strong>
+      </label>
+      <input id="smoothness-slider" type="range" min="0" max="100" step="1" value="55" />
+
+      <label class="control-row" for="sea-level-slider">
+        <span>Sea Level</span>
+        <strong id="sea-level-value">58%</strong>
+      </label>
+      <input id="sea-level-slider" type="range" min="20" max="80" step="1" value="58" />
+
+      <footer class="control-footer">
+        <div id="seed-value">Seed 0</div>
+        <div id="stats-value">Generating...</div>
+      </footer>
+    </section>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>

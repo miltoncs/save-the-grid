@@ -109,7 +109,7 @@
   <g id="selection-tooltip" filter="url(#shadow-soft)">
     <path d="M1025 607 L1011 640 L1040 624 Z" fill="#0d1f2b" fill-opacity="0.84" />
     <rect x="868" y="608" width="286" height="118" rx="18" fill="url(#chip-bg)" stroke="#4f6978" stroke-opacity="0.55" />
-    <text x="894" y="647" fill="#eff9ff" font-size="27" font-family="'Avenir Next', 'Helvetica Neue', sans-serif">Delta Corridor</text>
+    <text x="894" y="647" fill="#eff9ff" font-size="27" font-family="'Avenir Next', 'Helvetica Neue', sans-serif">Delta Port</text>
     <text x="894" y="681" fill="#d4e6f2" font-size="22" font-family="'Avenir Next', 'Helvetica Neue', sans-serif">Wind 78% | Solar 52%</text>
     <text x="894" y="712" fill="#ffd493" font-size="22" font-family="'Avenir Next', 'Helvetica Neue', sans-serif">Line load warning: 91%</text>
   </g>

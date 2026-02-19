@@ -152,13 +152,13 @@ src/
 
 1. Rule updates must use tick delta from fixed clock, never frame delta.
 2. Random events use seeded RNG captured in save snapshots.
-3. All player actions are normalized into intent commands (`build`, `demolish`, `reroute`, `pause_toggle`).
+3. All player actions are normalized into intent commands (`build`, `demolish`, `reroute`, `line_build`, `line_remove`, `pause_toggle`).
 4. Simulation outputs are pure functions of prior state + command queue + seed.
 
 ### 6.3 System Order per Tick
 
 1. Apply queued player commands.
-2. Recompute network connectivity/capacity.
+2. Recompute manual `Line` connectivity/capacity, substation coverage radius, and auto-generated orthogonal town service links.
 3. Update demand (base + growth + season/climate + event modifiers).
 4. Resolve supply allocation and unmet demand.
 5. Apply economy deltas (costs, penalties, operating burden, lawsuits).
@@ -170,7 +170,8 @@ src/
 
 ### Grid and routing domain
 
-- Models nodes, links, capacities, stress tiers, and town service coverage.
+- Models town and infrastructure nodes, player-built manual `Line` links, capacities, stress tiers, and town service coverage.
+- Explicitly excludes region-level service hubs and pre-authored major transmission corridors from runtime gameplay topology.
 - Exposes read models for rendering line thickness, pulse intensity, and overload color state.
 
 ### Demand domain

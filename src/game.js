@@ -36,18 +36,24 @@ const ICON_SET_URLS = {
     natural_gas: "/assets/icons/circular/plant-gas.svg",
   },
 };
-const LIVABLE_TERRAINS = new Set(["plains", "river"]);
-const TOWN_CAP_BY_DISTRICT = {
-  "Urban Core": 5,
-  "Industrial Belt": 4,
-  "Coastal Corridor": 4,
-  "Rural Cluster": 3,
-};
-const SPARSE_START_SEEDED_TOWNS = {
-  capital: 2,
-  north_industry: 1,
-  south_farms: 1,
-};
+const LIVABLE_TERRAINS = new Set(["plains", "river", "coast"]);
+const SPARSE_START_TOWN_IDS = new Set(["capital"]);
+const EMERGENCE_TOWN_NAMES = [
+  "Pine Crossing",
+  "Rivergate",
+  "Sunfield",
+  "Ironpoint",
+  "Clearwater",
+  "Stonebridge",
+  "Redcliff",
+  "Lakeside",
+  "New Harbor",
+  "Juniper Flats",
+  "North Meadow",
+  "West Orchard",
+  "Cedar Junction",
+  "Brighton Vale",
+];
 const LINE_BASE_BUILD_COST_PER_WORLD_UNIT = 0.34;
 const LINE_BASE_MAINTENANCE_PER_WORLD_UNIT = 0.0036;
 const LINE_DISTANCE_CAPACITY_FACTOR = 0.08;
@@ -135,7 +141,15 @@ function centroidFromPolygon(polygon) {
 }
 
 function findBaseRegion(regionId) {
-  return BASE_MAP.regions.find((region) => region.id === regionId) || null;
+  const mapTowns = BASE_MAP.towns || BASE_MAP.regions || [];
+  return mapTowns.find((region) => region.id === regionId) || null;
+}
+
+function pickTownArchetype(districtType = "") {
+  if (districtType === "Industrial Belt") return "industrial";
+  if (districtType === "Coastal Corridor") return "coastal";
+  if (districtType === "Urban Core") return "metro";
+  return "rural";
 }
 
 function loadImageAsset(url) {
@@ -298,7 +312,7 @@ function buildRunConfigFromCampaignMission(missionId) {
     runTargetSec: mission.objective.targetDurationSec,
     mission,
     sourceMissionId: mission.id,
-    sparseStart: true,
+    sparseStart: false,
     townEmergenceMode: getMissionTownEmergenceMode(mission, population.enabled),
   };
 }
@@ -487,16 +501,9 @@ class GameRuntime {
     this.render();
   }
 
-  getTownCapForRegion(region) {
-    return TOWN_CAP_BY_DISTRICT[region.districtType] || 4;
-  }
-
-  getSeededTownCount(region, townCap) {
-    if (this.config.sparseStart) {
-      const seeded = SPARSE_START_SEEDED_TOWNS[region.id] || 0;
-      return clamp(seeded, 0, townCap);
-    }
-    return clamp(Math.max(1, Math.round(townCap * 0.65)), 0, townCap);
+  getSeededTownCount(region) {
+    if (!this.config.sparseStart) return 1;
+    return SPARSE_START_TOWN_IDS.has(region.id) ? 1 : 0;
   }
 
   getStarterAssetsForRegion(region, seededTowns) {
@@ -504,7 +511,7 @@ class GameRuntime {
       return deepClone(region.starterAssets);
     }
     if (region.id === "capital") {
-      return { plant: 2, substation: 1, storage: 0 };
+      return { plant: 2, substation: 2, storage: 1 };
     }
     if (seededTowns > 0) {
       return { plant: 0, substation: 1, storage: 0 };
@@ -513,12 +520,10 @@ class GameRuntime {
   }
 
   getDemandAnchorForRegion(region) {
-    const townCap = Math.max(1, Number(region.townCap) || this.getTownCapForRegion(region));
-    const townCount = clamp(Number(region.townCount || 0), 0, townCap);
+    const townCount = Math.max(0, Number(region.townCount || 0));
     if (townCount <= 0) return 0;
     const nominalBaseDemand = Number(region.nominalBaseDemand || region.baseDemand || 0);
-    const townSaturation = townCount / townCap;
-    return nominalBaseDemand * (0.08 + townSaturation * 0.88);
+    return nominalBaseDemand;
   }
 
   ensureRegionResourceProfiles() {
@@ -628,16 +633,20 @@ class GameRuntime {
   }
 
   createFreshState() {
-    const regions = BASE_MAP.regions.map((region) => {
-      const townCap = this.getTownCapForRegion(region);
-      const townCount = this.getSeededTownCount(region, townCap);
+    const mapTowns = BASE_MAP.towns || BASE_MAP.regions || [];
+    const sourceTowns = this.config.sparseStart
+      ? mapTowns.filter((region) => SPARSE_START_TOWN_IDS.has(region.id))
+      : mapTowns;
+    const towns = sourceTowns.map((region) => {
+      const townCount = this.getSeededTownCount(region);
       const assets = this.getStarterAssetsForRegion(region, townCount);
-      const demandAnchor = this.getDemandAnchorForRegion({ ...region, townCap, townCount });
+      const demandAnchor = this.getDemandAnchorForRegion({ ...region, townCount });
       return {
         ...deepClone(region),
+        entityType: "town",
         priority: "normal",
         townCount,
-        townCap,
+        townCap: 1,
         nominalBaseDemand: region.baseDemand,
         stableServiceSeconds: townCount > 0 ? 8 : 0,
         outageSeconds: 0,
@@ -658,18 +667,10 @@ class GameRuntime {
       };
     });
 
-    const seededTownIds = new Set(
-      regions.filter((region) => (region.townCount || 0) > 0).map((region) => region.id)
-    );
-
     const links = BASE_MAP.links.map((link) => {
-      const touchesCapital = link.a === "capital" || link.b === "capital";
-      const otherEndpointId = link.a === "capital" ? link.b : link.a;
-      const sparseStarterBackbone = touchesCapital && seededTownIds.has(otherEndpointId);
-      const built = this.config.sparseStart ? sparseStarterBackbone : true;
       return {
         ...deepClone(link),
-        built,
+        built: false,
         length: Math.hypot(
           (findBaseRegion(link.a)?.x || 0) - (findBaseRegion(link.b)?.x || 0),
           (findBaseRegion(link.a)?.y || 0) - (findBaseRegion(link.b)?.y || 0)
@@ -707,12 +708,15 @@ class GameRuntime {
       ],
       townsEmerged: 0,
       nextLineId: 1,
+      nextTownId: 1,
+      nextNodeId: 1,
       nextTownEmergenceAt: randomRange(44, 70),
       nextEventAt: randomRange(20, 34),
       nextNewsAt: 7,
       nextLawsuitEligibleAt: 45,
       collapseSeconds: 0,
-      regions,
+      towns,
+      regions: towns,
       links,
     };
   }
@@ -720,24 +724,29 @@ class GameRuntime {
   rehydrateSnapshot(snapshot) {
     const safe = deepClone(snapshot);
     safe.links = safe.links || [];
-    safe.regions = safe.regions || [];
+    safe.towns = safe.towns || safe.regions || [];
+    safe.regions = safe.towns;
     safe.alerts = safe.alerts || [];
     safe.incidents = safe.incidents || [];
     safe.timeline = safe.timeline || [];
     for (const region of safe.regions) {
-      region.townCap = Math.max(1, Number(region.townCap) || this.getTownCapForRegion(region));
-      const fallbackTownCount = 1;
-      region.townCount = clamp(
-        Number(region.townCount ?? fallbackTownCount),
-        0,
-        region.townCap
-      );
-      region.nominalBaseDemand = Number(region.nominalBaseDemand || region.baseDemand || 0);
+      if (!region.entityType) {
+        region.entityType = String(region.id || "").startsWith("node-") ? "node" : "town";
+      }
+      region.townCap = region.entityType === "town" ? 1 : 0;
+      region.townCount = region.entityType === "town" ? 1 : 0;
+      region.nominalBaseDemand =
+        region.entityType === "town"
+          ? Number(region.nominalBaseDemand || region.baseDemand || 0)
+          : 0;
       region.stableServiceSeconds = Math.max(0, Number(region.stableServiceSeconds || 0));
       region.outageSeconds = Math.max(0, Number(region.outageSeconds || 0));
       region.coveredBySubstation = !!region.coveredBySubstation;
       region.coverageSourceId = region.coverageSourceId || null;
       region.coverageDistance = Math.max(0, Number(region.coverageDistance || 0));
+      region.baseDemand = region.entityType === "town" ? Number(region.baseDemand || 0) : 0;
+      region.population = region.entityType === "town" ? Number(region.population || 0) : 0;
+      region.growthRate = region.entityType === "town" ? Number(region.growthRate || 0) : 0;
       if (!region.assets) {
         region.assets = { plant: 0, substation: 0, storage: 0 };
       }
@@ -761,7 +770,23 @@ class GameRuntime {
     if (!safe.nextLawsuitEligibleAt) safe.nextLawsuitEligibleAt = safe.runtimeSeconds + 45;
     if (!safe.nextTownEmergenceAt) safe.nextTownEmergenceAt = safe.runtimeSeconds + randomRange(44, 70);
     if (!Number.isFinite(safe.townsEmerged)) safe.townsEmerged = 0;
+    if (!Number.isFinite(safe.nextTownId)) {
+      const maxTownId = safe.regions.reduce((max, town) => {
+        const match = /^town-(\d+)$/.exec(String(town.id || ""));
+        if (!match) return max;
+        return Math.max(max, Number(match[1]) || 0);
+      }, 0);
+      safe.nextTownId = maxTownId + 1;
+    }
     if (!Number.isFinite(safe.nextLineId)) safe.nextLineId = 1;
+    if (!Number.isFinite(safe.nextNodeId)) {
+      const maxNodeId = safe.regions.reduce((max, entity) => {
+        const match = /^node-(\d+)$/.exec(String(entity.id || ""));
+        if (!match) return max;
+        return Math.max(max, Number(match[1]) || 0);
+      }, 0);
+      safe.nextNodeId = maxNodeId + 1;
+    }
     safe.totalDemand = safe.totalDemand || 0;
     safe.totalServed = safe.totalServed || 0;
     safe.totalUnmet = safe.totalUnmet || 0;
@@ -1226,12 +1251,92 @@ class GameRuntime {
     }
   }
 
+  isTownEntity(entity) {
+    return !!entity && entity.entityType !== "node";
+  }
+
+  inferLocalBiomeAtPoint(x, y) {
+    const anchors = this.state.regions.filter((entity) => this.isTownEntity(entity));
+    if (!anchors.length) {
+      return {
+        terrain: "plains",
+        climate: "temperate",
+        districtType: "Rural Cluster",
+      };
+    }
+    let nearest = anchors[0];
+    let nearestDistance = Infinity;
+    for (const anchor of anchors) {
+      const distance = Math.hypot(anchor.x - x, anchor.y - y);
+      if (distance < nearestDistance) {
+        nearestDistance = distance;
+        nearest = anchor;
+      }
+    }
+    return {
+      terrain: nearest.terrain || "plains",
+      climate: nearest.climate || "temperate",
+      districtType: nearest.districtType || "Rural Cluster",
+    };
+  }
+
+  createInfrastructureNode(worldX, worldY) {
+    const nextIndex = Math.max(1, Number(this.state.nextNodeId || 1));
+    const id = `node-${nextIndex}`;
+    this.state.nextNodeId = nextIndex + 1;
+    const localBiome = this.inferLocalBiomeAtPoint(worldX, worldY);
+    return {
+      id,
+      name: `Grid Node ${nextIndex}`,
+      entityType: "node",
+      x: clamp(worldX, 0, BASE_MAP.width),
+      y: clamp(worldY, 0, BASE_MAP.height),
+      radius: 22,
+      districtType: localBiome.districtType,
+      terrain: localBiome.terrain,
+      climate: localBiome.climate,
+      baseDemand: 0,
+      population: 0,
+      growthRate: 0,
+      starterAssets: { plant: 0, substation: 0, storage: 0 },
+      strategicValue: "Player-placed infrastructure anchor",
+      priority: "normal",
+      townCount: 0,
+      townCap: 0,
+      nominalBaseDemand: 0,
+      stableServiceSeconds: 0,
+      outageSeconds: 0,
+      coveredBySubstation: false,
+      coverageSourceId: null,
+      coverageDistance: 0,
+      assets: { plant: 0, substation: 0, storage: 0 },
+      resourceProfile: this.createEmptyResourceProfile(),
+      demand: 0,
+      targetDemand: 0,
+      served: 0,
+      unmet: 0,
+      utilization: 1,
+      demandEventMultiplier: 1,
+      lineEventMultiplier: 1,
+      selected: false,
+      cooldownUntil: 0,
+    };
+  }
+
+  getTownInteractionRadius(entity) {
+    if (!entity) return 0;
+    if (!this.isTownEntity(entity)) {
+      return clamp(Number(entity.radius || 22) * 0.9, 14, 24);
+    }
+    return clamp(Number(entity.radius || 60) * 0.42, 24, 40);
+  }
+
   findRegionAt(worldX, worldY) {
     for (let i = this.state.regions.length - 1; i >= 0; i -= 1) {
       const region = this.state.regions[i];
       const dx = worldX - region.x;
       const dy = worldY - region.y;
-      if (Math.hypot(dx, dy) <= region.radius) {
+      if (Math.hypot(dx, dy) <= this.getTownInteractionRadius(region)) {
         return region;
       }
     }
@@ -1590,14 +1695,14 @@ class GameRuntime {
     const intervalBase = randomRange(24, 40);
     this.state.nextEventAt = this.state.runtimeSeconds + intervalBase / this.config.eventIntensity;
 
-    const activeRegions = this.state.regions.filter((region) => (region.townCount || 0) > 0);
-    if (!activeRegions.length) {
+    const activeTowns = this.state.regions.filter((entity) => this.isTownEntity(entity));
+    if (!activeTowns.length) {
       return;
     }
 
-    const coastRegions = activeRegions.filter((region) => region.terrain === "coast");
-    const coldRegions = activeRegions.filter((region) => region.climate === "cold");
-    const warmRegions = activeRegions.filter((region) => region.climate === "warm");
+    const coastRegions = activeTowns.filter((region) => region.terrain === "coast");
+    const coldRegions = activeTowns.filter((region) => region.climate === "cold");
+    const warmRegions = activeTowns.filter((region) => region.climate === "warm");
 
     const events = [];
 
@@ -1695,11 +1800,11 @@ class GameRuntime {
       const populationMultiplier =
         1 + ((region.population - 20) / 100) * 0.52 * this.config.demandGrowthMultiplier;
       const volatility =
-        region.districtType === "Industrial Belt"
-          ? 1 + Math.sin(this.state.runtimeSeconds * 0.45) * 0.1
-          : region.districtType === "Urban Core"
-            ? 1 + Math.sin(this.state.runtimeSeconds * 0.22 + region.x * 0.01) * 0.06
-            : 1 + Math.sin(this.state.runtimeSeconds * 0.13 + region.y * 0.008) * 0.04;
+        region.climate === "warm"
+          ? 1 + Math.sin(this.state.runtimeSeconds * 0.19 + region.x * 0.008) * 0.08
+          : region.terrain === "river"
+            ? 1 + Math.sin(this.state.runtimeSeconds * 0.14 + region.y * 0.008) * 0.05
+            : 1 + Math.sin(this.state.runtimeSeconds * 0.24 + region.x * 0.006) * 0.07;
 
       const incidentDemand = this.getIncidentMultiplierForRegion(region.id, "demand_boost");
       const targetDemand = clamp(
@@ -1716,62 +1821,119 @@ class GameRuntime {
     }
   }
 
-  getPoweredSubstationIds() {
-    const powered = new Set();
-    const queue = [];
+  computeGenerationForTown(town) {
+    const resource = town.resourceProfile || this.createEmptyResourceProfile();
+    const plantBoostMultiplier = clamp(
+      1 + resource.wind * 0.16 + resource.sun * 0.14 + resource.natural_gas * 0.2,
+      1,
+      1.5
+    );
+    const storageBoostMultiplier = clamp(1 + resource.wind * 0.05 + resource.sun * 0.08, 1, 1.2);
+    return (
+      town.assets.plant * ASSET_RULES.plant.generation * plantBoostMultiplier +
+      town.assets.storage * ASSET_RULES.storage.generation * storageBoostMultiplier
+    );
+  }
 
-    for (const region of this.state.regions) {
-      if ((region.assets.substation || 0) <= 0) continue;
-      if ((region.assets.plant || 0) > 0 || (region.assets.storage || 0) > 0) {
-        powered.add(region.id);
-        queue.push(region.id);
+  buildTownComponents() {
+    const adjacency = new Map();
+    for (const town of this.state.regions) {
+      adjacency.set(town.id, []);
+    }
+
+    for (const link of this.state.links) {
+      if (!link.built || link.safeCapacity <= 0) continue;
+      if (!adjacency.has(link.a) || !adjacency.has(link.b)) continue;
+      adjacency.get(link.a).push(link.b);
+      adjacency.get(link.b).push(link.a);
+    }
+
+    const componentByTown = new Map();
+    let nextComponentId = 1;
+
+    for (const town of this.state.regions) {
+      if (componentByTown.has(town.id)) continue;
+      const componentId = `component-${nextComponentId++}`;
+      const queue = [town.id];
+      componentByTown.set(town.id, componentId);
+      while (queue.length) {
+        const currentId = queue.shift();
+        const neighbors = adjacency.get(currentId) || [];
+        for (const neighborId of neighbors) {
+          if (componentByTown.has(neighborId)) continue;
+          componentByTown.set(neighborId, componentId);
+          queue.push(neighborId);
+        }
       }
     }
 
-    while (queue.length) {
-      const currentId = queue.shift();
-      for (const link of this.state.links) {
-        if (!link.built) continue;
-        let nextId = null;
-        if (link.a === currentId) nextId = link.b;
-        if (link.b === currentId) nextId = link.a;
-        if (!nextId || powered.has(nextId)) continue;
-        const nextRegion = this.findRegion(nextId);
-        if (!nextRegion || (nextRegion.assets.substation || 0) <= 0) continue;
-        powered.add(nextId);
-        queue.push(nextId);
+    return componentByTown;
+  }
+
+  getPoweredSubstationIds() {
+    const powered = new Set();
+    const componentByTown = this.buildTownComponents();
+    const generationByComponent = new Map();
+
+    for (const town of this.state.regions) {
+      const componentId = componentByTown.get(town.id) || town.id;
+      const generation = this.computeGenerationForTown(town);
+      generationByComponent.set(
+        componentId,
+        (generationByComponent.get(componentId) || 0) + generation
+      );
+    }
+
+    for (const town of this.state.regions) {
+      if ((town.assets.substation || 0) <= 0) continue;
+      const componentId = componentByTown.get(town.id) || town.id;
+      if ((generationByComponent.get(componentId) || 0) > 0.0001) {
+        powered.add(town.id);
       }
     }
 
     return powered;
   }
 
+  getCoverageForPoint(x, y, poweredSubstations = this.getPoweredSubstationIds()) {
+    const radius = this.config.substationRadius || SUBSTATION_RADIUS_BY_PROFILE.standard;
+    let bestDistance = Infinity;
+    let bestSourceId = null;
+
+    for (const sourceId of poweredSubstations) {
+      const source = this.findRegion(sourceId);
+      if (!source) continue;
+      const distance = Math.hypot(source.x - x, source.y - y);
+      if (distance > radius) continue;
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        bestSourceId = sourceId;
+      }
+    }
+
+    if (!bestSourceId) return null;
+    return {
+      sourceId: bestSourceId,
+      distance: bestDistance,
+    };
+  }
+
   updateTownCoverage() {
     const poweredSubstations = this.getPoweredSubstationIds();
-    const radius = this.config.substationRadius || SUBSTATION_RADIUS_BY_PROFILE.standard;
 
-    for (const town of this.state.regions) {
-      town.coveredBySubstation = false;
-      town.coverageSourceId = null;
-      town.coverageDistance = 0;
-
-      let bestDistance = Infinity;
-      let bestSource = null;
-      for (const sourceId of poweredSubstations) {
-        const source = this.findRegion(sourceId);
-        if (!source) continue;
-        const distance = Math.hypot(source.x - town.x, source.y - town.y);
-        if (distance > radius) continue;
-        if (distance < bestDistance) {
-          bestDistance = distance;
-          bestSource = sourceId;
-        }
+    for (const entity of this.state.regions) {
+      entity.coveredBySubstation = false;
+      entity.coverageSourceId = null;
+      entity.coverageDistance = 0;
+      if (!this.isTownEntity(entity)) {
+        continue;
       }
 
-      if (bestSource) {
-        town.coveredBySubstation = true;
-        town.coverageSourceId = bestSource;
-        town.coverageDistance = bestDistance;
+      const coverage = this.getCoverageForPoint(entity.x, entity.y, poweredSubstations);
+      if (coverage) {
+        entity.coveredBySubstation = true;
+        entity.coverageSourceId = coverage.sourceId;
+        entity.coverageDistance = coverage.distance;
       }
     }
   }
@@ -1797,9 +1959,15 @@ class GameRuntime {
       const neighborId = link.a === region.id ? link.b : link.a;
       const neighbor = this.findRegion(neighborId);
       if (!neighbor) continue;
+      if (!this.isTownEntity(neighbor)) {
+        if ((neighbor.assets.plant || 0) > 0 || (neighbor.assets.substation || 0) > 0) {
+          return true;
+        }
+        continue;
+      }
 
       const neighborStable =
-        ((neighbor.townCount || 0) > 0 ? neighbor.utilization >= 0.8 : true) &&
+        neighbor.utilization >= 0.8 &&
         neighbor.coveredBySubstation &&
         (neighbor.outageSeconds || 0) < 5;
       if (neighborStable) {
@@ -1811,6 +1979,7 @@ class GameRuntime {
 
   updateTownServiceStability(dt) {
     for (const region of this.state.regions) {
+      if (!this.isTownEntity(region)) continue;
       const hasDemand = region.demand > 1;
       const localStable = !hasDemand || (region.coveredBySubstation && region.utilization >= 0.84);
       const stableNeighbor = this.hasStableNeighborService(region);
@@ -1822,7 +1991,7 @@ class GameRuntime {
         region.stableServiceSeconds = Math.max(0, region.stableServiceSeconds - dt * 1.2);
       }
 
-      if ((region.townCount || 0) > 0 && hasDemand && region.utilization < 0.5) {
+      if (hasDemand && region.utilization < 0.5) {
         region.outageSeconds = clamp(region.outageSeconds + dt, 0, 360);
       } else {
         region.outageSeconds = Math.max(0, region.outageSeconds - dt * 0.8);
@@ -1859,6 +2028,118 @@ class GameRuntime {
     };
   }
 
+  getUnspawnedTownAnchors() {
+    const existingTownIds = new Set(this.state.regions.map((town) => town.id));
+    const mapTowns = BASE_MAP.towns || BASE_MAP.regions || [];
+    return mapTowns.filter((anchor) => !existingTownIds.has(anchor.id));
+  }
+
+  getNearestTown(x, y) {
+    let best = null;
+    let bestDistance = Infinity;
+    for (const town of this.state.regions) {
+      if (!this.isTownEntity(town)) continue;
+      const distance = Math.hypot(town.x - x, town.y - y);
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        best = town;
+      }
+    }
+    return best;
+  }
+
+  pickEmergentTownName(indexValue = this.state.nextTownId) {
+    const index = Math.max(0, Number(indexValue || 1) - 1);
+    const base = EMERGENCE_TOWN_NAMES[index % EMERGENCE_TOWN_NAMES.length];
+    const suffix = Math.floor(index / EMERGENCE_TOWN_NAMES.length);
+    return suffix > 0 ? `${base} ${suffix + 1}` : base;
+  }
+
+  generateEmergentTownAnchor(sponsoringTowns) {
+    if (!sponsoringTowns.length) return null;
+
+    const mapPadding = 110;
+    const minTownSpacing = 170;
+    for (let attempt = 0; attempt < 36; attempt += 1) {
+      const sponsor = pickRandom(sponsoringTowns);
+      const angle = Math.random() * Math.PI * 2;
+      const distance = randomRange(180, 420);
+      const x = clamp(
+        sponsor.x + Math.cos(angle) * distance,
+        mapPadding,
+        BASE_MAP.width - mapPadding
+      );
+      const y = clamp(
+        sponsor.y + Math.sin(angle) * distance,
+        mapPadding,
+        BASE_MAP.height - mapPadding
+      );
+      const tooClose = this.state.regions.some(
+        (town) => Math.hypot(town.x - x, town.y - y) < minTownSpacing
+      );
+      if (tooClose) continue;
+
+      const nearest = this.getNearestTown(x, y) || sponsor;
+      const archetypeSource = nearest || sponsor;
+      return {
+        id: null,
+        name: this.pickEmergentTownName(this.state.nextTownId),
+        x,
+        y,
+        radius: randomRange(54, 66),
+        districtType: archetypeSource.districtType || "Rural Cluster",
+        terrain: archetypeSource.terrain || "plains",
+        climate: archetypeSource.climate || "temperate",
+        baseDemand: clamp((archetypeSource.baseDemand || 52) * randomRange(0.72, 1.08), 26, 118),
+        population: clamp((archetypeSource.population || 34) * randomRange(0.6, 0.9), 14, 82),
+        growthRate: clamp((archetypeSource.growthRate || 0.45) * randomRange(0.85, 1.2), 0.25, 1.25),
+        starterAssets: { plant: 0, substation: 0, storage: 0 },
+        strategicValue: `${pickTownArchetype(archetypeSource.districtType)} growth settlement`,
+      };
+    }
+
+    return null;
+  }
+
+  createEmergentTownFromAnchor(anchor) {
+    const pendingTownIndex = Number(this.state.nextTownId || 1);
+    const resolvedId = anchor.id || `town-${pendingTownIndex}`;
+    const resolvedName = anchor.name || this.pickEmergentTownName(pendingTownIndex);
+    if (!anchor.id) {
+      this.state.nextTownId = pendingTownIndex + 1;
+    }
+    const initialDemand = clamp(anchor.baseDemand * randomRange(0.26, 0.42), 8, anchor.baseDemand);
+    const population = Math.max(8, Number(anchor.population || 24) * randomRange(0.32, 0.48));
+    return {
+      ...deepClone(anchor),
+      id: resolvedId,
+      name: resolvedName,
+      radius: Number(anchor.radius || randomRange(54, 66)),
+      priority: "normal",
+      townCount: 1,
+      townCap: 1,
+      nominalBaseDemand: Number(anchor.baseDemand || initialDemand),
+      population,
+      growthRate: Number(anchor.growthRate || 0.42),
+      stableServiceSeconds: 0,
+      outageSeconds: 0,
+      coveredBySubstation: false,
+      coverageSourceId: null,
+      coverageDistance: 0,
+      assets: { plant: 0, substation: 0, storage: 0 },
+      resourceProfile: this.createEmptyResourceProfile(),
+      demand: initialDemand,
+      targetDemand: initialDemand,
+      served: 0,
+      unmet: initialDemand,
+      utilization: 0,
+      demandEventMultiplier: 1,
+      lineEventMultiplier: 1,
+      selected: false,
+      cooldownUntil: 0,
+    };
+  }
+
   updateTownEmergence() {
     const profile = this.getTownEmergenceProfile();
     if (!profile) return;
@@ -1869,35 +2150,70 @@ class GameRuntime {
 
     if (this.state.townsEmerged >= profile.maxEmergences) return;
     if (this.state.reliability < profile.reliabilityFloor) return;
+    const poweredSubstations = this.getPoweredSubstationIds();
+    if (!poweredSubstations.size) return;
 
-    const candidates = this.state.regions.filter((region) => {
-      if (!this.isRegionLivableForTown(region)) return false;
-      if ((region.townCount || 0) >= (region.townCap || 1)) return false;
-      if ((region.stableServiceSeconds || 0) < profile.minStableSeconds) return false;
-      if ((region.outageSeconds || 0) >= 8) return false;
-      return this.hasStableNeighborService(region);
+    const sponsoringTowns = this.state.regions.filter((town) => {
+      if (!this.isTownEntity(town)) return false;
+      if (!this.isRegionLivableForTown(town)) return false;
+      if ((town.stableServiceSeconds || 0) < profile.minStableSeconds) return false;
+      if ((town.outageSeconds || 0) >= 6) return false;
+      if (!town.coveredBySubstation) return false;
+      return town.utilization >= 0.72 && this.hasStableNeighborService(town);
     });
+    if (!sponsoringTowns.length) return;
 
-    if (!candidates.length) return;
-
-    const scored = candidates
-      .map((region) => {
-        const openSlots = Math.max(1, (region.townCap || 1) - (region.townCount || 0));
+    const anchorCandidates = this.getUnspawnedTownAnchors()
+      .filter((anchor) => this.isRegionLivableForTown(anchor))
+      .map((anchor) => {
+        const nearestStableTownDistance = sponsoringTowns.reduce((nearest, sponsor) => {
+          const distance = Math.hypot(anchor.x - sponsor.x, anchor.y - sponsor.y);
+          return Math.min(nearest, distance);
+        }, Infinity);
+        if (!Number.isFinite(nearestStableTownDistance)) return null;
         return {
-          region,
-          score: openSlots * 2.2 + (region.stableServiceSeconds || 0) * 0.08 + Math.random(),
+          anchor,
+          score:
+            clamp(2.4 - nearestStableTownDistance / 520, 0.2, 2.4) +
+            Math.random(),
         };
       })
+      .filter(Boolean)
       .sort((a, b) => b.score - a.score);
 
-    const target = scored[0].region;
-    target.townCount = clamp((target.townCount || 0) + 1, 0, target.townCap || 1);
-    target.population += randomRange(3.5, 8.5);
-    target.stableServiceSeconds = Math.max(0, target.stableServiceSeconds - 8);
+    const syntheticAnchor = this.generateEmergentTownAnchor(sponsoringTowns);
+    if (syntheticAnchor && this.isRegionLivableForTown(syntheticAnchor)) {
+      const nearestStableTownDistance = sponsoringTowns.reduce((nearest, sponsor) => {
+        const distance = Math.hypot(syntheticAnchor.x - sponsor.x, syntheticAnchor.y - sponsor.y);
+        return Math.min(nearest, distance);
+      }, Infinity);
+      anchorCandidates.push({
+        anchor: syntheticAnchor,
+        score: clamp(2.2 - nearestStableTownDistance / 560, 0.25, 2.2) + Math.random() * 0.7,
+      });
+      anchorCandidates.sort((a, b) => b.score - a.score);
+    }
+
+    if (!anchorCandidates.length) return;
+
+    const selected = anchorCandidates[0];
+    const town = this.createEmergentTownFromAnchor(selected.anchor);
+    if (this.resourceZones.length) {
+      const profileWeights = this.createEmptyResourceProfile();
+      for (const zone of this.resourceZones) {
+        const coverage = this.estimateZoneCoverageForRegion(town, zone.polygon);
+        if (coverage <= 0) continue;
+        profileWeights[zone.resource] = clamp(profileWeights[zone.resource] + coverage, 0, 1);
+      }
+      town.resourceProfile = profileWeights;
+    }
+
+    this.state.regions.push(town);
+    this.updateTownCoverage();
     this.state.townsEmerged += 1;
     this.state.score += 12;
-    this.logTimeline(`Town emerged in ${target.name}; new local demand activated.`);
-    this.pushAlert(`New town emerged in ${target.name}. Demand baseline increased.`, "warning", 6);
+    this.logTimeline(`Town emerged on the map: ${town.name}. New local demand activated.`);
+    this.pushAlert(`New town emerged: ${town.name}. Demand baseline increased.`, "warning", 6);
   }
 
   resolveGrid() {
@@ -1919,74 +2235,79 @@ class GameRuntime {
       link.hardCapacity = link.safeCapacity * 1.15;
     }
 
-    const regions = this.state.regions;
-    let pool = 0;
+    const towns = this.state.regions;
+    const componentByTown = this.buildTownComponents();
+    const generationByComponent = new Map();
+    const coveredByComponent = new Map();
 
-    for (const region of regions) {
-      const resource = region.resourceProfile || this.createEmptyResourceProfile();
-      const plantBoostMultiplier = clamp(
-        1 + resource.wind * 0.16 + resource.sun * 0.14 + resource.natural_gas * 0.2,
-        1,
-        1.5
-      );
-      const storageBoostMultiplier = clamp(1 + resource.wind * 0.05 + resource.sun * 0.08, 1, 1.2);
-      const localGeneration =
-        region.assets.plant * ASSET_RULES.plant.generation * plantBoostMultiplier +
-        region.assets.storage * ASSET_RULES.storage.generation * storageBoostMultiplier;
+    for (const town of towns) {
+      const componentId = componentByTown.get(town.id) || town.id;
+      const generation = this.computeGenerationForTown(town);
+      generationByComponent.set(componentId, (generationByComponent.get(componentId) || 0) + generation);
+      town.served = 0;
+      town.unmet = town.demand;
 
-      const localServed = region.coveredBySubstation ? Math.min(localGeneration, region.demand) : 0;
-      region.served = localServed;
-      region.unmet = Math.max(0, region.demand - localServed);
-      pool += Math.max(0, localGeneration - localServed);
+      if (town.coveredBySubstation && town.coverageSourceId) {
+        const sourceComponent = componentByTown.get(town.coverageSourceId) || town.coverageSourceId;
+        if (!coveredByComponent.has(sourceComponent)) {
+          coveredByComponent.set(sourceComponent, []);
+        }
+        coveredByComponent.get(sourceComponent).push(town);
+      }
     }
 
     const prioritySort = { high: 0, normal: 1, low: 2 };
-    const targets = regions
-      .filter((region) => region.unmet > 0 && region.coveredBySubstation)
-      .sort((a, b) => {
+    for (const [componentId, coveredTowns] of coveredByComponent.entries()) {
+      let pool = generationByComponent.get(componentId) || 0;
+      if (pool <= 0.0001) continue;
+
+      coveredTowns.sort((a, b) => {
         const p = prioritySort[a.priority] - prioritySort[b.priority];
         if (p !== 0) return p;
-        return b.unmet - a.unmet;
+        return b.demand - a.demand;
       });
 
-    for (const target of targets) {
-      if (pool <= 0.0001) break;
-      if (target.id === "capital") continue;
-
-      const path = this.findPath("capital", target.id);
-      if (!path.length) continue;
-
-      let transferable = Infinity;
-      for (const linkId of path) {
-        const link = this.findLink(linkId);
-        if (!link) continue;
-        transferable = Math.min(transferable, Math.max(0, link.hardCapacity - link.used));
-      }
-
-      if (!Number.isFinite(transferable) || transferable <= 0) continue;
-
-      const moved = Math.min(target.unmet, pool, transferable);
-      target.served += moved;
-      target.unmet -= moved;
-      pool -= moved;
-
-      for (const linkId of path) {
-        const link = this.findLink(linkId);
-        if (!link) continue;
-        link.used += moved;
-        link.stress = link.safeCapacity > 0 ? link.used / link.safeCapacity : 0;
-        link.overload = link.used > link.safeCapacity;
+      for (const town of coveredTowns) {
+        if (pool <= 0.0001) break;
+        const moved = Math.min(town.unmet, pool);
+        town.served += moved;
+        town.unmet -= moved;
+        pool -= moved;
       }
     }
 
-    for (const region of regions) {
-      region.unmet = clamp(region.unmet, 0, region.demand);
-      region.utilization = region.demand > 0 ? region.served / region.demand : 1;
+    const componentServed = new Map();
+    const componentLineCount = new Map();
+    for (const town of towns) {
+      if (!town.coveredBySubstation || !town.coverageSourceId) continue;
+      const componentId = componentByTown.get(town.coverageSourceId) || town.coverageSourceId;
+      componentServed.set(componentId, (componentServed.get(componentId) || 0) + town.served);
     }
 
-    this.state.totalDemand = regions.reduce((acc, region) => acc + region.demand, 0);
-    this.state.totalServed = regions.reduce((acc, region) => acc + region.served, 0);
-    this.state.totalUnmet = regions.reduce((acc, region) => acc + region.unmet, 0);
+    for (const link of this.state.links) {
+      if (!link.built || link.safeCapacity <= 0) continue;
+      const componentId = componentByTown.get(link.a) || link.a;
+      componentLineCount.set(componentId, (componentLineCount.get(componentId) || 0) + 1);
+    }
+
+    for (const link of this.state.links) {
+      if (!link.built || link.safeCapacity <= 0) continue;
+      const componentId = componentByTown.get(link.a) || link.a;
+      const servedInComponent = componentServed.get(componentId) || 0;
+      const lineCount = Math.max(1, componentLineCount.get(componentId) || 1);
+      link.used = servedInComponent / lineCount;
+      link.stress = link.safeCapacity > 0 ? link.used / link.safeCapacity : 0;
+      link.overload = link.used > link.safeCapacity;
+    }
+
+    for (const town of towns) {
+      town.unmet = clamp(town.unmet, 0, town.demand);
+      town.utilization = town.demand > 0 ? town.served / town.demand : 1;
+    }
+
+    this.state.totalDemand = towns.reduce((acc, town) => acc + town.demand, 0);
+    this.state.totalServed = towns.reduce((acc, town) => acc + town.served, 0);
+    this.state.totalUnmet = towns.reduce((acc, town) => acc + town.unmet, 0);
   }
 
   findPath(startId, endId) {
@@ -2095,6 +2416,7 @@ class GameRuntime {
 
     let trustPressure = 0;
     for (const region of regions) {
+      if (!this.isTownEntity(region)) continue;
       const unmetShare = region.demand > 0 ? region.unmet / region.demand : 0;
       if (unmetShare > 0.35) {
         trustPressure += unmetShare * 2.1;
@@ -2127,7 +2449,7 @@ class GameRuntime {
     }
 
     const uncoveredTowns = this.state.regions.filter(
-      (region) => (region.townCount || 0) > 0 && !region.coveredBySubstation
+      (region) => this.isTownEntity(region) && !region.coveredBySubstation
     ).length;
     if (uncoveredTowns > 0) {
       this.pushTransientAlertOnce(
@@ -2183,7 +2505,7 @@ class GameRuntime {
           mission.objective.requiredStableTowns ?? mission.objective.requiredUnlocked ?? 0;
         const servedTowns = this.state.regions.filter(
           (region) =>
-            (region.townCount || 0) > 0 &&
+            this.isTownEntity(region) &&
             region.coveredBySubstation &&
             (region.utilization || 0) >= 0.7
         ).length;
@@ -2534,44 +2856,67 @@ class GameRuntime {
 
   getTownIconForRegion(region) {
     if (region.id === "capital") return this.iconSet.town.capital;
-    const townCount = Math.max(0, Number(region.townCount || 0));
-    const townCap = Math.max(1, Number(region.townCap || 1));
-    if (townCount >= Math.ceil(townCap * 0.66)) return this.iconSet.town.city;
+    if ((region.population || 0) >= 52) return this.iconSet.town.city;
     return this.iconSet.town.hamlet;
+  }
+
+  getTownRenderRadius(region) {
+    const zoom = this.zoomLevels[this.camera.zoomIndex];
+    return clamp(Number(region.radius || 60) * zoom * 0.34, 17, 34);
   }
 
   drawTownMarkers(ctx, point, radius, region) {
     const zoom = this.zoomLevels[this.camera.zoomIndex];
-    const townCount = Math.max(0, Math.round(region.townCount || 0));
-    if (!townCount) return;
-    const visibleTownMarkers = zoom <= 0.72 ? 1 : townCount;
-    const iconSize = clamp(28 * zoom, 18, 34);
+    const iconSize = clamp(radius * 1.2, 18, 34);
     const icon = this.getTownIconForRegion(region);
+    const tx = point.x;
+    const ty = point.y;
 
-    for (let i = 0; i < visibleTownMarkers; i += 1) {
-      const angle = (Math.PI * 2 * i) / Math.max(1, visibleTownMarkers);
-      const orbit = radius * (0.32 + (i % 2) * 0.08);
-      const tx = point.x + Math.cos(angle) * orbit;
-      const ty = point.y + Math.sin(angle) * orbit;
+    if (icon) {
+      ctx.save();
+      ctx.globalAlpha = 0.96;
+      ctx.drawImage(icon, tx - iconSize / 2, ty - iconSize / 2, iconSize, iconSize);
+      ctx.restore();
+    } else {
+      const markerRadius = clamp(1.8 * zoom, 1.2, 3.3);
+      ctx.beginPath();
+      ctx.arc(tx, ty, markerRadius + 0.7, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(8, 24, 38, 0.8)";
+      ctx.fill();
 
-      if (icon) {
-        ctx.save();
-        ctx.globalAlpha = 0.96;
-        ctx.drawImage(icon, tx - iconSize / 2, ty - iconSize / 2, iconSize, iconSize);
-        ctx.restore();
-      } else {
-        const markerRadius = clamp(1.8 * zoom, 1.2, 3.3);
-        ctx.beginPath();
-        ctx.arc(tx, ty, markerRadius + 0.7, 0, Math.PI * 2);
-        ctx.fillStyle = "rgba(8, 24, 38, 0.8)";
-        ctx.fill();
-
-        ctx.beginPath();
-        ctx.arc(tx, ty, markerRadius, 0, Math.PI * 2);
-        ctx.fillStyle = "rgba(227, 245, 232, 0.9)";
-        ctx.fill();
-      }
+      ctx.beginPath();
+      ctx.arc(tx, ty, markerRadius, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(227, 245, 232, 0.9)";
+      ctx.fill();
     }
+
+    const badges = [];
+    if ((region.assets.plant || 0) > 0) badges.push({ label: "P", count: region.assets.plant });
+    if ((region.assets.substation || 0) > 0)
+      badges.push({ label: "S", count: region.assets.substation });
+    if ((region.assets.storage || 0) > 0) badges.push({ label: "B", count: region.assets.storage });
+
+    if (!badges.length) return;
+    ctx.save();
+    ctx.font = `600 ${Math.max(9, iconSize * 0.3)}px "IBM Plex Mono", monospace`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    const badgeRadius = clamp(iconSize * 0.18, 5, 8);
+    badges.forEach((badge, index) => {
+      const angle = -Math.PI / 2 + index * 1.35;
+      const bx = tx + Math.cos(angle) * (radius + badgeRadius + 3);
+      const by = ty + Math.sin(angle) * (radius + badgeRadius + 3);
+      ctx.fillStyle = "rgba(9, 21, 30, 0.86)";
+      ctx.beginPath();
+      ctx.arc(bx, by, badgeRadius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = "rgba(189, 234, 206, 0.44)";
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.fillStyle = "#d8efe0";
+      ctx.fillText(`${badge.label}${badge.count}`, bx, by + 0.2);
+    });
+    ctx.restore();
   }
 
   drawRegions(ctx) {
@@ -2579,7 +2924,7 @@ class GameRuntime {
 
     for (const region of this.state.regions) {
       const point = this.worldToScreen(region.x, region.y);
-      const radius = region.radius * this.zoomLevels[this.camera.zoomIndex];
+      const radius = this.getTownRenderRadius(region);
 
       const climateColor =
         region.climate === "cold"
@@ -2592,22 +2937,40 @@ class GameRuntime {
       const serviceTint =
         serviceRatio > 0.9 ? "rgba(129, 225, 156, 0.45)" : serviceRatio > 0.72 ? "rgba(246, 194, 106, 0.44)" : "rgba(255, 99, 99, 0.52)";
 
-      ctx.fillStyle = "rgba(20, 33, 46, 0.72)";
+      ctx.fillStyle = "rgba(20, 33, 46, 0.52)";
       ctx.beginPath();
-      ctx.arc(point.x, point.y, radius, 0, Math.PI * 2);
+      ctx.arc(point.x, point.y, radius + 5, 0, Math.PI * 2);
       ctx.fill();
 
       ctx.fillStyle = climateColor;
-      ctx.globalAlpha = 0.33;
+      ctx.globalAlpha = 0.2;
       ctx.beginPath();
-      ctx.arc(point.x, point.y, radius * 0.94, 0, Math.PI * 2);
+      ctx.arc(point.x, point.y, radius + 2, 0, Math.PI * 2);
       ctx.fill();
       ctx.globalAlpha = 1;
 
       ctx.fillStyle = serviceTint;
       ctx.beginPath();
-      ctx.arc(point.x, point.y, radius * 0.68, 0, Math.PI * 2);
+      ctx.arc(point.x, point.y, radius - 1, 0, Math.PI * 2);
       ctx.fill();
+
+      if (!region.coveredBySubstation && region.demand > 0.2) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(point.x, point.y, radius - 1.8, 0, Math.PI * 2);
+        ctx.clip();
+        ctx.strokeStyle = "rgba(244, 214, 172, 0.42)";
+        ctx.lineWidth = 1;
+        const hatchGap = 5;
+        for (let x = point.x - radius * 2; x <= point.x + radius * 2; x += hatchGap) {
+          ctx.beginPath();
+          ctx.moveTo(x, point.y - radius * 2);
+          ctx.lineTo(x + radius * 2, point.y + radius * 2);
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+
       this.drawTownMarkers(ctx, point, radius, region);
 
       if ((region.assets.substation || 0) > 0 && this.zoomLevels[this.camera.zoomIndex] >= 0.9) {
@@ -2623,10 +2986,10 @@ class GameRuntime {
         ctx.setLineDash([]);
       }
 
-      ctx.lineWidth = selectedId === region.id ? 4 : 2;
-      ctx.strokeStyle = selectedId === region.id ? "#f4f7d5" : "rgba(235, 245, 237, 0.5)";
+      ctx.lineWidth = selectedId === region.id ? 2.5 : 1.5;
+      ctx.strokeStyle = selectedId === region.id ? "#f4f7d5" : "rgba(235, 245, 237, 0.42)";
       ctx.beginPath();
-      ctx.arc(point.x, point.y, radius, 0, Math.PI * 2);
+      ctx.arc(point.x, point.y, radius + 5, 0, Math.PI * 2);
       ctx.stroke();
 
       const farZoom = this.zoomLevels[this.camera.zoomIndex] <= 0.72;
@@ -2634,21 +2997,19 @@ class GameRuntime {
 
       ctx.fillStyle = "#f0f7ef";
       ctx.textAlign = "center";
-      ctx.font = `600 ${Math.max(11, 11 * this.zoomLevels[this.camera.zoomIndex])}px "IBM Plex Sans", sans-serif`;
-      ctx.fillText(region.name, point.x, point.y - radius * 0.18);
+      ctx.font = `600 ${Math.max(10, 10 * this.zoomLevels[this.camera.zoomIndex])}px "IBM Plex Sans", sans-serif`;
+      ctx.fillText(region.name, point.x, point.y - radius - 14);
 
       const demandText = `${Math.round(region.served)}/${Math.round(region.demand)} MW`;
 
       ctx.fillStyle = "rgba(246, 251, 250, 0.92)";
-      ctx.font = `500 ${Math.max(10, 10 * this.zoomLevels[this.camera.zoomIndex])}px "IBM Plex Mono", monospace`;
-      ctx.fillText(demandText, point.x, point.y + radius * 0.12);
+      ctx.font = `500 ${Math.max(9, 9 * this.zoomLevels[this.camera.zoomIndex])}px "IBM Plex Mono", monospace`;
+      ctx.fillText(demandText, point.x, point.y + radius + 14);
 
-      ctx.fillStyle = "rgba(202, 233, 219, 0.9)";
-      ctx.fillText(`Towns ${region.townCount}/${region.townCap}`, point.x, point.y + radius * 0.34);
-
-      const assetText = `P${region.assets.plant} S${region.assets.substation} B${region.assets.storage}`;
-      ctx.fillStyle = "rgba(194, 229, 212, 0.88)";
-      ctx.fillText(assetText, point.x, point.y + radius * 0.56);
+      if (this.zoomLevels[this.camera.zoomIndex] >= 0.9) {
+        ctx.fillStyle = "rgba(202, 233, 219, 0.86)";
+        ctx.fillText(`Pop ${Math.round(region.population)}`, point.x, point.y + radius + 27);
+      }
     }
   }
 
@@ -2698,6 +3059,7 @@ class GameRuntime {
       objective,
       alerts: this.state.alerts,
       incidents: this.state.incidents,
+      selectedTown: selected,
       selectedRegion: selected,
     });
   }
@@ -2709,7 +3071,7 @@ class GameRuntime {
         mission.objective.requiredStableTowns ?? mission.objective.requiredUnlocked ?? 0;
       const servedTowns = this.state.regions.filter(
         (region) =>
-          (region.townCount || 0) > 0 &&
+          this.isTownEntity(region) &&
           region.coveredBySubstation &&
           (region.utilization || 0) >= 0.7
       ).length;
@@ -2787,6 +3149,34 @@ class GameRuntime {
   }
 
   renderGameToText() {
+    const townSnapshots = this.state.regions.map((town) => ({
+      id: town.id,
+      name: town.name,
+      x: Number(town.x.toFixed(1)),
+      y: Number(town.y.toFixed(1)),
+      priority: town.priority,
+      climate: town.climate,
+      terrain: town.terrain,
+      population: Number(town.population.toFixed(2)),
+      demand: Number(town.demand.toFixed(2)),
+      served: Number(town.served.toFixed(2)),
+      unmet: Number(town.unmet.toFixed(2)),
+      utilization: Number(town.utilization.toFixed(3)),
+      service: {
+        coveredBySubstation: !!town.coveredBySubstation,
+        coverageSourceId: town.coverageSourceId || null,
+        coverageDistance: Number((town.coverageDistance || 0).toFixed(2)),
+        stableSeconds: Number((town.stableServiceSeconds || 0).toFixed(2)),
+        outageSeconds: Number((town.outageSeconds || 0).toFixed(2)),
+      },
+      resourceProfile: {
+        wind: Number((town.resourceProfile?.wind || 0).toFixed(3)),
+        sun: Number((town.resourceProfile?.sun || 0).toFixed(3)),
+        naturalGas: Number((town.resourceProfile?.natural_gas || 0).toFixed(3)),
+      },
+      assets: { ...town.assets },
+    }));
+
     const payload = {
       mode: this.config.mode,
       runLabel: this.config.label,
@@ -2812,8 +3202,8 @@ class GameRuntime {
       totalUnmet: Number(this.state.totalUnmet.toFixed(2)),
       selectedTool: this.tool,
       selectedBuildAsset: this.buildAssetType,
-      selectedRegionId: this.selectedRegionId,
-      lineSelectionStartRegionId: this.lineBuildStartRegionId,
+      selectedTownId: this.selectedRegionId,
+      lineSelectionStartTownId: this.lineBuildStartRegionId,
       lineCostPreview: this.lineCostPreview,
       townEmergence: {
         mode: this.config.townEmergenceMode,
@@ -2844,32 +3234,7 @@ class GameRuntime {
         },
         resourceZoneCounts: { ...this.resourceZoneSummary },
       },
-      regions: this.state.regions.map((region) => ({
-        id: region.id,
-        name: region.name,
-        x: Number(region.x.toFixed(1)),
-        y: Number(region.y.toFixed(1)),
-        priority: region.priority,
-        climate: region.climate,
-        terrain: region.terrain,
-        population: Number(region.population.toFixed(2)),
-        demand: Number(region.demand.toFixed(2)),
-        served: Number(region.served.toFixed(2)),
-        unmet: Number(region.unmet.toFixed(2)),
-        utilization: Number(region.utilization.toFixed(3)),
-        towns: {
-          count: Math.round(region.townCount || 0),
-          cap: Math.round(region.townCap || 0),
-          stableServiceSeconds: Number((region.stableServiceSeconds || 0).toFixed(2)),
-          outageSeconds: Number((region.outageSeconds || 0).toFixed(2)),
-        },
-        resourceProfile: {
-          wind: Number((region.resourceProfile?.wind || 0).toFixed(3)),
-          sun: Number((region.resourceProfile?.sun || 0).toFixed(3)),
-          naturalGas: Number((region.resourceProfile?.natural_gas || 0).toFixed(3)),
-        },
-        assets: { ...region.assets },
-      })),
+      towns: townSnapshots,
       resourceZones: this.resourceZones.map((zone) => ({
         id: zone.id,
         resource: zone.resource,
@@ -2893,7 +3258,7 @@ class GameRuntime {
         title: incident.title,
         level: incident.level,
         type: incident.type,
-        regionId: incident.regionId || null,
+        townId: incident.regionId || null,
         expiresIn: Number((incident.expiresAt - this.state.runtimeSeconds).toFixed(2)),
       })),
       alerts: this.state.alerts.map((alert) => ({
@@ -3481,8 +3846,8 @@ export class SaveTheGridApp {
 
           <div class="floating-group floating-bottom-right">
             <div id="region-context" class="floating-card floating-region-context">
-              <h3>Region Context</h3>
-              <p>Select a region on the map.</p>
+              <h3>Town Context</h3>
+              <p>Select a town on the map.</p>
             </div>
             <div class="ticker floating-ticker" id="news-ticker">${newsTickerText}</div>
           </div>
@@ -3731,11 +4096,11 @@ export class SaveTheGridApp {
     }
 
     const regionContext = $("#region-context");
-    const selected = payload.selectedRegion;
+    const selected = payload.selectedTown || payload.selectedRegion;
     if (!regionContext) return;
 
     if (!selected) {
-      regionContext.innerHTML = "<h3>Region Context</h3><p>Select a region on the map.</p>";
+      regionContext.innerHTML = "<h3>Town Context</h3><p>Select a town on the map.</p>";
       return;
     }
 
@@ -3744,7 +4109,7 @@ export class SaveTheGridApp {
       sun: 0,
       natural_gas: 0,
     };
-    const townLine = `Towns ${selected.townCount || 0}/${selected.townCap || 0} | Stability ${(
+    const serviceLine = `Stability ${(
       selected.stableServiceSeconds || 0
     ).toFixed(1)}s | Outage ${(
       selected.outageSeconds || 0
@@ -3769,10 +4134,10 @@ export class SaveTheGridApp {
           : "";
     const selectedHtml = `
       <h3>${selected.name}</h3>
-      <p>${selected.districtType} | ${selected.climate} climate | ${selected.terrain} terrain</p>
+      <p>${pickTownArchetype(selected.districtType)} town | ${selected.climate} climate | ${selected.terrain} terrain</p>
       <p>Priority ${selected.priority.toUpperCase()} | Population ${selected.population.toFixed(1)}</p>
       <p>Demand ${selected.demand.toFixed(1)} | Served ${selected.served.toFixed(1)} | Unmet ${selected.unmet.toFixed(1)}</p>
-      <p>${townLine}</p>
+      <p>${serviceLine}</p>
       <p>${coverageLine}</p>
       <p>Assets P${selected.assets.plant} S${selected.assets.substation} B${selected.assets.storage}</p>
       <p>${resourceLine}</p>

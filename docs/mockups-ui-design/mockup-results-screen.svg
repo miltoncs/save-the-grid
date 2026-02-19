@@ -33,7 +33,7 @@
   <text x="250" y="396" fill="#a8cfe0" font-size="21" font-family="'Segoe UI', sans-serif">Reliability</text>
   <text x="650" y="396" text-anchor="end" fill="#cff9ec" font-size="34" font-family="'Trebuchet MS', sans-serif">86%</text>
 
-  <text x="250" y="446" fill="#a8cfe0" font-size="21" font-family="'Segoe UI', sans-serif">Regions Stabilized</text>
+  <text x="250" y="446" fill="#a8cfe0" font-size="21" font-family="'Segoe UI', sans-serif">Towns Stabilized</text>
   <text x="650" y="446" text-anchor="end" fill="#e6f7ff" font-size="34" font-family="'Trebuchet MS', sans-serif">7 / 8</text>
 
   <text x="250" y="498" fill="#a8cfe0" font-size="21" font-family="'Segoe UI', sans-serif">Incidents Resolved</text>

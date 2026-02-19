@@ -34,7 +34,7 @@ Layers:
 1. Game board layer (always visible): land/water plus land type (mountain, desert, plains).
 2. Civilization layer: towns shown as point icons.
 3. Grid asset layer: power plants and substations shown as point icons.
-4. Player-built `Line` layer: manual long-distance power lines between plants and substations.
+4. Player-built `Line` layer: manual long-distance power lines between valid plant/substation endpoint pairs.
 5. Resource layer: natural resource zones, hidden by default and revealed while holding `R`.
 6. Alerts/objective layer: incidents, demand deficits, and mission markers.
 
@@ -46,6 +46,8 @@ Map content strategy:
 2. Procedural map generation is a post-v1 initiative after balance criteria are defined.
 3. Map progression scales from small fully visible layouts to larger layouts with longer routing distances.
 4. Basic levels start mostly empty: mostly terrain, a few seeded towns, and little to no prebuilt power-grid infrastructure.
+5. No region-level service hubs are represented in-map; towns are the direct authored demand entities.
+6. No pre-authored major transmission corridors are part of gameplay; long-distance backbone routes are built by the player with the `Line` tool.
 
 ### 2.1 Town Seeding and Emergence
 
@@ -110,7 +112,7 @@ Terrain effects should be visible and explainable in tooltips.
 ## 5. Infrastructure Placement and Line Rules
 
 1. Power plants and substations place on valid map slots.
-2. `Line` tool creates manual long-distance links between allowed endpoint pairs:
+2. In-game `Line` tool creates manual long-distance links between allowed endpoint pairs:
    - plant to plant,
    - plant to substation,
    - substation to substation,
@@ -156,7 +158,7 @@ Point icon scale target:
 - Standard map zoom uses small point icons around 20x20 px for towns, plants, and substations.
 
 1. Far zoom (national view):
-   - Show game-board terrain classes, town clusters, major manual `Line` routes, high-level deficits, active critical alerts, and current season state.
+   - Show game-board terrain classes, town clusters, prominent player-built `Line` routes, high-level deficits, active critical alerts, and current season state.
    - Collapse point icons into minimal markers to avoid clutter.
 2. Mid zoom (network view):
    - Show town, plant, and substation point icons at standard size.

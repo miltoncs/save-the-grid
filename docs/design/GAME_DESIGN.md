@@ -33,10 +33,11 @@ The player is the Energy Directory for a fictional country. In real time, they b
 13. Seasonal and local-climate demand conditions are core difficulty mechanics, introduced only after tutorial/early onboarding levels.
 14. Early levels use small, easy-to-read maps; later levels use larger maps with longer routing distances and denser town networks.
 15. There are no map-area unlock systems; the full map is available from run start.
-16. Basic levels start mostly empty: mostly terrain, a few towns, and little to no prebuilt power-grid infrastructure.
-17. As conditions improve, new towns can emerge on livable powered terrain during a run.
-18. Large player-built power routing is handled by a single tool named `Line`.
-19. Substations power all towns within radius and automatically generate short orthogonal town-connection lines.
+16. There are no region-level service hubs, district ownership layers, or corridor-purchase mechanics.
+17. Basic levels start mostly empty: mostly terrain, a few towns, and little to no prebuilt power-grid infrastructure.
+18. As conditions improve, new towns can emerge on livable powered terrain during a run.
+19. Large player-built power routing is handled by a single tool named `Line`.
+20. Substations power all towns within radius and automatically generate short orthogonal town-connection lines.
 
 ## 4. Player Fantasy and Role
 
@@ -46,7 +47,7 @@ You are not an engineer placing wires in a sandbox. You are a national decision-
 
 1. Start from a mostly terrain-first map with a few seeded towns.
 2. Build power plants and substations to create supply and local coverage.
-3. Build manual `Lines` to connect plants and substations across distance.
+3. Build manual `Lines` to connect plants and substations across distance (`plant->plant`, `plant->substation`, `substation->substation`, `substation->plant`).
 4. Stabilize service quality so additional towns can emerge.
 5. Demolish or replace aging or inefficient assets.
 6. Absorb random pressures (weather, fuel shocks, policy changes).
@@ -98,6 +99,8 @@ The primary strategic question is always the same: what to build, when to build 
 
 - Country map represented as a 2D overhead layered board/network view.
 - Layer model includes: base game board (land/water/land type), civilization town points, power-grid points, player-built `Line` network, and resource-zone overlays.
+- There are no authored region service hubs; towns are placed directly on the board as first-class entities.
+- There are no pre-authored major transmission corridors in gameplay.
 - Maps are handcrafted in v1 to ensure balanced and readable scenarios.
 - Towns are the primary demand entities and carry growth pressure.
 - Early missions use small maps with low town count and high at-a-glance readability.
@@ -120,7 +123,7 @@ The primary strategic question is always the same: what to build, when to build 
   - substation to power plant.
 - Substations provide circular service radius for nearby towns.
 - When a town is in range of a powered substation, a short orthogonal service line is auto-generated between them.
-- Actions: build, demolish, reroute priorities.
+- Actions: build, demolish, reroute priorities, and `Line` routing.
 
 ### 8.3 Demand and Supply
 

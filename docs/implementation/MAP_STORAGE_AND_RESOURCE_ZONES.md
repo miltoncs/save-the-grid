@@ -14,6 +14,8 @@ Decision:
 3. Store resource zones inside the map file under `resourceZones[]`.
 4. Treat resource zones as static authored map features (not procedurally generated in MVP).
 5. Keep resource effects shallow and explicit (multipliers + optional reserve), avoiding deep extraction simulation.
+6. Represent demand directly through town seeds/spawn anchors (no region service-hub layer).
+7. Do not encode pre-authored major transmission corridors; long-distance `Line` topology is player-built at runtime.
 
 This matches design constraints in:
 

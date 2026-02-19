@@ -1,70 +1,204 @@
 {
-  "source_generator": "tools/terrain/generate_terrain_map_png.py",
+  "generator": "submodules/topology_mapgen",
+  "source_script": "tools/terrain/generate_mission_terrain_maps.py",
   "output_directory": "assets/maps/terrain/mission-terrain-maps",
   "image": {
     "width": 1800,
     "height": 1080
   },
+  "target_land_fraction": 0.42,
   "missions": [
     {
       "mission_id": "m01-cold-start",
+      "seed": 2361346911,
       "map_png": "m01-cold-start.png",
-      "seed": 2361346911
+      "stats": {
+        "sea_level": 0.7313301317723067,
+        "mountaintop_level": 0.8845958649274395,
+        "mountain_slope_level": 0.0026587735553937107,
+        "target_land_fraction": 0.42,
+        "actual_land_fraction": 0.42,
+        "water_fraction": 0.58,
+        "plains_fraction": 0.30871399176954734,
+        "mountain_fraction": 0.061286008230452674,
+        "mountaintop_fraction": 0.05
+      }
     },
     {
       "mission_id": "m02-rolling-summer",
+      "seed": 1136623211,
       "map_png": "m02-rolling-summer.png",
-      "seed": 1136623211
+      "stats": {
+        "sea_level": 0.6809448216967138,
+        "mountaintop_level": 0.7609745742457159,
+        "mountain_slope_level": 0.002524880855013439,
+        "target_land_fraction": 0.42,
+        "actual_land_fraction": 0.42,
+        "water_fraction": 0.58,
+        "plains_fraction": 0.30381635802469137,
+        "mountain_fraction": 0.06618364197530864,
+        "mountaintop_fraction": 0.05
+      }
     },
     {
       "mission_id": "m03-fuel-shock",
+      "seed": 1566796015,
       "map_png": "m03-fuel-shock.png",
-      "seed": 1566796015
+      "stats": {
+        "sea_level": 0.7295185196047598,
+        "mountaintop_level": 0.8825662196689752,
+        "mountain_slope_level": 0.0027036907279932676,
+        "target_land_fraction": 0.42,
+        "actual_land_fraction": 0.42,
+        "water_fraction": 0.58,
+        "plains_fraction": 0.3058312757201646,
+        "mountain_fraction": 0.06416872427983539,
+        "mountaintop_fraction": 0.05
+      }
     },
     {
       "mission_id": "m04-coastal-storm",
+      "seed": 1907792676,
       "map_png": "m04-coastal-storm.png",
-      "seed": 1907792676
+      "stats": {
+        "sea_level": 0.707322575766688,
+        "mountaintop_level": 0.8071574444609745,
+        "mountain_slope_level": 0.0025677388089808705,
+        "target_land_fraction": 0.42,
+        "actual_land_fraction": 0.42,
+        "water_fraction": 0.58,
+        "plains_fraction": 0.3061836419753086,
+        "mountain_fraction": 0.06381635802469136,
+        "mountaintop_fraction": 0.05
+      }
     },
     {
       "mission_id": "m05-industrial-push",
+      "seed": 3145825292,
       "map_png": "m05-industrial-push.png",
-      "seed": 3145825292
+      "stats": {
+        "sea_level": 0.7535641309573899,
+        "mountaintop_level": 0.8885134768028556,
+        "mountain_slope_level": 0.0025342012839404573,
+        "target_land_fraction": 0.42,
+        "actual_land_fraction": 0.42,
+        "water_fraction": 0.58,
+        "plains_fraction": 0.3054315843621399,
+        "mountain_fraction": 0.06456841563786009,
+        "mountaintop_fraction": 0.05
+      }
     },
     {
       "mission_id": "m06-dry-season",
+      "seed": 32726298,
       "map_png": "m06-dry-season.png",
-      "seed": 32726298
+      "stats": {
+        "sea_level": 0.718215967969187,
+        "mountaintop_level": 0.8867358780220308,
+        "mountain_slope_level": 0.002781745414705748,
+        "target_land_fraction": 0.42,
+        "actual_land_fraction": 0.42,
+        "water_fraction": 0.58,
+        "plains_fraction": 0.3068878600823045,
+        "mountain_fraction": 0.06311213991769547,
+        "mountaintop_fraction": 0.05
+      }
     },
     {
       "mission_id": "m07-night-surge",
+      "seed": 728398034,
       "map_png": "m07-night-surge.png",
-      "seed": 728398034
+      "stats": {
+        "sea_level": 0.6699898946183681,
+        "mountaintop_level": 0.8282740586089593,
+        "mountain_slope_level": 0.002657613337621219,
+        "target_land_fraction": 0.42,
+        "actual_land_fraction": 0.42,
+        "water_fraction": 0.58,
+        "plains_fraction": 0.3068117283950617,
+        "mountain_fraction": 0.06318827160493827,
+        "mountaintop_fraction": 0.05
+      }
     },
     {
       "mission_id": "m08-election-quarter",
+      "seed": 1602047662,
       "map_png": "m08-election-quarter.png",
-      "seed": 1602047662
+      "stats": {
+        "sea_level": 0.7390155386781646,
+        "mountaintop_level": 0.860449909420971,
+        "mountain_slope_level": 0.0025580342399831035,
+        "target_land_fraction": 0.42,
+        "actual_land_fraction": 0.42,
+        "water_fraction": 0.58,
+        "plains_fraction": 0.3045478395061728,
+        "mountain_fraction": 0.06545216049382716,
+        "mountaintop_fraction": 0.05
+      }
     },
     {
       "mission_id": "m09-grid-retrofit",
+      "seed": 1244620938,
       "map_png": "m09-grid-retrofit.png",
-      "seed": 1244620938
+      "stats": {
+        "sea_level": 0.7182301001052896,
+        "mountaintop_level": 0.8392014049611509,
+        "mountain_slope_level": 0.0025445961243830586,
+        "target_land_fraction": 0.42,
+        "actual_land_fraction": 0.42,
+        "water_fraction": 0.58,
+        "plains_fraction": 0.3058554526748971,
+        "mountain_fraction": 0.06414454732510289,
+        "mountaintop_fraction": 0.05
+      }
     },
     {
       "mission_id": "m10-cross-country-link",
+      "seed": 2249896869,
       "map_png": "m10-cross-country-link.png",
-      "seed": 2249896869
+      "stats": {
+        "sea_level": 0.753651658414752,
+        "mountaintop_level": 0.8762898844337084,
+        "mountain_slope_level": 0.002604338192970515,
+        "target_land_fraction": 0.42,
+        "actual_land_fraction": 0.42,
+        "water_fraction": 0.58,
+        "plains_fraction": 0.307619341563786,
+        "mountain_fraction": 0.062380658436213994,
+        "mountaintop_fraction": 0.05
+      }
     },
     {
       "mission_id": "m11-green-mandate",
+      "seed": 662268011,
       "map_png": "m11-green-mandate.png",
-      "seed": 662268011
+      "stats": {
+        "sea_level": 0.7234840859252509,
+        "mountaintop_level": 0.8834218318634197,
+        "mountain_slope_level": 0.00274539703653844,
+        "target_land_fraction": 0.42,
+        "actual_land_fraction": 0.42,
+        "water_fraction": 0.58,
+        "plains_fraction": 0.30662602880658435,
+        "mountain_fraction": 0.06337397119341563,
+        "mountaintop_fraction": 0.05
+      }
     },
     {
       "mission_id": "m12-national-peak",
+      "seed": 1663624458,
       "map_png": "m12-national-peak.png",
-      "seed": 1663624458
+      "stats": {
+        "sea_level": 0.6782625903846821,
+        "mountaintop_level": 0.826465734056073,
+        "mountain_slope_level": 0.002738630071332114,
+        "target_land_fraction": 0.42,
+        "actual_land_fraction": 0.42,
+        "water_fraction": 0.58,
+        "plains_fraction": 0.30601748971193415,
+        "mountain_fraction": 0.06398251028806584,
+        "mountaintop_fraction": 0.05
+      }
     }
   ]
 }

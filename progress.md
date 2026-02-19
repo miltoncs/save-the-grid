@@ -344,3 +344,71 @@ Original prompt: Develop the game MVP based on all provided documentation
 ### Follow-up TODO
 - Optional: migrate mission objective field name usage fully (remove `requiredUnlocked` fallback after old snapshots are no longer needed).
 - Optional: revisit sparse-start baseline balance now that starter backbone links exist (line maintenance/economy tuning).
+
+## 2026-02-19 (Interactive Terrain Browser App)
+- Added a standalone fullscreen browser app for interactive terrain generation:
+  - `tools/terrain/interactive/index.html`
+  - `tools/terrain/interactive/styles.css`
+  - `tools/terrain/interactive/app.js`
+  - `tools/terrain/interactive/README.md`
+- App behavior:
+  - full-screen map canvas,
+  - floating controls,
+  - `Re-generate` button,
+  - `Smoothness` slider,
+  - `Sea Level` slider.
+- Generation model in browser follows topology map logic and classifies terrain into:
+  - water (blue), plains (green), mountains (light brown), and top 5% mountaintops (white).
+
+### Validation
+- `node --check tools/terrain/interactive/app.js`
+- Browser screenshots captured with Playwright:
+  - `output/terrain-interactive/desktop-initial.png`
+  - `output/terrain-interactive/desktop-adjusted.png`
+  - `output/terrain-interactive/mobile-initial.png`
+
+## 2026-02-19 (Town-Only Topology Runtime Update)
+- Implemented the docs-aligned town-only runtime model and removed remaining corridor/hub assumptions from active gameplay.
+- Updated map data to expose town-first topology:
+  - Added `BASE_MAP.towns` and kept `BASE_MAP.regions` as alias for compatibility.
+  - Removed all authored starter transmission corridors (`BASE_MAP.links = []`).
+  - Renamed map entities away from corridor/belt wording and reduced node radii for point-node visuals.
+- Updated simulation configuration/policy:
+  - Standard/custom runs remain sparse-start (`capital` seeded initially).
+  - Campaign runs remain non-sparse to preserve mission objective viability.
+- Reworked town emergence:
+  - Added synthetic emergent-town anchor generation so towns can appear directly on the map (not only from hidden authored anchors).
+  - Added emergent town name generation (`town-<n>` ids + curated names).
+- Reworked grid power resolution away from capital-hub dispatch:
+  - Added component discovery over built manual `Line` network.
+  - Powered-substation detection now checks whether a town's network component has generation.
+  - Demand allocation is resolved per powered component instead of forcing all transfers through capital.
+  - Link stress/usage now derives from per-component served load.
+- Kept substation-radius local service model and orthogonal auto-town links.
+- Updated map rendering to point-style town nodes:
+  - Removed large hub-disc look.
+  - Town icons now render centered on node points.
+  - Added compact asset badges around town icons.
+  - Added subtle hatch warning for unserved towns.
+- Updated runtime payloads/UI copy:
+  - `render_game_to_text` now uses town-centric keys (`selectedTownId`, `lineSelectionStartTownId`, `towns`) and drops region aliases from output.
+  - Region context details now use town archetype wording.
+
+### Validation
+- Syntax checks:
+  - `node --check src/data.js`
+  - `node --check src/game.js`
+  - `node --check src/main.js`
+- Develop-web-game loop:
+  - `node "$HOME/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js" --url http://127.0.0.1:5173 --actions-file "$HOME/.codex/skills/develop-web-game/references/action_payloads.json" --click-selector "#start-btn" --iterations 4 --pause-ms 300 --screenshot-dir output/web-game-town-topology-v3`
+- Bot regression scenarios:
+  - `node bot-player/run-bot.mjs --url http://127.0.0.1:5173 --scenario bot-player/scenarios/smoke-controls.json`
+  - `node bot-player/run-bot.mjs --url http://127.0.0.1:5173 --scenario bot-player/scenarios/start-round-demo.json`
+- Targeted behavior checks via Playwright scripting:
+  - Verified town emergence after time advance.
+  - Verified manual `Line` build between capital and emerged town after substation placement.
+  - Verified auto-generated orthogonal town service link when a town is covered by a powered substation in range.
+
+### Remaining TODO / Suggestions
+- Balance tuning: sparse-start reliability drops quickly if player delays expansion; tune starter generation, emergence timing, or early demand pressure.
+- Optional cleanup: rename internal `region` identifiers/functions in code to `town` for full semantic consistency.
