@@ -1,0 +1,70 @@
+{
+  "source_generator": "docs/mockups-ui-design/generate_terrain_map_png.py",
+  "output_directory": "docs/mockups-ui-design/mission-terrain-maps",
+  "image": {
+    "width": 1800,
+    "height": 1080
+  },
+  "missions": [
+    {
+      "mission_id": "m01-cold-start",
+      "map_png": "m01-cold-start.png",
+      "seed": 2361346911
+    },
+    {
+      "mission_id": "m02-rolling-summer",
+      "map_png": "m02-rolling-summer.png",
+      "seed": 1136623211
+    },
+    {
+      "mission_id": "m03-fuel-shock",
+      "map_png": "m03-fuel-shock.png",
+      "seed": 1566796015
+    },
+    {
+      "mission_id": "m04-coastal-storm",
+      "map_png": "m04-coastal-storm.png",
+      "seed": 1907792676
+    },
+    {
+      "mission_id": "m05-industrial-push",
+      "map_png": "m05-industrial-push.png",
+      "seed": 3145825292
+    },
+    {
+      "mission_id": "m06-dry-season",
+      "map_png": "m06-dry-season.png",
+      "seed": 32726298
+    },
+    {
+      "mission_id": "m07-night-surge",
+      "map_png": "m07-night-surge.png",
+      "seed": 728398034
+    },
+    {
+      "mission_id": "m08-election-quarter",
+      "map_png": "m08-election-quarter.png",
+      "seed": 1602047662
+    },
+    {
+      "mission_id": "m09-grid-retrofit",
+      "map_png": "m09-grid-retrofit.png",
+      "seed": 1244620938
+    },
+    {
+      "mission_id": "m10-cross-country-link",
+      "map_png": "m10-cross-country-link.png",
+      "seed": 2249896869
+    },
+    {
+      "mission_id": "m11-green-mandate",
+      "map_png": "m11-green-mandate.png",
+      "seed": 662268011
+    },
+    {
+      "mission_id": "m12-national-peak",
+      "map_png": "m12-national-peak.png",
+      "seed": 1663624458
+    }
+  ]
+}

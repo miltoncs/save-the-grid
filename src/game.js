@@ -18,6 +18,7 @@ const TICK_SECONDS = 0.1;
 const TOOL_BUILD = "build";
 const TOOL_DEMOLISH = "demolish";
 const TOOL_REROUTE = "reroute";
+const TOOL_LINE = "line";
 const ASSET_ORDER = ["plant", "substation", "storage"];
 const PRIORITY_ORDER = ["low", "normal", "high"];
 const DRAG_THRESHOLD_PX = 6;
@@ -46,6 +47,21 @@ const SPARSE_START_SEEDED_TOWNS = {
   capital: 2,
   north_industry: 1,
   south_farms: 1,
+};
+const LINE_BASE_BUILD_COST_PER_WORLD_UNIT = 0.34;
+const LINE_BASE_MAINTENANCE_PER_WORLD_UNIT = 0.0036;
+const LINE_DISTANCE_CAPACITY_FACTOR = 0.08;
+const LINE_MIN_CAPACITY = 58;
+const LINE_MAX_CAPACITY = 140;
+const SUBSTATION_RADIUS_BY_PROFILE = {
+  wide: 370,
+  standard: 300,
+  tight: 245,
+};
+const LINE_MAINTENANCE_BY_PROFILE = {
+  low: 0.82,
+  standard: 1,
+  high: 1.24,
 };
 const RESOURCE_ZONE_COLORS = {
   wind: {
@@ -118,6 +134,10 @@ function centroidFromPolygon(polygon) {
   return { x: sx / polygon.length, y: sy / polygon.length };
 }
 
+function findBaseRegion(regionId) {
+  return BASE_MAP.regions.find((region) => region.id === regionId) || null;
+}
+
 function loadImageAsset(url) {
   return new Promise((resolve) => {
     const image = new Image();
@@ -156,19 +176,7 @@ function toOrdinal(index) {
 }
 
 function unlockedByFragmentation(fragmentation, regionId) {
-  if (fragmentation === "none" || fragmentation === "open") return true;
-  const alwaysOpen = new Set(["capital", "north_industry", "south_farms"]);
-  if (fragmentation === "moderate") {
-    const moderateOpen = new Set([
-      "capital",
-      "north_industry",
-      "south_farms",
-      "west_hydro",
-      "east_coast",
-    ]);
-    return moderateOpen.has(regionId);
-  }
-  return alwaysOpen.has(regionId);
+  return true;
 }
 
 function normalizePopulationMode(mode) {
@@ -209,8 +217,21 @@ function normalizeUnlockProfile(value) {
 }
 
 function normalizeTownEmergenceMode(value, populationEnabled = true) {
-  if (value === "off" || value === "low" || value === "normal") return value;
+  if (value === "off") return "off";
+  if (value === "limited" || value === "low") return "low";
+  if (value === "high") return "high";
+  if (value === "normal") return "normal";
   return populationEnabled ? "normal" : "low";
+}
+
+function normalizeSubstationRadiusProfile(value) {
+  if (value === "wide" || value === "tight" || value === "standard") return value;
+  return "standard";
+}
+
+function normalizeLineMaintenanceProfile(value) {
+  if (value === "low" || value === "high" || value === "standard") return value;
+  return "standard";
 }
 
 function getMissionTownEmergenceMode(missionId) {
@@ -218,6 +239,18 @@ function getMissionTownEmergenceMode(missionId) {
   if (missionIndex >= 0 && missionIndex <= 2) return "off";
   if (missionIndex >= 0 && missionIndex <= 4) return "low";
   return "normal";
+}
+
+function getMissionSubstationRadiusProfile(mission) {
+  if (mission.mapScale === "Large") return "tight";
+  if (mission.mapScale === "Small") return "wide";
+  return "standard";
+}
+
+function getMissionLineMaintenanceProfile(mission) {
+  if (mission.difficulty === "Expert" || mission.difficulty === "Hard") return "high";
+  if (mission.difficulty === "Easy") return "low";
+  return "standard";
 }
 
 function buildRunConfigFromStandardPreset(presetId) {
@@ -236,14 +269,20 @@ function buildRunConfigFromStandardPreset(presetId) {
     failureStrictness: normalizeFailureStrictness(preset.failureStrictness),
     populationEnabled: population.enabled,
     populationStrength: population.strength,
-    regionFragmentation: preset.regionFragmentation,
-    unlockCostMultiplier: normalizeUnlockProfile(preset.unlockCostProfile),
+    substationRadiusProfile: normalizeSubstationRadiusProfile(preset.substationRadiusProfile),
+    substationRadius: SUBSTATION_RADIUS_BY_PROFILE[
+      normalizeSubstationRadiusProfile(preset.substationRadiusProfile)
+    ],
+    lineMaintenanceProfile: normalizeLineMaintenanceProfile(preset.lineMaintenanceProfile),
+    lineMaintenanceMultiplier: LINE_MAINTENANCE_BY_PROFILE[
+      normalizeLineMaintenanceProfile(preset.lineMaintenanceProfile)
+    ],
     startingBudget: preset.budget,
     runTargetSec: 0,
     mission: null,
     sourcePresetId: preset.id,
     sparseStart: true,
-    townEmergenceMode: "normal",
+    townEmergenceMode: normalizeTownEmergenceMode(preset.townEmergenceMode, population.enabled),
   };
 }
 
@@ -263,8 +302,10 @@ function buildRunConfigFromCampaignMission(missionId) {
     failureStrictness: mission.difficulty === "Easy" ? 0.9 : mission.difficulty === "Normal" ? 1 : mission.difficulty === "Hard" ? 1.14 : 1.25,
     populationEnabled: population.enabled,
     populationStrength: population.strength,
-    regionFragmentation: mission.fragmentation.toLowerCase() === "open" ? "open" : "high",
-    unlockCostMultiplier: mission.fragmentation.toLowerCase() === "open" ? 0.95 : 1.12,
+    substationRadiusProfile: getMissionSubstationRadiusProfile(mission),
+    substationRadius: SUBSTATION_RADIUS_BY_PROFILE[getMissionSubstationRadiusProfile(mission)],
+    lineMaintenanceProfile: getMissionLineMaintenanceProfile(mission),
+    lineMaintenanceMultiplier: LINE_MAINTENANCE_BY_PROFILE[getMissionLineMaintenanceProfile(mission)],
     startingBudget: mission.startingBudget,
     runTargetSec: mission.objective.targetDurationSec,
     mission,
@@ -289,14 +330,23 @@ function buildRunConfigFromCustom(customState) {
     failureStrictness: normalizeFailureStrictness(customState.failureStrictness),
     populationEnabled: population.enabled,
     populationStrength: population.strength,
-    regionFragmentation: customState.regionFragmentation,
-    unlockCostMultiplier: normalizeUnlockProfile(customState.unlockCostProfile),
+    substationRadiusProfile: normalizeSubstationRadiusProfile(customState.substationRadiusProfile),
+    substationRadius: SUBSTATION_RADIUS_BY_PROFILE[
+      normalizeSubstationRadiusProfile(customState.substationRadiusProfile)
+    ],
+    lineMaintenanceProfile: normalizeLineMaintenanceProfile(customState.lineMaintenanceProfile),
+    lineMaintenanceMultiplier: LINE_MAINTENANCE_BY_PROFILE[
+      normalizeLineMaintenanceProfile(customState.lineMaintenanceProfile)
+    ],
     startingBudget: customState.budget,
     runTargetSec: customState.runTargetMinutes * 60,
     mission: null,
     sourceCustom: deepClone(customState),
     sparseStart: true,
-    townEmergenceMode: normalizeTownEmergenceMode(null, population.enabled),
+    townEmergenceMode: normalizeTownEmergenceMode(
+      customState.townEmergenceIntensity,
+      population.enabled
+    ),
   };
 }
 
@@ -356,6 +406,8 @@ class GameRuntime {
     this.tool = TOOL_BUILD;
     this.buildAssetType = "plant";
     this.selectedRegionId = null;
+    this.lineBuildStartRegionId = null;
+    this.lineCostPreview = null;
     this.highlightedAlertId = null;
     this.mapImage = null;
     this.mapImageReady = false;
@@ -406,6 +458,18 @@ class GameRuntime {
     if (this.config.sparseStart == null) {
       this.config.sparseStart = true;
     }
+    this.config.substationRadiusProfile = normalizeSubstationRadiusProfile(
+      this.config.substationRadiusProfile
+    );
+    this.config.substationRadius =
+      Number(this.config.substationRadius) ||
+      SUBSTATION_RADIUS_BY_PROFILE[this.config.substationRadiusProfile];
+    this.config.lineMaintenanceProfile = normalizeLineMaintenanceProfile(
+      this.config.lineMaintenanceProfile
+    );
+    this.config.lineMaintenanceMultiplier =
+      Number(this.config.lineMaintenanceMultiplier) ||
+      LINE_MAINTENANCE_BY_PROFILE[this.config.lineMaintenanceProfile];
     this.config.townEmergenceMode = normalizeTownEmergenceMode(
       this.config.townEmergenceMode,
       this.config.populationEnabled !== false
@@ -581,7 +645,7 @@ class GameRuntime {
 
   createFreshState() {
     const regions = BASE_MAP.regions.map((region) => {
-      const unlocked = unlockedByFragmentation(this.config.regionFragmentation, region.id);
+      const unlocked = true;
       const townCap = this.getTownCapForRegion(region);
       const townCount = this.getSeededTownCount(region, unlocked, townCap);
       const assets = this.getStarterAssetsForRegion(region, unlocked, townCount);
@@ -595,6 +659,9 @@ class GameRuntime {
         nominalBaseDemand: region.baseDemand,
         stableServiceSeconds: townCount > 0 ? 8 : 0,
         outageSeconds: 0,
+        coveredBySubstation: false,
+        coverageSourceId: null,
+        coverageDistance: 0,
         assets,
         resourceProfile: this.createEmptyResourceProfile(),
         demand: demandAnchor,
@@ -611,9 +678,15 @@ class GameRuntime {
 
     const links = BASE_MAP.links.map((link) => ({
       ...deepClone(link),
+      built: false,
+      length: Math.hypot(
+        (findBaseRegion(link.a)?.x || 0) - (findBaseRegion(link.b)?.x || 0),
+        (findBaseRegion(link.a)?.y || 0) - (findBaseRegion(link.b)?.y || 0)
+      ),
+      lineBuildCost: 0,
       used: 0,
-      safeCapacity: link.baseCapacity,
-      hardCapacity: link.baseCapacity * 1.15,
+      safeCapacity: 0,
+      hardCapacity: 0,
       stress: 0,
       overload: false,
     }));
@@ -641,6 +714,7 @@ class GameRuntime {
         },
       ],
       townsEmerged: 0,
+      nextLineId: 1,
       nextTownEmergenceAt: randomRange(44, 70),
       nextEventAt: randomRange(20, 34),
       nextNewsAt: 7,
@@ -659,8 +733,9 @@ class GameRuntime {
     safe.incidents = safe.incidents || [];
     safe.timeline = safe.timeline || [];
     for (const region of safe.regions) {
+      region.unlocked = true;
       region.townCap = Math.max(1, Number(region.townCap) || this.getTownCapForRegion(region));
-      const fallbackTownCount = region.unlocked ? 1 : 0;
+      const fallbackTownCount = 1;
       region.townCount = clamp(
         Number(region.townCount ?? fallbackTownCount),
         0,
@@ -669,12 +744,33 @@ class GameRuntime {
       region.nominalBaseDemand = Number(region.nominalBaseDemand || region.baseDemand || 0);
       region.stableServiceSeconds = Math.max(0, Number(region.stableServiceSeconds || 0));
       region.outageSeconds = Math.max(0, Number(region.outageSeconds || 0));
+      region.coveredBySubstation = !!region.coveredBySubstation;
+      region.coverageSourceId = region.coverageSourceId || null;
+      region.coverageDistance = Math.max(0, Number(region.coverageDistance || 0));
+      if (!region.assets) {
+        region.assets = { plant: 0, substation: 0, storage: 0 };
+      }
+      region.assets.plant = Math.max(0, Number(region.assets.plant || 0));
+      region.assets.substation = Math.max(0, Number(region.assets.substation || 0));
+      region.assets.storage = Math.max(0, Number(region.assets.storage || 0));
+    }
+    for (const link of safe.links) {
+      link.built = !!link.built;
+      if (!Number.isFinite(link.length) || link.length <= 0) {
+        const a = findBaseRegion(link.a);
+        const b = findBaseRegion(link.b);
+        link.length = a && b ? Math.hypot(a.x - b.x, a.y - b.y) : 0;
+      }
+      if (!Number.isFinite(link.lineBuildCost) || link.lineBuildCost < 0) {
+        link.lineBuildCost = 0;
+      }
     }
     if (!safe.nextEventAt) safe.nextEventAt = safe.runtimeSeconds + randomRange(20, 34);
     if (!safe.nextNewsAt) safe.nextNewsAt = safe.runtimeSeconds + 7;
     if (!safe.nextLawsuitEligibleAt) safe.nextLawsuitEligibleAt = safe.runtimeSeconds + 45;
     if (!safe.nextTownEmergenceAt) safe.nextTownEmergenceAt = safe.runtimeSeconds + randomRange(44, 70);
     if (!Number.isFinite(safe.townsEmerged)) safe.townsEmerged = 0;
+    if (!Number.isFinite(safe.nextLineId)) safe.nextLineId = 1;
     safe.totalDemand = safe.totalDemand || 0;
     safe.totalServed = safe.totalServed || 0;
     safe.totalUnmet = safe.totalUnmet || 0;
@@ -982,6 +1078,12 @@ class GameRuntime {
       return;
     }
 
+    if (event.code === "Digit4" || event.code === "KeyL") {
+      this.tool = TOOL_LINE;
+      this.pushHudUpdate();
+      return;
+    }
+
     if (event.code === "KeyX") {
       this.tool = TOOL_DEMOLISH;
       this.pushHudUpdate();
@@ -1015,6 +1117,7 @@ class GameRuntime {
 
     if (event.code === "Escape") {
       this.selectedRegionId = null;
+      this.clearLineSelection();
       this.pushHudUpdate();
       return;
     }
@@ -1055,6 +1158,7 @@ class GameRuntime {
     this.keyPan.left = false;
     this.keyPan.right = false;
     this.resourceRevealHeld = false;
+    this.clearLineSelection();
     this.pointerDown.active = false;
     this.pointerDown.dragging = false;
     this.camera.dragActive = false;
@@ -1151,6 +1255,152 @@ class GameRuntime {
     return this.state.links.find((link) => link.id === linkId) || null;
   }
 
+  findLineBetween(aId, bId) {
+    return (
+      this.state.links.find(
+        (link) => (link.a === aId && link.b === bId) || (link.a === bId && link.b === aId)
+      ) || null
+    );
+  }
+
+  calculateLineLength(a, b) {
+    return Math.hypot(a.x - b.x, a.y - b.y);
+  }
+
+  estimateLineCapacity(length) {
+    return clamp(
+      Math.round(LINE_MAX_CAPACITY - length * LINE_DISTANCE_CAPACITY_FACTOR),
+      LINE_MIN_CAPACITY,
+      LINE_MAX_CAPACITY
+    );
+  }
+
+  estimateLineBuildCost(a, b) {
+    const distance = this.calculateLineLength(a, b);
+    const terrainFactor =
+      ((TERRAIN_COST_MULTIPLIERS[a.terrain] || 1) + (TERRAIN_COST_MULTIPLIERS[b.terrain] || 1)) /
+      2;
+    const rawCost =
+      distance *
+      LINE_BASE_BUILD_COST_PER_WORLD_UNIT *
+      terrainFactor *
+      this.config.infraCostMultiplier *
+      this.getModifierValue("build_cost", 1);
+    return Math.ceil(rawCost);
+  }
+
+  canEndpointHostLine(region) {
+    if (!region) return false;
+    return (region.assets.plant || 0) > 0 || (region.assets.substation || 0) > 0;
+  }
+
+  clearLineSelection() {
+    this.lineBuildStartRegionId = null;
+    this.lineCostPreview = null;
+  }
+
+  handleLineTool(region) {
+    if (!this.lineBuildStartRegionId) {
+      if (!this.canEndpointHostLine(region)) {
+        this.pushAlert(
+          "Line endpoint must have a plant or substation before connecting.",
+          "advisory",
+          4
+        );
+        return;
+      }
+      this.lineBuildStartRegionId = region.id;
+      this.lineCostPreview = null;
+      this.pushAlert(`Line start selected: ${region.name}. Choose endpoint town.`, "advisory", 5);
+      return;
+    }
+
+    const startRegion = this.findRegion(this.lineBuildStartRegionId);
+    if (!startRegion) {
+      this.clearLineSelection();
+      return;
+    }
+    if (startRegion.id === region.id) {
+      this.clearLineSelection();
+      this.pushAlert("Line endpoint cleared.", "advisory", 3);
+      return;
+    }
+    if (!this.canEndpointHostLine(startRegion) || !this.canEndpointHostLine(region)) {
+      this.pushAlert(
+        "Line endpoints require plant/substation infrastructure at both towns.",
+        "warning",
+        5
+      );
+      return;
+    }
+
+    const existing = this.findLineBetween(startRegion.id, region.id);
+    const buildCost = this.estimateLineBuildCost(startRegion, region);
+    this.lineCostPreview = {
+      from: startRegion.id,
+      to: region.id,
+      cost: buildCost,
+      capacity: this.estimateLineCapacity(this.calculateLineLength(startRegion, region)),
+    };
+
+    if (existing && existing.built) {
+      existing.built = false;
+      const refund = Math.max(12, Math.floor((existing.lineBuildCost || buildCost) * 0.42));
+      this.state.budget += refund;
+      this.state.score += 4;
+      this.logTimeline(`Removed Line ${startRegion.name} -> ${region.name} (+${refund} budget).`);
+      this.pushAlert(
+        `Line removed between ${startRegion.name} and ${region.name}.`,
+        "warning",
+        4
+      );
+      this.clearLineSelection();
+      return;
+    }
+
+    if (this.state.budget < buildCost) {
+      this.pushAlert(`Insufficient budget for Line (${buildCost}).`, "warning", 5);
+      return;
+    }
+
+    let line = existing;
+    if (!line) {
+      const length = this.calculateLineLength(startRegion, region);
+      line = {
+        id: `line-${this.state.nextLineId++}`,
+        a: startRegion.id,
+        b: region.id,
+        baseCapacity: this.estimateLineCapacity(length),
+        built: true,
+        length,
+        lineBuildCost: buildCost,
+        used: 0,
+        safeCapacity: 0,
+        hardCapacity: 0,
+        stress: 0,
+        overload: false,
+      };
+      this.state.links.push(line);
+    } else {
+      line.built = true;
+      line.lineBuildCost = buildCost;
+      if (!Number.isFinite(line.length) || line.length <= 0) {
+        line.length = this.calculateLineLength(startRegion, region);
+      }
+      if (!Number.isFinite(line.baseCapacity) || line.baseCapacity <= 0) {
+        line.baseCapacity = this.estimateLineCapacity(line.length);
+      }
+    }
+
+    this.state.budget -= buildCost;
+    this.state.score += 10;
+    this.logTimeline(
+      `Built Line ${startRegion.name} -> ${region.name} (${buildCost} budget, cap ${line.baseCapacity}).`
+    );
+    this.pushAlert(`Line commissioned: ${startRegion.name} to ${region.name}.`, "advisory", 5);
+    this.clearLineSelection();
+  }
+
   handleBuild(region) {
     const rule = ASSET_RULES[this.buildAssetType];
     if (!rule) return;
@@ -1206,31 +1456,6 @@ class GameRuntime {
     this.pushAlert(`${region.name} rerouted to ${region.priority} priority.`, "advisory", 4);
   }
 
-  tryUnlockRegion(region) {
-    if (region.unlocked) return;
-    const baseCost = region.unlockCost * this.config.unlockCostMultiplier;
-    const cost = Math.ceil(baseCost);
-
-    if (this.state.budget < cost) {
-      this.pushAlert(`Cannot unlock ${region.name}: need ${cost} budget.`, "warning", 5);
-      return;
-    }
-
-    region.unlocked = true;
-    this.state.budget -= cost;
-    this.state.score += 30;
-    this.logTimeline(`Unlocked ${region.name} for ${cost} budget.`);
-    if ((region.townCount || 0) > 0) {
-      this.pushAlert(`${region.name} unlocked. New demand obligations activated.`, "warning", 6);
-    } else {
-      this.pushAlert(
-        `${region.name} unlocked. Sparse terrain active; towns may emerge with stable nearby service.`,
-        "advisory",
-        7
-      );
-    }
-  }
-
   handlePrimaryClick() {
     const worldPoint = this.screenToWorld(this.mouse.x, this.mouse.y);
     const region = this.findRegionAt(worldPoint.x, worldPoint.y);
@@ -1242,15 +1467,13 @@ class GameRuntime {
 
     this.selectedRegionId = region.id;
     if (this.tool === TOOL_BUILD) {
-      if (!region.unlocked) {
-        this.tryUnlockRegion(region);
-      } else {
-        this.handleBuild(region);
-      }
+      this.handleBuild(region);
     } else if (this.tool === TOOL_DEMOLISH) {
       this.handleDemolish(region);
     } else if (this.tool === TOOL_REROUTE) {
       this.handleReroute(region);
+    } else if (this.tool === TOOL_LINE) {
+      this.handleLineTool(region);
     }
     this.pushHudUpdate();
   }
@@ -1312,6 +1535,7 @@ class GameRuntime {
     this.expireIncidents();
     this.spawnEventsIfNeeded();
     this.updateDemand(dt);
+    this.updateTownCoverage();
     this.resolveGrid();
     this.updateTownServiceStability(dt);
     this.updateTownEmergence();
@@ -1515,25 +1739,91 @@ class GameRuntime {
     }
   }
 
+  getPoweredSubstationIds() {
+    const powered = new Set();
+    const queue = [];
+
+    for (const region of this.state.regions) {
+      if ((region.assets.substation || 0) <= 0) continue;
+      if ((region.assets.plant || 0) > 0 || (region.assets.storage || 0) > 0) {
+        powered.add(region.id);
+        queue.push(region.id);
+      }
+    }
+
+    while (queue.length) {
+      const currentId = queue.shift();
+      for (const link of this.state.links) {
+        if (!link.built) continue;
+        let nextId = null;
+        if (link.a === currentId) nextId = link.b;
+        if (link.b === currentId) nextId = link.a;
+        if (!nextId || powered.has(nextId)) continue;
+        const nextRegion = this.findRegion(nextId);
+        if (!nextRegion || (nextRegion.assets.substation || 0) <= 0) continue;
+        powered.add(nextId);
+        queue.push(nextId);
+      }
+    }
+
+    return powered;
+  }
+
+  updateTownCoverage() {
+    const poweredSubstations = this.getPoweredSubstationIds();
+    const radius = this.config.substationRadius || SUBSTATION_RADIUS_BY_PROFILE.standard;
+
+    for (const town of this.state.regions) {
+      town.coveredBySubstation = false;
+      town.coverageSourceId = null;
+      town.coverageDistance = 0;
+
+      let bestDistance = Infinity;
+      let bestSource = null;
+      for (const sourceId of poweredSubstations) {
+        const source = this.findRegion(sourceId);
+        if (!source) continue;
+        const distance = Math.hypot(source.x - town.x, source.y - town.y);
+        if (distance > radius) continue;
+        if (distance < bestDistance) {
+          bestDistance = distance;
+          bestSource = sourceId;
+        }
+      }
+
+      if (bestSource) {
+        town.coveredBySubstation = true;
+        town.coverageSourceId = bestSource;
+        town.coverageDistance = bestDistance;
+      }
+    }
+  }
+
   isRegionLivableForTown(region) {
     return LIVABLE_TERRAINS.has(region.terrain);
   }
 
   hasStableNeighborService(region) {
     if (region.id === "capital") {
-      return this.state.reliability >= 58 || region.utilization >= 0.78;
+      return this.state.reliability >= 58 || (region.coveredBySubstation && region.utilization >= 0.74);
+    }
+
+    if (region.coveredBySubstation && region.utilization >= 0.7) {
+      return true;
     }
 
     for (const link of this.state.links) {
       if (link.a !== region.id && link.b !== region.id) continue;
+      if (!link.built) continue;
       if (link.safeCapacity <= 0 || link.overload) continue;
 
       const neighborId = link.a === region.id ? link.b : link.a;
       const neighbor = this.findRegion(neighborId);
-      if (!neighbor || !neighbor.unlocked) continue;
+      if (!neighbor) continue;
 
       const neighborStable =
         ((neighbor.townCount || 0) > 0 ? neighbor.utilization >= 0.8 : true) &&
+        neighbor.coveredBySubstation &&
         (neighbor.outageSeconds || 0) < 5;
       if (neighborStable) {
         return true;
@@ -1544,14 +1834,8 @@ class GameRuntime {
 
   updateTownServiceStability(dt) {
     for (const region of this.state.regions) {
-      if (!region.unlocked) {
-        region.stableServiceSeconds = 0;
-        region.outageSeconds = 0;
-        continue;
-      }
-
       const hasDemand = region.demand > 1;
-      const localStable = !hasDemand || region.utilization >= 0.84;
+      const localStable = !hasDemand || (region.coveredBySubstation && region.utilization >= 0.84);
       const stableNeighbor = this.hasStableNeighborService(region);
       const stable = localStable && stableNeighbor && this.state.reliability >= 52;
 
@@ -1571,6 +1855,15 @@ class GameRuntime {
 
   getTownEmergenceProfile() {
     if (this.config.townEmergenceMode === "off") return null;
+    if (this.config.townEmergenceMode === "high") {
+      return {
+        minStableSeconds: 12,
+        intervalMin: 34,
+        intervalMax: 58,
+        maxEmergences: 14,
+        reliabilityFloor: 52,
+      };
+    }
     if (this.config.townEmergenceMode === "low") {
       return {
         minStableSeconds: 28,
@@ -1601,7 +1894,6 @@ class GameRuntime {
     if (this.state.reliability < profile.reliabilityFloor) return;
 
     const candidates = this.state.regions.filter((region) => {
-      if (!region.unlocked) return false;
       if (!this.isRegionLivableForTown(region)) return false;
       if ((region.townCount || 0) >= (region.townCap || 1)) return false;
       if ((region.stableServiceSeconds || 0) < profile.minStableSeconds) return false;
@@ -1638,7 +1930,7 @@ class GameRuntime {
       link.overload = false;
       const a = this.findRegion(link.a);
       const b = this.findRegion(link.b);
-      if (!a || !b || !a.unlocked || !b.unlocked) {
+      if (!a || !b || !link.built) {
         link.safeCapacity = 0;
         link.hardCapacity = 0;
         continue;
@@ -1650,7 +1942,7 @@ class GameRuntime {
       link.hardCapacity = link.safeCapacity * 1.15;
     }
 
-    const unlocked = this.state.regions.filter((region) => region.unlocked);
+    const unlocked = this.state.regions;
     let pool = 0;
 
     for (const region of unlocked) {
@@ -1665,7 +1957,7 @@ class GameRuntime {
         region.assets.plant * ASSET_RULES.plant.generation * plantBoostMultiplier +
         region.assets.storage * ASSET_RULES.storage.generation * storageBoostMultiplier;
 
-      const localServed = Math.min(localGeneration, region.demand);
+      const localServed = region.coveredBySubstation ? Math.min(localGeneration, region.demand) : 0;
       region.served = localServed;
       region.unmet = Math.max(0, region.demand - localServed);
       pool += Math.max(0, localGeneration - localServed);
@@ -1673,7 +1965,7 @@ class GameRuntime {
 
     const prioritySort = { high: 0, normal: 1, low: 2 };
     const targets = unlocked
-      .filter((region) => region.unmet > 0)
+      .filter((region) => region.unmet > 0 && region.coveredBySubstation)
       .sort((a, b) => {
         const p = prioritySort[a.priority] - prioritySort[b.priority];
         if (p !== 0) return p;
@@ -1729,6 +2021,7 @@ class GameRuntime {
     while (queue.length) {
       const [nodeId, path] = queue.shift();
       for (const link of this.state.links) {
+        if (!link.built) continue;
         if (link.safeCapacity <= 0) continue;
         let nextId = null;
         if (link.a === nodeId) nextId = link.b;
@@ -1748,7 +2041,7 @@ class GameRuntime {
   }
 
   updateEconomyAndReliability(dt) {
-    const unlocked = this.state.regions.filter((region) => region.unlocked);
+    const unlocked = this.state.regions;
 
     const operatingBase = unlocked.reduce((acc, region) => {
       const resource = region.resourceProfile || this.createEmptyResourceProfile();
@@ -1767,6 +2060,13 @@ class GameRuntime {
 
     const operatingMultiplier = this.getModifierValue("operating_cost", 1);
     const operatingCost = operatingBase * operatingMultiplier;
+    const lineMaintenanceCost = this.state.links
+      .filter((link) => link.built)
+      .reduce(
+        (acc, link) =>
+          acc + (link.length || 0) * LINE_BASE_MAINTENANCE_PER_WORLD_UNIT * this.config.lineMaintenanceMultiplier,
+        0
+      );
 
     const revenue = this.state.totalServed * 0.108;
     const unmetPenalty = this.state.totalUnmet * 0.12 * this.config.failureStrictness;
@@ -1774,7 +2074,8 @@ class GameRuntime {
       this.state.links.filter((link) => link.overload).length * 1.4 * this.config.failureStrictness;
     const lawsuitPenalty = this.state.lawsuits * 0.18;
 
-    this.state.budget += (revenue - operatingCost - unmetPenalty - overloadPenalty - lawsuitPenalty) * dt;
+    this.state.budget +=
+      (revenue - operatingCost - lineMaintenanceCost - unmetPenalty - overloadPenalty - lawsuitPenalty) * dt;
 
     const unmetRatio =
       this.state.totalDemand > 0 ? this.state.totalUnmet / this.state.totalDemand : 0;
@@ -1835,14 +2136,26 @@ class GameRuntime {
       this.state.hiddenTrust = clamp(this.state.hiddenTrust + 22, 0, 100);
       this.state.nextLawsuitEligibleAt = this.state.runtimeSeconds + 70;
       this.state.budget -= 140;
-      this.pushAlert("Underserved-region lawsuit filed against the Power Department.", "critical", 8);
-      this.logTimeline("Lawsuit penalty triggered after sustained underserved regions.");
+      this.pushAlert("Underserved-town lawsuit filed against the Power Department.", "critical", 8);
+      this.logTimeline("Lawsuit penalty triggered after sustained underserved town service.");
     }
 
     if (unmetRatio > 0.32) {
       this.pushTransientAlertOnce(
         "grid-stress",
         "Grid stress rising: unmet demand sustained beyond warning threshold.",
+        "warning",
+        4
+      );
+    }
+
+    const uncoveredTowns = this.state.regions.filter(
+      (region) => (region.townCount || 0) > 0 && !region.coveredBySubstation
+    ).length;
+    if (uncoveredTowns > 0) {
+      this.pushTransientAlertOnce(
+        "coverage-gap",
+        `Coverage gap detected: ${uncoveredTowns} town(s) outside powered substation radius.`,
         "warning",
         4
       );
@@ -1889,11 +2202,16 @@ class GameRuntime {
     if (this.config.mode === "campaign" && this.config.mission) {
       if (this.state.runtimeSeconds >= this.config.runTargetSec) {
         const mission = this.config.mission;
-        const unlockedCount = this.state.regions.filter((region) => region.unlocked).length;
+        const servedTowns = this.state.regions.filter(
+          (region) =>
+            (region.townCount || 0) > 0 &&
+            region.coveredBySubstation &&
+            (region.utilization || 0) >= 0.7
+        ).length;
         const objective = mission.objective;
         const objectivePass =
           this.state.reliability >= objective.reliabilityFloor &&
-          unlockedCount >= (objective.requiredUnlocked || 0) &&
+          servedTowns >= (objective.requiredUnlocked || 0) &&
           (objective.budgetFloor == null || this.state.budget >= objective.budgetFloor) &&
           (objective.maxLawsuits == null || this.state.lawsuits <= objective.maxLawsuits);
 
@@ -2067,6 +2385,7 @@ class GameRuntime {
     ctx.clearRect(0, 0, width, height);
     this.drawMapBackdrop(ctx, width, height);
     this.drawLinks(ctx);
+    this.drawTownServiceLinks(ctx);
     this.drawRegions(ctx);
     this.drawOverlay(ctx, width, height);
   }
@@ -2173,9 +2492,10 @@ class GameRuntime {
 
   drawLinks(ctx) {
     for (const link of this.state.links) {
+      if (!link.built) continue;
       const a = this.findRegion(link.a);
       const b = this.findRegion(link.b);
-      if (!a || !b || !a.unlocked || !b.unlocked) continue;
+      if (!a || !b) continue;
 
       const sa = this.worldToScreen(a.x, a.y);
       const sb = this.worldToScreen(b.x, b.y);
@@ -2200,6 +2520,37 @@ class GameRuntime {
       ctx.arc(pulseX, pulseY, 2.5 + Math.min(4, stress * 3), 0, Math.PI * 2);
       ctx.fill();
     }
+  }
+
+  drawTownServiceLinks(ctx) {
+    const zoom = this.zoomLevels[this.camera.zoomIndex];
+    if (zoom <= 0.62) return;
+
+    ctx.save();
+    ctx.strokeStyle = "rgba(170, 238, 206, 0.55)";
+    ctx.lineWidth = clamp(1.1 * zoom, 0.8, 2);
+    ctx.setLineDash([4, 3]);
+
+    for (const town of this.state.regions) {
+      if (!town.coveredBySubstation || !town.coverageSourceId) continue;
+      const source = this.findRegion(town.coverageSourceId);
+      if (!source) continue;
+      if (source.id === town.id) continue;
+
+      const from = this.worldToScreen(source.x, source.y);
+      const to = this.worldToScreen(town.x, town.y);
+      const elbowX = to.x;
+      const elbowY = from.y;
+
+      ctx.beginPath();
+      ctx.moveTo(from.x, from.y);
+      ctx.lineTo(elbowX, elbowY);
+      ctx.lineTo(to.x, to.y);
+      ctx.stroke();
+    }
+
+    ctx.setLineDash([]);
+    ctx.restore();
   }
 
   getTownIconForRegion(region) {
@@ -2258,12 +2609,11 @@ class GameRuntime {
             ? "#d8a46e"
             : "#7ab98a";
 
-      const lockOverlay = region.unlocked ? 0 : 0.58;
       const serviceRatio = region.demand > 0 ? region.served / region.demand : 1;
       const serviceTint =
         serviceRatio > 0.9 ? "rgba(129, 225, 156, 0.45)" : serviceRatio > 0.72 ? "rgba(246, 194, 106, 0.44)" : "rgba(255, 99, 99, 0.52)";
 
-      ctx.fillStyle = `rgba(20, 33, 46, ${0.72 + lockOverlay})`;
+      ctx.fillStyle = "rgba(20, 33, 46, 0.72)";
       ctx.beginPath();
       ctx.arc(point.x, point.y, radius, 0, Math.PI * 2);
       ctx.fill();
@@ -2281,22 +2631,24 @@ class GameRuntime {
       ctx.fill();
       this.drawTownMarkers(ctx, point, radius, region);
 
+      if ((region.assets.substation || 0) > 0 && this.zoomLevels[this.camera.zoomIndex] >= 0.9) {
+        const coverageRadius = (this.config.substationRadius || 300) * this.zoomLevels[this.camera.zoomIndex];
+        ctx.strokeStyle = region.coveredBySubstation
+          ? "rgba(173, 236, 200, 0.33)"
+          : "rgba(241, 188, 128, 0.26)";
+        ctx.lineWidth = 1.2;
+        ctx.setLineDash([6, 6]);
+        ctx.beginPath();
+        ctx.arc(point.x, point.y, coverageRadius, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+
       ctx.lineWidth = selectedId === region.id ? 4 : 2;
       ctx.strokeStyle = selectedId === region.id ? "#f4f7d5" : "rgba(235, 245, 237, 0.5)";
       ctx.beginPath();
       ctx.arc(point.x, point.y, radius, 0, Math.PI * 2);
       ctx.stroke();
-
-      if (!region.unlocked) {
-        ctx.strokeStyle = "rgba(255, 230, 188, 0.5)";
-        ctx.lineWidth = 1;
-        for (let offset = -radius; offset <= radius; offset += 8) {
-          ctx.beginPath();
-          ctx.moveTo(point.x - radius, point.y + offset);
-          ctx.lineTo(point.x + radius, point.y + offset + radius * 0.5);
-          ctx.stroke();
-        }
-      }
 
       const farZoom = this.zoomLevels[this.camera.zoomIndex] <= 0.72;
       if (farZoom) continue;
@@ -2306,9 +2658,7 @@ class GameRuntime {
       ctx.font = `600 ${Math.max(11, 11 * this.zoomLevels[this.camera.zoomIndex])}px "IBM Plex Sans", sans-serif`;
       ctx.fillText(region.name, point.x, point.y - radius * 0.18);
 
-      const demandText = region.unlocked
-        ? `${Math.round(region.served)}/${Math.round(region.demand)} MW`
-        : `Locked: ${Math.ceil(region.unlockCost * this.config.unlockCostMultiplier)} budget`;
+      const demandText = `${Math.round(region.served)}/${Math.round(region.demand)} MW`;
 
       ctx.fillStyle = "rgba(246, 251, 250, 0.92)";
       ctx.font = `500 ${Math.max(10, 10 * this.zoomLevels[this.camera.zoomIndex])}px "IBM Plex Mono", monospace`;
@@ -2317,11 +2667,9 @@ class GameRuntime {
       ctx.fillStyle = "rgba(202, 233, 219, 0.9)";
       ctx.fillText(`Towns ${region.townCount}/${region.townCap}`, point.x, point.y + radius * 0.34);
 
-      if (region.unlocked) {
-        const assetText = `P${region.assets.plant} S${region.assets.substation} B${region.assets.storage}`;
-        ctx.fillStyle = "rgba(194, 229, 212, 0.88)";
-        ctx.fillText(assetText, point.x, point.y + radius * 0.56);
-      }
+      const assetText = `P${region.assets.plant} S${region.assets.substation} B${region.assets.storage}`;
+      ctx.fillStyle = "rgba(194, 229, 212, 0.88)";
+      ctx.fillText(assetText, point.x, point.y + radius * 0.56);
     }
   }
 
@@ -2358,6 +2706,8 @@ class GameRuntime {
       paused: this.paused,
       tool: this.tool,
       buildAssetType: this.buildAssetType,
+      lineSelectionStartRegionId: this.lineBuildStartRegionId,
+      lineCostPreview: this.lineCostPreview,
       resourceLayerVisible: this.resourceRevealHeld,
       townEmergenceMode: this.config.townEmergenceMode,
       townsEmerged: this.state.townsEmerged || 0,
@@ -2375,13 +2725,18 @@ class GameRuntime {
   buildObjectiveStatus() {
     if (this.config.mode === "campaign" && this.config.mission) {
       const mission = this.config.mission;
-      const unlockedCount = this.state.regions.filter((region) => region.unlocked).length;
+      const servedTowns = this.state.regions.filter(
+        (region) =>
+          (region.townCount || 0) > 0 &&
+          region.coveredBySubstation &&
+          (region.utilization || 0) >= 0.7
+      ).length;
       const progress = clamp(this.state.runtimeSeconds / mission.objective.targetDurationSec, 0, 1);
       return {
         title: mission.codename,
         text: mission.objective.description,
         progress,
-        detail: `Unlocked ${unlockedCount}/${mission.objective.requiredUnlocked} | Reliability ${this.state.reliability.toFixed(1)}%`,
+        detail: `Towns stable ${servedTowns}/${mission.objective.requiredUnlocked} | Reliability ${this.state.reliability.toFixed(1)}%`,
       };
     }
 
@@ -2412,6 +2767,8 @@ class GameRuntime {
       tool: this.tool,
       buildAssetType: this.buildAssetType,
       selectedRegionId: this.selectedRegionId,
+      lineBuildStartRegionId: this.lineBuildStartRegionId,
+      lineCostPreview: this.lineCostPreview,
       paused: this.paused,
     };
   }
@@ -2425,6 +2782,7 @@ class GameRuntime {
     if (this.resourceZones.length) {
       this.applyResourceCoverageToRegions();
     }
+    this.updateTownCoverage();
     this.camera = {
       ...this.camera,
       ...(snapshotPayload.camera || {}),
@@ -2439,6 +2797,8 @@ class GameRuntime {
     this.tool = snapshotPayload.tool || TOOL_BUILD;
     this.buildAssetType = snapshotPayload.buildAssetType || "plant";
     this.selectedRegionId = snapshotPayload.selectedRegionId || null;
+    this.lineBuildStartRegionId = snapshotPayload.lineBuildStartRegionId || null;
+    this.lineCostPreview = snapshotPayload.lineCostPreview || null;
     this.paused = !!snapshotPayload.paused;
     this.resourceRevealHeld = false;
     this.pushHudUpdate();
@@ -2471,6 +2831,8 @@ class GameRuntime {
       selectedTool: this.tool,
       selectedBuildAsset: this.buildAssetType,
       selectedRegionId: this.selectedRegionId,
+      lineSelectionStartRegionId: this.lineBuildStartRegionId,
+      lineCostPreview: this.lineCostPreview,
       townEmergence: {
         mode: this.config.townEmergenceMode,
         townsEmerged: this.state.townsEmerged || 0,
@@ -3106,6 +3468,7 @@ export class SaveTheGridApp {
             <span class="floating-chip">Pan <strong>Drag / WASD</strong></span>
             <span class="floating-chip">Resources <strong id="hud-resource-visibility">Hidden (hold R)</strong></span>
             <span class="floating-chip">Towns <strong id="hud-town-emergence">0 emerged</strong></span>
+            <span class="floating-chip">Substation Radius <strong id="hud-substation-radius">0</strong></span>
           </div>
 
           <div class="floating-group floating-bottom-center">
@@ -3113,6 +3476,7 @@ export class SaveTheGridApp {
               <button class="tool-btn floating-dock-btn" data-tool="build" data-testid="tool-build">Build</button>
               <button class="tool-btn floating-dock-btn" data-tool="demolish" data-testid="tool-demolish">Demolish</button>
               <button class="tool-btn floating-dock-btn" data-tool="reroute" data-testid="tool-reroute">Reroute</button>
+              <button class="tool-btn floating-dock-btn" data-tool="line" data-testid="tool-line">Line (4)</button>
               <span class="dock-separator" aria-hidden="true"></span>
               <button class="asset-btn floating-dock-btn" data-asset="plant" data-testid="asset-plant">Plant (1)</button>
               <button class="asset-btn floating-dock-btn" data-asset="substation" data-testid="asset-substation">Sub (2)</button>
@@ -3383,7 +3747,6 @@ export class SaveTheGridApp {
       return;
     }
 
-    const unlockCost = Math.ceil(selected.unlockCost * this.runtime.config.unlockCostMultiplier);
     const resourceProfile = selected.resourceProfile || {
       wind: 0,
       sun: 0,
@@ -3394,16 +3757,34 @@ export class SaveTheGridApp {
     ).toFixed(1)}s | Outage ${(
       selected.outageSeconds || 0
     ).toFixed(1)}s`;
+    const coverageLine = selected.coveredBySubstation
+      ? `Coverage active via ${this.runtime.findRegion(selected.coverageSourceId)?.name || "substation"} (${Math.round(selected.coverageDistance || 0)}u)`
+      : "Coverage gap: outside powered substation radius.";
     const resourceLine = `Resources W${Math.round(resourceProfile.wind * 100)}% S${Math.round(resourceProfile.sun * 100)}% G${Math.round(resourceProfile.natural_gas * 100)}%`;
+    const linePreview =
+      payload.lineSelectionStartRegionId && payload.lineSelectionStartRegionId !== selected.id
+        ? (() => {
+            const start = this.runtime.findRegion(payload.lineSelectionStartRegionId);
+            if (!start) return "";
+            const previewCost = this.runtime.estimateLineBuildCost(start, selected);
+            const previewCapacity = this.runtime.estimateLineCapacity(
+              this.runtime.calculateLineLength(start, selected)
+            );
+            return `<p>Line preview ${start.name} -> ${selected.name}: ${previewCost} budget, cap ${previewCapacity}</p>`;
+          })()
+        : payload.lineSelectionStartRegionId === selected.id
+          ? `<p>Line start selected: ${selected.name}. Pick endpoint.</p>`
+          : "";
     const selectedHtml = `
       <h3>${selected.name}</h3>
       <p>${selected.districtType} | ${selected.climate} climate | ${selected.terrain} terrain</p>
       <p>Priority ${selected.priority.toUpperCase()} | Population ${selected.population.toFixed(1)}</p>
       <p>Demand ${selected.demand.toFixed(1)} | Served ${selected.served.toFixed(1)} | Unmet ${selected.unmet.toFixed(1)}</p>
       <p>${townLine}</p>
+      <p>${coverageLine}</p>
       <p>Assets P${selected.assets.plant} S${selected.assets.substation} B${selected.assets.storage}</p>
       <p>${resourceLine}</p>
-      <p>${selected.unlocked ? "Region active" : `Unlock cost: ${unlockCost}`}</p>
+      ${linePreview}
     `;
     regionContext.innerHTML = selectedHtml;
   }
