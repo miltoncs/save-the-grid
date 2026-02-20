@@ -111,14 +111,14 @@ Terrain effects should be visible and explainable in tooltips.
 
 ## 5. Infrastructure Placement and Line Rules
 
-1. Power plants and substations place on valid map slots.
+1. Power plants and substations place directly on valid map points.
 2. In-game `Line` tool creates manual long-distance links between allowed endpoint pairs:
    - plant to plant,
    - plant to substation,
    - substation to substation,
    - substation to plant.
 3. Storage assets attach to plant/substation clusters.
-4. Demolition has a short cooldown on rebuild at same slot to prevent spam loops.
+4. Demolition has a short cooldown on rebuild at the same point to prevent spam loops.
 
 Placement preview should always show:
 
@@ -164,7 +164,7 @@ Point icon scale target:
    - Show town, plant, and substation point icons at standard size.
    - Show manual `Line` stress states, major incidents, population pressure hotspots, and climate-pressure hotspots.
 3. Near zoom (local view):
-   - Show node slots, placement previews, local capacity stats, fine routing details, substation radius rings, and town growth trend markers.
+   - Show placement points, placement previews, local capacity stats, fine routing details, substation radius rings, and town growth trend markers.
    - Show richer labels/tooltips for nearby towns and grid assets.
    - Show auto-generated orthogonal town service links clearly.
 

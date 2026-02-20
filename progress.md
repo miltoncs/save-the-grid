@@ -412,3 +412,123 @@ Original prompt: Develop the game MVP based on all provided documentation
 ### Remaining TODO / Suggestions
 - Balance tuning: sparse-start reliability drops quickly if player delays expansion; tune starter generation, emergence timing, or early demand pressure.
 - Optional cleanup: rename internal `region` identifiers/functions in code to `town` for full semantic consistency.
+
+## 2026-02-19 (Town-as-point build model verification)
+- Validated current `src/game.js` behavior after entity-model refactor (`town` demand entities + player-built `node` infrastructure anchors).
+- Ran syntax check:
+  - `node --check src/game.js`
+- Ran develop-web-game Playwright client smoke checks:
+  - Open-map build test with multiple clicks: `output/web-game-town-node-check/`
+  - Town-click rejection + open-map build test: `output/web-game-town-block-check-fast/`
+- Confirmed in `render_game_to_text` snapshots:
+  - `towns` remain demand-only entities (`assets` zero by default).
+  - New player infrastructure appears under `infrastructureNodes` with `node-*` ids.
+  - Clicking town icons surfaces advisory alert: "Towns are demand points. Build infrastructure on open map points."
+  - Open-map clicks commission plants at new infrastructure nodes.
+- Visual inspection of screenshots confirms towns render as icon points and new infrastructure renders as separate point nodes.
+- No runtime console/page errors emitted by Playwright client (no `errors-*.json` files in validation outputs).
+
+### TODO / Follow-up
+- Optional: rebalance initial economy/reliability now that rounds begin with no pre-built infrastructure and sparse-start demand can spike quickly.
+- Optional: run full bot scenarios (`smoke-menu-to-run`, `smoke-controls`) after any additional gameplay tuning.
+- Added `Mountaintops Level` slider to interactive terrain app.
+  - Updated UI in `tools/terrain/interactive/index.html`.
+  - Wired mountaintop height percentile in `tools/terrain/interactive/app.js`.
+  - Updated control docs in `tools/terrain/interactive/README.md`.
+- Validation screenshots:
+  - `output/terrain-interactive/desktop-mountaintops-85.png`
+  - `output/terrain-interactive/desktop-mountaintops-99.png`
+- Added generation algorithm toggle to interactive terrain app.
+  - New algorithm buttons: `Topology` and `Midpoint`.
+  - Implemented midpoint displacement (diamond-square) heightmap path in `tools/terrain/interactive/app.js`.
+  - Wired algorithm selection into map generation + stats output.
+- Validation screenshots:
+  - `output/terrain-interactive/desktop-topology-toggle.png`
+  - `output/terrain-interactive/desktop-midpoint-toggle.png`
+
+## 2026-02-19 (Docs Sync: Point Terminology + Infrastructure Endpoint Enforcement)
+- Continued docs-sync pass after latest wording and topology updates.
+- Updated runtime behavior in `src/game.js` so manual `Line` endpoints are strictly infrastructure points:
+  - `canEndpointHostLine` now rejects town entities.
+  - Line tool alerts now explicitly explain that towns are demand points and endpoints must be infrastructure points with plant/substation assets.
+- Hardened simulation topology consistency with docs:
+  - Generation calculation now excludes towns (`computeGenerationForEntity` returns 0 for town entities).
+  - Powered-substation source selection now excludes towns.
+  - Operating and reliability asset contributions now count infrastructure points only.
+- Updated remaining user-facing wording from `Node` to `Point` in selection context copy.
+- Re-validated handcrafted-map selection in Custom Game:
+  - selecting `m03-fuel-shock` correctly propagates to runtime terrain map image and metadata behavior (`metadata: null`).
+
+### Validation
+- Syntax checks:
+  - `node --check src/game.js`
+  - `node --check src/data.js`
+  - `node --check src/main.js`
+- Develop-web-game loop:
+  - `node "$HOME/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js" --url http://127.0.0.1:5180 --actions-file "$HOME/.codex/skills/develop-web-game/references/action_payloads.json" --click-selector "#start-btn" --iterations 4 --pause-ms 300 --screenshot-dir output/web-game-docsync-latest2`
+- Bot scenarios:
+  - `node bot-player/run-bot.mjs --url http://127.0.0.1:5180 --scenario bot-player/scenarios/smoke-controls.json`
+  - `node bot-player/run-bot.mjs --url http://127.0.0.1:5180 --scenario bot-player/scenarios/start-round-demo.json`
+- Targeted runtime assertions:
+  - verified custom-map terrain profile (`m03-fuel-shock`) via `window.render_game_to_text()`.
+  - verified line-tool town click produces endpoint-rejection alert and does not set `lineSelectionStartEntityId`.
+
+## 2026-02-19 (Terrain Lab Rivers)
+- Added river generation to `tools/terrain/interactive/app.js` after height-field generation and sea-level thresholding.
+- Rivers now:
+  - start from random land source cells,
+  - follow downhill flow to lower neighbors,
+  - optionally fork to second-lower neighbors based on fork chance,
+  - continue through local pits via lowest unvisited neighbor fallback,
+  - stop at sea level,
+  - rasterize with constant-width brush (`RIVER_WIDTH_PX = 20`).
+- Wired floating controls:
+  - river source counter (`- / +`),
+  - river forking slider.
+- Updated HUD stats line to include river coverage, source count, and fork percentage.
+- Added counter control styling in `tools/terrain/interactive/styles.css`.
+- Updated controls docs in `tools/terrain/interactive/README.md`.
+
+### Validation
+- `node --check tools/terrain/interactive/app.js`
+- `node /Users/mstafford/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js --url http://127.0.0.1:5173/tools/terrain/interactive/ --actions-file /Users/mstafford/.codex/skills/develop-web-game/references/action_payloads.json --iterations 3 --pause-ms 250 --screenshot-dir output/terrain-rivers`
+- `npx playwright screenshot --full-page http://127.0.0.1:5173/tools/terrain/interactive/ output/terrain-rivers/fullpage-default.png`
+- Custom Playwright interaction run (inline) verified that changing river count and fork chance updates branching and displayed stats.
+
+## 2026-02-19 (Terrain Lab River Reset + Animated River Growth)
+- Added `Reset Rivers` control in `tools/terrain/interactive/index.html`.
+- Added button styling in `tools/terrain/interactive/styles.css`.
+- Updated terrain app river behavior in `tools/terrain/interactive/app.js`:
+  - Added dedicated `riverSeed` so river-only resets can regenerate river networks while preserving terrain seed.
+  - `Reset Rivers` now restores river defaults (`count=6`, `fork=24%`) and reseeds river generation.
+  - Reduced river width from 20px to 12px (`RIVER_WIDTH_PX = 12`).
+  - Added animated river tracing pass (~950ms):
+    - sources appear first,
+    - river paths propagate downstream over time,
+    - mouths/endpoints fade in near animation completion.
+  - Added animation cancellation/replace logic so rapid slider updates do not leave stale frames.
+  - Seed display now shows terrain + river seeds (`Seed T... | R...`).
+- Updated docs in `tools/terrain/interactive/README.md` to include `Reset Rivers`.
+
+### Validation
+- `node --check tools/terrain/interactive/app.js`
+- `node /Users/mstafford/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js --url http://127.0.0.1:5173/tools/terrain/interactive/ --actions-file /Users/mstafford/.codex/skills/develop-web-game/references/action_payloads.json --iterations 3 --pause-ms 250 --screenshot-dir output/terrain-rivers-animated`
+- Playwright interaction verification (inline script):
+  - captured animation snapshots at start/mid/end,
+  - changed river count/fork,
+  - clicked `Reset Rivers` and confirmed defaults + new river seed + rerender animation.
+- Screenshots:
+  - `output/terrain-rivers-animated/anim-00-start.png`
+  - `output/terrain-rivers-animated/anim-01-mid.png`
+  - `output/terrain-rivers-animated/anim-02-end.png`
+  - `output/terrain-rivers-animated/anim-04-after-reset-early.png`
+  - `output/terrain-rivers-animated/anim-05-after-reset-end.png`
+
+## 2026-02-19 (River Visual Slimdown)
+- Reduced river width again for a much thinner result:
+  - `tools/terrain/interactive/app.js`: `RIVER_WIDTH_PX` changed from `12` to `4`.
+  - River brush minimum radius changed from `2` to `1`.
+- Removed colored source/endpoint dot overlays from animated river rendering by deleting marker blending/drawing calls in `composeTerrainFrame`.
+- Validation:
+  - `node --check tools/terrain/interactive/app.js`
+  - screenshot: `output/terrain-rivers-animated/anim-06-narrow-no-dots.png`

@@ -18,6 +18,15 @@
         <button id="regenerate-btn" type="button">Re-generate</button>
       </header>
 
+      <label class="control-row" for="algorithm-toggle">
+        <span>Algorithm</span>
+        <strong id="algorithm-value">Topology</strong>
+      </label>
+      <div id="algorithm-toggle" class="algorithm-toggle" role="group" aria-label="Generation algorithm">
+        <button class="algo-btn is-active" data-algo="topology" type="button">Topology</button>
+        <button class="algo-btn" data-algo="midpoint" type="button">Midpoint</button>
+      </div>
+
       <label class="control-row" for="smoothness-slider">
         <span>Smoothness</span>
         <strong id="smoothness-value">55</strong>
@@ -29,6 +38,28 @@
         <strong id="sea-level-value">58%</strong>
       </label>
       <input id="sea-level-slider" type="range" min="20" max="80" step="1" value="58" />
+
+      <label class="control-row" for="mountaintop-slider">
+        <span>Mountaintops Level</span>
+        <strong id="mountaintop-value">95%</strong>
+      </label>
+      <input id="mountaintop-slider" type="range" min="85" max="99" step="1" value="95" />
+
+      <div class="control-row counter-row">
+        <span>Rivers</span>
+        <div class="counter-controls" aria-label="Number of rivers">
+          <button id="rivers-dec-btn" class="counter-btn" type="button" aria-label="Decrease rivers">-</button>
+          <strong id="rivers-count-value">6</strong>
+          <button id="rivers-inc-btn" class="counter-btn" type="button" aria-label="Increase rivers">+</button>
+        </div>
+      </div>
+
+      <label class="control-row" for="river-fork-slider">
+        <span>River Forking</span>
+        <strong id="river-fork-value">24%</strong>
+      </label>
+      <input id="river-fork-slider" type="range" min="0" max="100" step="1" value="24" />
+      <button id="reset-rivers-btn" class="secondary-btn" type="button">Reset Rivers</button>
 
       <footer class="control-footer">
         <div id="seed-value">Seed 0</div>

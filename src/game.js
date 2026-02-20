@@ -22,8 +22,10 @@ const TOOL_LINE = "line";
 const ASSET_ORDER = ["plant", "substation", "storage"];
 const PRIORITY_ORDER = ["low", "normal", "high"];
 const DRAG_THRESHOLD_PX = 6;
-const TERRAIN_MAP_IMAGE_URL = "/assets/maps/terrain/mockup-terrain-map.png";
-const TERRAIN_MAP_METADATA_URL = "/data/maps/terrain/mockup-terrain-map.metadata.json";
+const DEFAULT_TERRAIN_MAP_ID = "national-core";
+const DEFAULT_TERRAIN_MAP_IMAGE_URL = "/assets/maps/terrain/mockup-terrain-map.png";
+const DEFAULT_TERRAIN_MAP_METADATA_URL = "/data/maps/terrain/mockup-terrain-map.metadata.json";
+const MISSION_TERRAIN_MAP_BASE_URL = "/assets/maps/terrain/mission-terrain-maps";
 const ICON_SET_URLS = {
   town: {
     hamlet: "/assets/icons/circular/town-hamlet.svg",
@@ -152,6 +154,51 @@ function pickTownArchetype(districtType = "") {
   return "rural";
 }
 
+function getMissionTerrainImageUrl(missionId) {
+  return `${MISSION_TERRAIN_MAP_BASE_URL}/${missionId}.png`;
+}
+
+function resolveTerrainMapProfile(config) {
+  const selectedId = String(config?.mapSelectionId || config?.terrainMapId || "").trim();
+  if (selectedId && selectedId !== DEFAULT_TERRAIN_MAP_ID) {
+    const mission = CAMPAIGN_MISSIONS.find((item) => item.id === selectedId);
+    if (mission) {
+      return {
+        id: mission.id,
+        label: `${mission.codename} Terrain`,
+        imageUrl: getMissionTerrainImageUrl(mission.id),
+        metadataUrl: null,
+      };
+    }
+  }
+
+  if (config?.mode === "campaign" && config?.mission?.id) {
+    return {
+      id: config.mission.id,
+      label: `${config.mission.codename} Terrain`,
+      imageUrl: getMissionTerrainImageUrl(config.mission.id),
+      metadataUrl: null,
+    };
+  }
+
+  return {
+    id: DEFAULT_TERRAIN_MAP_ID,
+    label: "National Core Terrain",
+    imageUrl: DEFAULT_TERRAIN_MAP_IMAGE_URL,
+    metadataUrl: DEFAULT_TERRAIN_MAP_METADATA_URL,
+  };
+}
+
+function getMapSelectionOptions() {
+  return [
+    { id: DEFAULT_TERRAIN_MAP_ID, label: "National Core" },
+    ...CAMPAIGN_MISSIONS.map((mission) => ({
+      id: mission.id,
+      label: `${mission.codename} Terrain`,
+    })),
+  ];
+}
+
 function loadImageAsset(url) {
   return new Promise((resolve) => {
     const image = new Image();
@@ -258,6 +305,10 @@ function getMissionLineMaintenanceProfile(mission) {
 function buildRunConfigFromStandardPreset(presetId) {
   const preset = STANDARD_PRESETS.find((item) => item.id === presetId) || STANDARD_PRESETS[0];
   const population = normalizePopulationMode(preset.populationMode);
+  const terrainProfile = resolveTerrainMapProfile({
+    mode: "standard",
+    mapSelectionId: DEFAULT_TERRAIN_MAP_ID,
+  });
   return {
     mode: "standard",
     label: `Standard Run (${preset.label})`,
@@ -283,6 +334,11 @@ function buildRunConfigFromStandardPreset(presetId) {
     runTargetSec: 0,
     mission: null,
     sourcePresetId: preset.id,
+    mapSelectionId: terrainProfile.id,
+    terrainMapId: terrainProfile.id,
+    terrainMapLabel: terrainProfile.label,
+    terrainMapImageUrl: terrainProfile.imageUrl,
+    terrainMapMetadataUrl: terrainProfile.metadataUrl,
     sparseStart: true,
     townEmergenceMode: normalizeTownEmergenceMode(preset.townEmergenceMode, population.enabled),
   };
@@ -291,6 +347,10 @@ function buildRunConfigFromStandardPreset(presetId) {
 function buildRunConfigFromCampaignMission(missionId) {
   const mission = CAMPAIGN_MISSIONS.find((item) => item.id === missionId) || CAMPAIGN_MISSIONS[0];
   const population = normalizePopulationMode(mission.populationMode);
+  const terrainProfile = resolveTerrainMapProfile({
+    mode: "campaign",
+    mission,
+  });
   return {
     mode: "campaign",
     label: `Campaign Mission: ${mission.codename}`,
@@ -312,6 +372,11 @@ function buildRunConfigFromCampaignMission(missionId) {
     runTargetSec: mission.objective.targetDurationSec,
     mission,
     sourceMissionId: mission.id,
+    mapSelectionId: terrainProfile.id,
+    terrainMapId: terrainProfile.id,
+    terrainMapLabel: terrainProfile.label,
+    terrainMapImageUrl: terrainProfile.imageUrl,
+    terrainMapMetadataUrl: terrainProfile.metadataUrl,
     sparseStart: false,
     townEmergenceMode: getMissionTownEmergenceMode(mission, population.enabled),
   };
@@ -319,6 +384,10 @@ function buildRunConfigFromCampaignMission(missionId) {
 
 function buildRunConfigFromCustom(customState) {
   const population = normalizePopulationMode(customState.populationMode);
+  const terrainProfile = resolveTerrainMapProfile({
+    mode: "custom",
+    mapSelectionId: customState.mapSelectionId,
+  });
   return {
     mode: "custom",
     label: "Custom Game",
@@ -343,6 +412,11 @@ function buildRunConfigFromCustom(customState) {
     startingBudget: customState.budget,
     runTargetSec: customState.runTargetMinutes * 60,
     mission: null,
+    mapSelectionId: terrainProfile.id,
+    terrainMapId: terrainProfile.id,
+    terrainMapLabel: terrainProfile.label,
+    terrainMapImageUrl: terrainProfile.imageUrl,
+    terrainMapMetadataUrl: terrainProfile.metadataUrl,
     sourceCustom: deepClone(customState),
     sparseStart: true,
     townEmergenceMode: normalizeTownEmergenceMode(
@@ -476,6 +550,12 @@ class GameRuntime {
       this.config.townEmergenceMode,
       this.config.populationEnabled !== false
     );
+    const terrainProfile = resolveTerrainMapProfile(this.config);
+    this.config.mapSelectionId = terrainProfile.id;
+    this.config.terrainMapId = terrainProfile.id;
+    this.config.terrainMapLabel = terrainProfile.label;
+    this.config.terrainMapImageUrl = terrainProfile.imageUrl;
+    this.config.terrainMapMetadataUrl = terrainProfile.metadataUrl;
   }
 
   createEmptyResourceProfile() {
@@ -508,13 +588,10 @@ class GameRuntime {
 
   getStarterAssetsForRegion(region, seededTowns) {
     if (!this.config.sparseStart) {
-      return deepClone(region.starterAssets);
-    }
-    if (region.id === "capital") {
-      return { plant: 2, substation: 2, storage: 1 };
+      return { plant: 0, substation: 0, storage: 0 };
     }
     if (seededTowns > 0) {
-      return { plant: 0, substation: 1, storage: 0 };
+      return { plant: 0, substation: 0, storage: 0 };
     }
     return { plant: 0, substation: 0, storage: 0 };
   }
@@ -542,16 +619,24 @@ class GameRuntime {
   }
 
   async loadMapAndResourceZones() {
+    const terrainMapImageUrl = this.config.terrainMapImageUrl || DEFAULT_TERRAIN_MAP_IMAGE_URL;
+    const terrainMapMetadataUrl =
+      this.config.terrainMapMetadataUrl == null
+        ? null
+        : this.config.terrainMapMetadataUrl || DEFAULT_TERRAIN_MAP_METADATA_URL;
+
     const imagePromise = new Promise((resolve) => {
       const image = new Image();
       image.onload = () => resolve(image);
       image.onerror = () => resolve(null);
-      image.src = TERRAIN_MAP_IMAGE_URL;
+      image.src = terrainMapImageUrl;
     });
 
-    const metadataPromise = fetch(TERRAIN_MAP_METADATA_URL)
-      .then((response) => (response.ok ? response.json() : null))
-      .catch(() => null);
+    const metadataPromise = terrainMapMetadataUrl
+      ? fetch(terrainMapMetadataUrl)
+          .then((response) => (response.ok ? response.json() : null))
+          .catch(() => null)
+      : Promise.resolve(null);
 
     const [image, metadata] = await Promise.all([imagePromise, metadataPromise]);
 
@@ -1287,7 +1372,7 @@ class GameRuntime {
     const localBiome = this.inferLocalBiomeAtPoint(worldX, worldY);
     return {
       id,
-      name: `Grid Node ${nextIndex}`,
+      name: `Grid Point ${nextIndex}`,
       entityType: "node",
       x: clamp(worldX, 0, BASE_MAP.width),
       y: clamp(worldY, 0, BASE_MAP.height),
@@ -1387,6 +1472,7 @@ class GameRuntime {
 
   canEndpointHostLine(region) {
     if (!region) return false;
+    if (this.isTownEntity(region)) return false;
     return (region.assets.plant || 0) > 0 || (region.assets.substation || 0) > 0;
   }
 
@@ -1398,8 +1484,11 @@ class GameRuntime {
   handleLineTool(region) {
     if (!this.lineBuildStartRegionId) {
       if (!this.canEndpointHostLine(region)) {
+        const text = this.isTownEntity(region)
+          ? "Towns are demand points. Build a plant/substation on an infrastructure point first."
+          : "Line endpoint must have a plant or substation before connecting.";
         this.pushAlert(
-          "Line endpoint must have a plant or substation before connecting.",
+          text,
           "advisory",
           4
         );
@@ -1407,7 +1496,7 @@ class GameRuntime {
       }
       this.lineBuildStartRegionId = region.id;
       this.lineCostPreview = null;
-      this.pushAlert(`Line start selected: ${region.name}. Choose endpoint town.`, "advisory", 5);
+      this.pushAlert(`Line start selected: ${region.name}. Choose endpoint point.`, "advisory", 5);
       return;
     }
 
@@ -1422,8 +1511,11 @@ class GameRuntime {
       return;
     }
     if (!this.canEndpointHostLine(startRegion) || !this.canEndpointHostLine(region)) {
+      const text = this.isTownEntity(region) || this.isTownEntity(startRegion)
+        ? "Line endpoints must be infrastructure points with a plant or substation."
+        : "Line endpoints require plant/substation infrastructure at both points.";
       this.pushAlert(
-        "Line endpoints require plant/substation infrastructure at both towns.",
+        text,
         "warning",
         5
       );
@@ -1497,34 +1589,73 @@ class GameRuntime {
     this.clearLineSelection();
   }
 
-  handleBuild(region) {
+  handleBuild(region, worldPoint) {
     const rule = ASSET_RULES[this.buildAssetType];
     if (!rule) return;
+    let target = region || null;
 
-    if (this.state.runtimeSeconds < region.cooldownUntil) {
+    if (target && this.isTownEntity(target)) {
       this.pushAlert(
-        `${region.name} slot cooling down after demolition.`,
+        "Towns are demand points. Build infrastructure on open map points.",
         "advisory",
         4
       );
-      return;
+      return null;
     }
 
-    const terrainFactor = TERRAIN_COST_MULTIPLIERS[region.terrain] || 1;
+    if (!target) {
+      if (!worldPoint) return null;
+      if (
+        worldPoint.x < 0 ||
+        worldPoint.x > BASE_MAP.width ||
+        worldPoint.y < 0 ||
+        worldPoint.y > BASE_MAP.height
+      ) {
+        this.pushAlert("Cannot build outside map bounds.", "warning", 4);
+        return null;
+      }
+
+      const nearbyNode = this.state.regions.find(
+        (candidate) =>
+          !this.isTownEntity(candidate) &&
+          Math.hypot(candidate.x - worldPoint.x, candidate.y - worldPoint.y) <=
+            this.getTownInteractionRadius(candidate)
+      );
+
+      target = nearbyNode || this.createInfrastructureNode(worldPoint.x, worldPoint.y);
+      if (!nearbyNode) {
+        this.state.regions.push(target);
+        if (this.resourceZones.length) {
+          this.applyResourceCoverageToRegions();
+        }
+      }
+    }
+
+    if (this.state.runtimeSeconds < target.cooldownUntil) {
+      this.pushAlert(
+        `${target.name} location cooling down after demolition.`,
+        "advisory",
+        4
+      );
+      return null;
+    }
+
+    const terrainFactor = TERRAIN_COST_MULTIPLIERS[target.terrain] || 1;
     const globalCostFactor = this.getModifierValue("build_cost", 1);
     const rawCost = rule.cost * terrainFactor * this.config.infraCostMultiplier * globalCostFactor;
     const cost = Math.ceil(rawCost);
 
     if (this.state.budget < cost) {
       this.pushAlert("Insufficient budget for selected build.", "warning", 5);
-      return;
+      return null;
     }
 
-    region.assets[this.buildAssetType] += 1;
+    target.assets[this.buildAssetType] += 1;
     this.state.budget -= cost;
     this.state.score += 5;
-    this.logTimeline(`Built ${rule.label} in ${region.name} (${cost} budget).`);
-    this.pushAlert(`${rule.label} commissioned in ${region.name}.`, "advisory", 4);
+    this.logTimeline(`Built ${rule.label} at ${target.name} (${cost} budget).`);
+    this.pushAlert(`${rule.label} commissioned at ${target.name}.`, "advisory", 4);
+    return target;
   }
 
   handleDemolish(region) {
@@ -1555,6 +1686,14 @@ class GameRuntime {
   handlePrimaryClick() {
     const worldPoint = this.screenToWorld(this.mouse.x, this.mouse.y);
     const region = this.findRegionAt(worldPoint.x, worldPoint.y);
+
+    if (this.tool === TOOL_BUILD) {
+      const target = this.handleBuild(region, worldPoint);
+      this.selectedRegionId = target ? target.id : region ? region.id : null;
+      this.pushHudUpdate();
+      return;
+    }
+
     if (!region) {
       this.selectedRegionId = null;
       this.pushHudUpdate();
@@ -1562,9 +1701,7 @@ class GameRuntime {
     }
 
     this.selectedRegionId = region.id;
-    if (this.tool === TOOL_BUILD) {
-      this.handleBuild(region);
-    } else if (this.tool === TOOL_DEMOLISH) {
+    if (this.tool === TOOL_DEMOLISH) {
       this.handleDemolish(region);
     } else if (this.tool === TOOL_REROUTE) {
       this.handleReroute(region);
@@ -1821,8 +1958,9 @@ class GameRuntime {
     }
   }
 
-  computeGenerationForTown(town) {
-    const resource = town.resourceProfile || this.createEmptyResourceProfile();
+  computeGenerationForEntity(entity) {
+    if (this.isTownEntity(entity)) return 0;
+    const resource = entity.resourceProfile || this.createEmptyResourceProfile();
     const plantBoostMultiplier = clamp(
       1 + resource.wind * 0.16 + resource.sun * 0.14 + resource.natural_gas * 0.2,
       1,
@@ -1830,8 +1968,8 @@ class GameRuntime {
     );
     const storageBoostMultiplier = clamp(1 + resource.wind * 0.05 + resource.sun * 0.08, 1, 1.2);
     return (
-      town.assets.plant * ASSET_RULES.plant.generation * plantBoostMultiplier +
-      town.assets.storage * ASSET_RULES.storage.generation * storageBoostMultiplier
+      entity.assets.plant * ASSET_RULES.plant.generation * plantBoostMultiplier +
+      entity.assets.storage * ASSET_RULES.storage.generation * storageBoostMultiplier
     );
   }
 
@@ -1877,7 +2015,7 @@ class GameRuntime {
 
     for (const town of this.state.regions) {
       const componentId = componentByTown.get(town.id) || town.id;
-      const generation = this.computeGenerationForTown(town);
+      const generation = this.computeGenerationForEntity(town);
       generationByComponent.set(
         componentId,
         (generationByComponent.get(componentId) || 0) + generation
@@ -1885,6 +2023,7 @@ class GameRuntime {
     }
 
     for (const town of this.state.regions) {
+      if (this.isTownEntity(town)) continue;
       if ((town.assets.substation || 0) <= 0) continue;
       const componentId = componentByTown.get(town.id) || town.id;
       if ((generationByComponent.get(componentId) || 0) > 0.0001) {
@@ -2242,7 +2381,7 @@ class GameRuntime {
 
     for (const town of towns) {
       const componentId = componentByTown.get(town.id) || town.id;
-      const generation = this.computeGenerationForTown(town);
+      const generation = this.computeGenerationForEntity(town);
       generationByComponent.set(componentId, (generationByComponent.get(componentId) || 0) + generation);
       town.served = 0;
       town.unmet = town.demand;
@@ -2342,6 +2481,7 @@ class GameRuntime {
     const regions = this.state.regions;
 
     const operatingBase = regions.reduce((acc, region) => {
+      if (this.isTownEntity(region)) return acc;
       const resource = region.resourceProfile || this.createEmptyResourceProfile();
       const plantOperatingMultiplier = clamp(
         1 - resource.natural_gas * 0.12 - resource.wind * 0.05 - resource.sun * 0.04,
@@ -2383,6 +2523,7 @@ class GameRuntime {
         : 0;
 
     const assetReliabilityBonus = regions.reduce((acc, region) => {
+      if (this.isTownEntity(region)) return acc;
       const resource = region.resourceProfile || this.createEmptyResourceProfile();
       const resourceReliability =
         (resource.wind * 0.26 + resource.sun * 0.2 + resource.natural_gas * 0.18) *
@@ -2833,6 +2974,7 @@ class GameRuntime {
     ctx.setLineDash([4, 3]);
 
     for (const town of this.state.regions) {
+      if (!this.isTownEntity(town)) continue;
       if (!town.coveredBySubstation || !town.coverageSourceId) continue;
       const source = this.findRegion(town.coverageSourceId);
       if (!source) continue;
@@ -2855,6 +2997,7 @@ class GameRuntime {
   }
 
   getTownIconForRegion(region) {
+    if (!this.isTownEntity(region)) return null;
     if (region.id === "capital") return this.iconSet.town.capital;
     if ((region.population || 0) >= 52) return this.iconSet.town.city;
     return this.iconSet.town.hamlet;
@@ -2862,6 +3005,9 @@ class GameRuntime {
 
   getTownRenderRadius(region) {
     const zoom = this.zoomLevels[this.camera.zoomIndex];
+    if (!this.isTownEntity(region)) {
+      return clamp(Number(region.radius || 22) * zoom * 0.42, 7, 15);
+    }
     return clamp(Number(region.radius || 60) * zoom * 0.34, 17, 34);
   }
 
@@ -2919,12 +3065,81 @@ class GameRuntime {
     ctx.restore();
   }
 
+  drawInfrastructureNode(ctx, point, radius, region, selectedId) {
+    const zoom = this.zoomLevels[this.camera.zoomIndex];
+    const isSelected = selectedId === region.id;
+    const hasPlant = (region.assets.plant || 0) > 0;
+    const hasSubstation = (region.assets.substation || 0) > 0;
+    const hasStorage = (region.assets.storage || 0) > 0;
+
+    ctx.fillStyle = "rgba(18, 30, 41, 0.78)";
+    ctx.beginPath();
+    ctx.arc(point.x, point.y, radius + 3, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = hasPlant ? "rgba(239, 191, 112, 0.82)" : "rgba(145, 176, 196, 0.72)";
+    ctx.beginPath();
+    ctx.arc(point.x, point.y, radius, 0, Math.PI * 2);
+    ctx.fill();
+
+    if (hasSubstation) {
+      ctx.strokeStyle = "rgba(177, 232, 212, 0.95)";
+      ctx.lineWidth = 1.6;
+      ctx.strokeRect(point.x - radius * 0.65, point.y - radius * 0.65, radius * 1.3, radius * 1.3);
+    }
+
+    if (hasStorage) {
+      ctx.strokeStyle = "rgba(206, 222, 255, 0.9)";
+      ctx.lineWidth = 1.3;
+      ctx.beginPath();
+      ctx.moveTo(point.x, point.y - radius * 0.75);
+      ctx.lineTo(point.x + radius * 0.7, point.y + radius * 0.72);
+      ctx.lineTo(point.x - radius * 0.7, point.y + radius * 0.72);
+      ctx.closePath();
+      ctx.stroke();
+    }
+
+    if (hasSubstation && zoom >= 0.9) {
+      const coverageRadius = (this.config.substationRadius || 300) * zoom;
+      ctx.strokeStyle = "rgba(173, 236, 200, 0.28)";
+      ctx.lineWidth = 1;
+      ctx.setLineDash([6, 6]);
+      ctx.beginPath();
+      ctx.arc(point.x, point.y, coverageRadius, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    ctx.lineWidth = isSelected ? 2.2 : 1.2;
+    ctx.strokeStyle = isSelected ? "#f4f7d5" : "rgba(231, 244, 250, 0.52)";
+    ctx.beginPath();
+    ctx.arc(point.x, point.y, radius + 3, 0, Math.PI * 2);
+    ctx.stroke();
+
+    if (zoom >= 0.95) {
+      ctx.fillStyle = "rgba(236, 246, 252, 0.9)";
+      ctx.textAlign = "center";
+      ctx.font = `500 ${Math.max(9, 9 * zoom)}px "IBM Plex Mono", monospace`;
+      ctx.fillText(region.name, point.x, point.y - radius - 10);
+      ctx.fillText(
+        `P${region.assets.plant || 0} S${region.assets.substation || 0} B${region.assets.storage || 0}`,
+        point.x,
+        point.y + radius + 13
+      );
+    }
+  }
+
   drawRegions(ctx) {
     const selectedId = this.selectedRegionId;
 
     for (const region of this.state.regions) {
       const point = this.worldToScreen(region.x, region.y);
       const radius = this.getTownRenderRadius(region);
+
+      if (!this.isTownEntity(region)) {
+        this.drawInfrastructureNode(ctx, point, radius, region, selectedId);
+        continue;
+      }
 
       const climateColor =
         region.climate === "cold"
@@ -3059,8 +3274,9 @@ class GameRuntime {
       objective,
       alerts: this.state.alerts,
       incidents: this.state.incidents,
-      selectedTown: selected,
+      selectedTown: selected && this.isTownEntity(selected) ? selected : null,
       selectedRegion: selected,
+      selectedEntity: selected,
     });
   }
 
@@ -3149,7 +3365,9 @@ class GameRuntime {
   }
 
   renderGameToText() {
-    const townSnapshots = this.state.regions.map((town) => ({
+    const townSnapshots = this.state.regions
+      .filter((town) => this.isTownEntity(town))
+      .map((town) => ({
       id: town.id,
       name: town.name,
       x: Number(town.x.toFixed(1)),
@@ -3175,7 +3393,19 @@ class GameRuntime {
         naturalGas: Number((town.resourceProfile?.natural_gas || 0).toFixed(3)),
       },
       assets: { ...town.assets },
-    }));
+      }));
+
+    const nodeSnapshots = this.state.regions
+      .filter((entity) => !this.isTownEntity(entity))
+      .map((node) => ({
+        id: node.id,
+        name: node.name,
+        x: Number(node.x.toFixed(1)),
+        y: Number(node.y.toFixed(1)),
+        terrain: node.terrain,
+        climate: node.climate,
+        assets: { ...node.assets },
+      }));
 
     const payload = {
       mode: this.config.mode,
@@ -3202,8 +3432,16 @@ class GameRuntime {
       totalUnmet: Number(this.state.totalUnmet.toFixed(2)),
       selectedTool: this.tool,
       selectedBuildAsset: this.buildAssetType,
-      selectedTownId: this.selectedRegionId,
-      lineSelectionStartTownId: this.lineBuildStartRegionId,
+      selectedEntityId: this.selectedRegionId,
+      selectedTownId:
+        this.selectedRegionId && this.isTownEntity(this.findRegion(this.selectedRegionId))
+          ? this.selectedRegionId
+          : null,
+      lineSelectionStartEntityId: this.lineBuildStartRegionId,
+      lineSelectionStartTownId:
+        this.lineBuildStartRegionId && this.isTownEntity(this.findRegion(this.lineBuildStartRegionId))
+          ? this.lineBuildStartRegionId
+          : null,
       lineCostPreview: this.lineCostPreview,
       townEmergence: {
         mode: this.config.townEmergenceMode,
@@ -3216,8 +3454,13 @@ class GameRuntime {
         ),
       },
       terrainMap: {
-        image: TERRAIN_MAP_IMAGE_URL,
-        metadata: TERRAIN_MAP_METADATA_URL,
+        id: this.config.terrainMapId || DEFAULT_TERRAIN_MAP_ID,
+        label: this.config.terrainMapLabel || "National Core Terrain",
+        image: this.config.terrainMapImageUrl || DEFAULT_TERRAIN_MAP_IMAGE_URL,
+        metadata:
+          this.config.terrainMapMetadataUrl == null
+            ? null
+            : this.config.terrainMapMetadataUrl || DEFAULT_TERRAIN_MAP_METADATA_URL,
         loaded: this.mapImageReady,
         resourceLayerVisible: this.resourceRevealHeld,
         iconSetLoaded: {
@@ -3235,6 +3478,8 @@ class GameRuntime {
         resourceZoneCounts: { ...this.resourceZoneSummary },
       },
       towns: townSnapshots,
+      infrastructurePoints: nodeSnapshots,
+      infrastructureNodes: nodeSnapshots,
       resourceZones: this.resourceZones.map((zone) => ({
         id: zone.id,
         resource: zone.resource,
@@ -3294,7 +3539,10 @@ export class SaveTheGridApp {
     this.suspendedRun = readJsonStorage(STORAGE_KEYS.suspendedRun, null);
 
     this.selectedStandardPresetId = STANDARD_PRESETS[0].id;
-    this.customConfig = deepClone(CUSTOM_PRESETS[0]);
+    this.customConfig = {
+      ...deepClone(CUSTOM_PRESETS[0]),
+      mapSelectionId: DEFAULT_TERRAIN_MAP_ID,
+    };
 
     this.splashTimeout = 0;
     this.boundSkipSplash = () => this.renderMainMenu();
@@ -3542,6 +3790,16 @@ export class SaveTheGridApp {
     const presetOptions = CUSTOM_PRESETS.map((preset) => {
       return `<option value="${preset.id}" ${preset.id === this.customConfig.presetId ? "selected" : ""}>${preset.label}</option>`;
     }).join("");
+    const mapSelectionOptions = getMapSelectionOptions()
+      .map(
+        (mapOption) =>
+          `<option value="${mapOption.id}" ${
+            String(this.customConfig.mapSelectionId || DEFAULT_TERRAIN_MAP_ID) === mapOption.id
+              ? "selected"
+              : ""
+          }>${mapOption.label}</option>`
+      )
+      .join("");
 
     this.root.innerHTML = `
       <section class="screen custom-screen">
@@ -3554,6 +3812,10 @@ export class SaveTheGridApp {
           <label>
             Preset
             <select name="presetId">${presetOptions}</select>
+          </label>
+          <label>
+            Handcrafted Map
+            <select name="mapSelectionId">${mapSelectionOptions}</select>
           </label>
           <label>
             Starting Budget
@@ -3635,7 +3897,13 @@ export class SaveTheGridApp {
     presetSelect.addEventListener("change", () => {
       const preset = CUSTOM_PRESETS.find((item) => item.id === presetSelect.value);
       if (preset) {
-        this.customConfig = deepClone(preset);
+        const retainedMapSelectionId = String(
+          this.customConfig.mapSelectionId || DEFAULT_TERRAIN_MAP_ID
+        );
+        this.customConfig = {
+          ...deepClone(preset),
+          mapSelectionId: retainedMapSelectionId,
+        };
         this.renderCustomSetup();
       }
     });
@@ -3645,6 +3913,7 @@ export class SaveTheGridApp {
       const formData = new FormData(form);
       this.customConfig = {
         presetId: formData.get("presetId"),
+        mapSelectionId: formData.get("mapSelectionId") || DEFAULT_TERRAIN_MAP_ID,
         budget: Number(formData.get("budget")),
         demandGrowthMultiplier: Number(formData.get("demandGrowthMultiplier")),
         eventIntensity: formData.get("eventIntensity"),
@@ -3846,8 +4115,8 @@ export class SaveTheGridApp {
 
           <div class="floating-group floating-bottom-right">
             <div id="region-context" class="floating-card floating-region-context">
-              <h3>Town Context</h3>
-              <p>Select a town on the map.</p>
+              <h3>Selection Context</h3>
+              <p>Select a town or infrastructure point on the map.</p>
             </div>
             <div class="ticker floating-ticker" id="news-ticker">${newsTickerText}</div>
           </div>
@@ -4096,13 +4365,16 @@ export class SaveTheGridApp {
     }
 
     const regionContext = $("#region-context");
-    const selected = payload.selectedTown || payload.selectedRegion;
+    const selected = payload.selectedEntity || payload.selectedTown || payload.selectedRegion;
     if (!regionContext) return;
 
     if (!selected) {
-      regionContext.innerHTML = "<h3>Town Context</h3><p>Select a town on the map.</p>";
+      regionContext.innerHTML =
+        "<h3>Selection Context</h3><p>Select a town or infrastructure point on the map.</p>";
       return;
     }
+
+    const isTown = selected.entityType !== "node";
 
     const resourceProfile = selected.resourceProfile || {
       wind: 0,
@@ -4114,15 +4386,26 @@ export class SaveTheGridApp {
     ).toFixed(1)}s | Outage ${(
       selected.outageSeconds || 0
     ).toFixed(1)}s`;
-    const coverageLine = selected.coveredBySubstation
-      ? `Coverage active via ${this.runtime.findRegion(selected.coverageSourceId)?.name || "substation"} (${Math.round(selected.coverageDistance || 0)}u)`
-      : "Coverage gap: outside powered substation radius.";
+    const coverageLine = isTown
+      ? selected.coveredBySubstation
+        ? `Coverage active via ${this.runtime.findRegion(selected.coverageSourceId)?.name || "substation"} (${Math.round(selected.coverageDistance || 0)}u)`
+        : "Coverage gap: outside powered substation radius."
+      : "Infrastructure point for player-built plants/substations and manual Lines.";
     const resourceLine = `Resources W${Math.round(resourceProfile.wind * 100)}% S${Math.round(resourceProfile.sun * 100)}% G${Math.round(resourceProfile.natural_gas * 100)}%`;
     const linePreview =
       payload.lineSelectionStartRegionId && payload.lineSelectionStartRegionId !== selected.id
         ? (() => {
             const start = this.runtime.findRegion(payload.lineSelectionStartRegionId);
             if (!start) return "";
+            if (isTown || this.runtime.isTownEntity(start)) {
+              return "<p>Line endpoints must be infrastructure points.</p>";
+            }
+            if (
+              !this.runtime.canEndpointHostLine(start) ||
+              !this.runtime.canEndpointHostLine(selected)
+            ) {
+              return "<p>Line endpoint requires a plant or substation.</p>";
+            }
             const previewCost = this.runtime.estimateLineBuildCost(start, selected);
             const previewCapacity = this.runtime.estimateLineCapacity(
               this.runtime.calculateLineLength(start, selected)
@@ -4130,14 +4413,26 @@ export class SaveTheGridApp {
             return `<p>Line preview ${start.name} -> ${selected.name}: ${previewCost} budget, cap ${previewCapacity}</p>`;
           })()
         : payload.lineSelectionStartRegionId === selected.id
-          ? `<p>Line start selected: ${selected.name}. Pick endpoint.</p>`
+          ? `<p>Line start selected: ${selected.name}. Pick endpoint point.</p>`
           : "";
     const selectedHtml = `
       <h3>${selected.name}</h3>
-      <p>${pickTownArchetype(selected.districtType)} town | ${selected.climate} climate | ${selected.terrain} terrain</p>
-      <p>Priority ${selected.priority.toUpperCase()} | Population ${selected.population.toFixed(1)}</p>
-      <p>Demand ${selected.demand.toFixed(1)} | Served ${selected.served.toFixed(1)} | Unmet ${selected.unmet.toFixed(1)}</p>
-      <p>${serviceLine}</p>
+      <p>${
+        isTown
+          ? `${pickTownArchetype(selected.districtType)} town point | ${selected.climate} climate | ${selected.terrain} terrain`
+          : `infrastructure point | ${selected.climate} climate | ${selected.terrain} terrain`
+      }</p>
+      <p>${
+        isTown
+          ? `Priority ${selected.priority.toUpperCase()} | Population ${selected.population.toFixed(1)}`
+          : "Build target: place assets directly on map points"
+      }</p>
+      <p>${
+        isTown
+          ? `Demand ${selected.demand.toFixed(1)} | Served ${selected.served.toFixed(1)} | Unmet ${selected.unmet.toFixed(1)}`
+          : `Demand N/A | Served N/A | Unmet N/A`
+      }</p>
+      <p>${isTown ? serviceLine : "Point stability tracks connected grid performance."}</p>
       <p>${coverageLine}</p>
       <p>Assets P${selected.assets.plant} S${selected.assets.substation} B${selected.assets.storage}</p>
       <p>${resourceLine}</p>
