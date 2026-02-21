@@ -61,6 +61,49 @@ const LINE_BASE_MAINTENANCE_PER_WORLD_UNIT = 0.0036;
 const LINE_DISTANCE_CAPACITY_FACTOR = 0.08;
 const LINE_MIN_CAPACITY = 58;
 const LINE_MAX_CAPACITY = 140;
+const DEV_MODE_BUDGET_FLOOR = 1_000_000_000;
+const TUTORIAL_STEP_DEFINITIONS = [
+  {
+    id: "build_plant",
+    title: "Build a Plant",
+    instruction: "Use Build and Plant (1), then place it on an open map point.",
+  },
+  {
+    id: "build_substation",
+    title: "Build a Substation",
+    instruction: "Use Build and Sub (2), then place it on an open map point.",
+  },
+  {
+    id: "build_line",
+    title: "Build a Line",
+    instruction: "Use Line (4) to connect two valid infrastructure endpoints.",
+  },
+  {
+    id: "service_town",
+    title: "Serve a Town",
+    instruction: "Deliver active power service to at least one town.",
+  },
+  {
+    id: "resource_reveal",
+    title: "Reveal Resources",
+    instruction: "Hold R to reveal the Resource Layer.",
+  },
+  {
+    id: "reroute",
+    title: "Use Reroute",
+    instruction: "Use Reroute on a town point at least once.",
+  },
+  {
+    id: "demolish",
+    title: "Use Demolish",
+    instruction: "Demolish at least one asset.",
+  },
+  {
+    id: "pause_resume",
+    title: "Pause and Resume",
+    instruction: "Press Space or Pause button to pause, then resume simulation.",
+  },
+];
 const SUBSTATION_RADIUS_BY_PROFILE = {
   wide: 370,
   standard: 300,
@@ -426,6 +469,42 @@ function buildRunConfigFromCustom(customState) {
   };
 }
 
+function buildRunConfigForTutorial() {
+  const terrainProfile = resolveTerrainMapProfile({
+    mode: "tutorial",
+    mapSelectionId: DEFAULT_TERRAIN_MAP_ID,
+  });
+  return {
+    mode: "tutorial",
+    label: "Tutorial",
+    leaderboardClass: "custom",
+    leaderboardEligible: false,
+    demandGrowthMultiplier: 0.72,
+    eventIntensity: 0.35,
+    seasonalProfile: "neutral",
+    climateIntensity: 0.8,
+    infraCostMultiplier: 0.86,
+    failureStrictness: 0.65,
+    populationEnabled: false,
+    populationStrength: 0,
+    substationRadiusProfile: "wide",
+    substationRadius: SUBSTATION_RADIUS_BY_PROFILE.wide,
+    lineMaintenanceProfile: "low",
+    lineMaintenanceMultiplier: LINE_MAINTENANCE_BY_PROFILE.low,
+    startingBudget: 5000,
+    runTargetSec: 0,
+    mission: null,
+    sourcePresetId: "tutorial",
+    mapSelectionId: terrainProfile.id,
+    terrainMapId: terrainProfile.id,
+    terrainMapLabel: terrainProfile.label,
+    terrainMapImageUrl: terrainProfile.imageUrl,
+    terrainMapMetadataUrl: terrainProfile.metadataUrl,
+    sparseStart: true,
+    townEmergenceMode: "off",
+  };
+}
+
 class GameRuntime {
   constructor(options) {
     this.canvas = options.canvas;
@@ -509,6 +588,13 @@ class GameRuntime {
 
     this.state = this.snapshot ? this.rehydrateSnapshot(this.snapshot) : this.createFreshState();
     this.ensureRegionResourceProfiles();
+    this.applyDevModeState();
+    if (this.config.mode === "tutorial") {
+      const step = this.getCurrentTutorialStep();
+      if (step) {
+        this.pushAlert(`Tutorial step: ${step.title}. ${step.instruction}`, "advisory", 12);
+      }
+    }
 
     this.resizeObserver = null;
     this.boundResize = () => this.resizeCanvas();
@@ -534,6 +620,7 @@ class GameRuntime {
     if (this.config.sparseStart == null) {
       this.config.sparseStart = true;
     }
+    this.config.devMode = !!this.config.devMode;
     this.config.substationRadiusProfile = normalizeSubstationRadiusProfile(
       this.config.substationRadiusProfile
     );
@@ -556,6 +643,16 @@ class GameRuntime {
     this.config.terrainMapLabel = terrainProfile.label;
     this.config.terrainMapImageUrl = terrainProfile.imageUrl;
     this.config.terrainMapMetadataUrl = terrainProfile.metadataUrl;
+    if (this.config.mode === "tutorial") {
+      this.config.populationEnabled = false;
+      this.config.populationStrength = 0;
+      this.config.seasonalProfile = "neutral";
+      this.config.townEmergenceMode = "off";
+      this.config.eventIntensity = Math.min(0.35, Number(this.config.eventIntensity || 0.35));
+      this.config.startingBudget = Math.max(5000, Number(this.config.startingBudget || 0));
+      this.config.leaderboardEligible = false;
+      this.config.leaderboardClass = "custom";
+    }
   }
 
   createEmptyResourceProfile() {
@@ -616,6 +713,118 @@ class GameRuntime {
         1
       );
     }
+  }
+
+  createTutorialProgressState(existing = null) {
+    const safe = existing && typeof existing === "object" ? existing : {};
+    const totalSteps = TUTORIAL_STEP_DEFINITIONS.length;
+    const completedSteps = clamp(
+      Number(safe.completedSteps || safe.currentStep || 0),
+      0,
+      totalSteps
+    );
+    const completed = !!safe.completed || completedSteps >= totalSteps;
+    return {
+      currentStep: completed ? totalSteps : completedSteps,
+      completedSteps: completed ? totalSteps : completedSteps,
+      totalSteps,
+      completed,
+      pauseSeen: !!safe.pauseSeen,
+      resumeSeen: !!safe.resumeSeen,
+    };
+  }
+
+  getCurrentTutorialStep() {
+    if (this.config.mode !== "tutorial") return null;
+    if (!this.state.tutorial) {
+      this.state.tutorial = this.createTutorialProgressState();
+    }
+    if (this.state.tutorial.completed) return null;
+    return TUTORIAL_STEP_DEFINITIONS[this.state.tutorial.currentStep] || null;
+  }
+
+  completeTutorialStep() {
+    if (this.config.mode !== "tutorial") return;
+    if (!this.state.tutorial) {
+      this.state.tutorial = this.createTutorialProgressState();
+    }
+
+    const currentStep = this.getCurrentTutorialStep();
+    if (!currentStep) return;
+
+    this.state.tutorial.currentStep += 1;
+    this.state.tutorial.completedSteps = this.state.tutorial.currentStep;
+    this.pushAlert(`Tutorial step complete: ${currentStep.title}.`, "advisory", 6);
+    this.logTimeline(`Tutorial step complete: ${currentStep.title}.`);
+
+    if (this.state.tutorial.currentStep >= this.state.tutorial.totalSteps) {
+      this.state.tutorial.completed = true;
+      this.finishRun("victory", "Tutorial complete: core controls verified.");
+      return;
+    }
+
+    const nextStep = this.getCurrentTutorialStep();
+    if (nextStep) {
+      this.pushAlert(
+        `Next tutorial step: ${nextStep.title}. ${nextStep.instruction}`,
+        "advisory",
+        8
+      );
+    }
+  }
+
+  recordTutorialAction(action, details = {}) {
+    if (this.config.mode !== "tutorial") return;
+    const currentStep = this.getCurrentTutorialStep();
+    if (!currentStep) return;
+
+    const matches =
+      (currentStep.id === "build_plant" &&
+        action === "build" &&
+        details.assetType === "plant" &&
+        details.onOpenPoint) ||
+      (currentStep.id === "build_substation" &&
+        action === "build" &&
+        details.assetType === "substation" &&
+        details.onOpenPoint) ||
+      (currentStep.id === "build_line" && action === "line_built") ||
+      (currentStep.id === "service_town" && action === "service_active") ||
+      (currentStep.id === "resource_reveal" && action === "resource_reveal") ||
+      (currentStep.id === "reroute" && action === "reroute" && details.isTown) ||
+      (currentStep.id === "demolish" && action === "demolish") ||
+      (currentStep.id === "pause_resume" && action === "pause_resume");
+
+    if (matches) {
+      this.completeTutorialStep();
+    }
+  }
+
+  evaluateTutorialPassiveProgress() {
+    if (this.config.mode !== "tutorial") return;
+    const currentStep = this.getCurrentTutorialStep();
+    if (!currentStep) return;
+
+    if (currentStep.id === "service_town") {
+      const servedTown = this.state.regions.some(
+        (region) =>
+          this.isTownEntity(region) &&
+          region.coveredBySubstation &&
+          (region.served || 0) > 0.1
+      );
+      if (servedTown) {
+        this.recordTutorialAction("service_active");
+      }
+    }
+  }
+
+  isDevModeEnabled() {
+    return !!this.config.devMode;
+  }
+
+  applyDevModeState() {
+    if (!this.isDevModeEnabled()) return;
+    this.state.budget = Math.max(DEV_MODE_BUDGET_FLOOR, Number(this.state.budget) || 0);
+    this.state.collapseSeconds = 0;
   }
 
   async loadMapAndResourceZones() {
@@ -771,7 +980,7 @@ class GameRuntime {
 
     return {
       runtimeSeconds: 0,
-      budget: this.config.startingBudget,
+      budget: this.isDevModeEnabled() ? DEV_MODE_BUDGET_FLOOR : this.config.startingBudget,
       reliability: 84,
       score: 0,
       hiddenTrust: 75,
@@ -800,6 +1009,7 @@ class GameRuntime {
       nextNewsAt: 7,
       nextLawsuitEligibleAt: 45,
       collapseSeconds: 0,
+      tutorial: this.config.mode === "tutorial" ? this.createTutorialProgressState() : null,
       towns,
       regions: towns,
       links,
@@ -875,6 +1085,11 @@ class GameRuntime {
     safe.totalDemand = safe.totalDemand || 0;
     safe.totalServed = safe.totalServed || 0;
     safe.totalUnmet = safe.totalUnmet || 0;
+    if (this.config.mode === "tutorial") {
+      safe.tutorial = this.createTutorialProgressState(safe.tutorial);
+    } else {
+      safe.tutorial = null;
+    }
     return safe;
   }
 
@@ -1194,6 +1409,7 @@ class GameRuntime {
     if (event.code === "KeyR") {
       if (!this.resourceRevealHeld) {
         this.resourceRevealHeld = true;
+        this.recordTutorialAction("resource_reveal");
         this.render();
       }
       return;
@@ -1267,6 +1483,17 @@ class GameRuntime {
 
   togglePause() {
     this.paused = !this.paused;
+    if (this.config.mode === "tutorial") {
+      this.state.tutorial = this.createTutorialProgressState(this.state.tutorial);
+      if (this.paused) {
+        this.state.tutorial.pauseSeen = true;
+      } else if (this.state.tutorial.pauseSeen) {
+        this.state.tutorial.resumeSeen = true;
+      }
+      if (this.state.tutorial.pauseSeen && this.state.tutorial.resumeSeen) {
+        this.recordTutorialAction("pause_resume");
+      }
+    }
     this.pushAlert(
       this.paused ? "Simulation paused." : "Simulation resumed.",
       this.paused ? "advisory" : "warning",
@@ -1546,7 +1773,7 @@ class GameRuntime {
       return;
     }
 
-    if (this.state.budget < buildCost) {
+    if (!this.isDevModeEnabled() && this.state.budget < buildCost) {
       this.pushAlert(`Insufficient budget for Line (${buildCost}).`, "warning", 5);
       return;
     }
@@ -1580,12 +1807,15 @@ class GameRuntime {
       }
     }
 
-    this.state.budget -= buildCost;
+    if (!this.isDevModeEnabled()) {
+      this.state.budget -= buildCost;
+    }
     this.state.score += 10;
     this.logTimeline(
       `Built Line ${startRegion.name} -> ${region.name} (${buildCost} budget, cap ${line.baseCapacity}).`
     );
     this.pushAlert(`Line commissioned: ${startRegion.name} to ${region.name}.`, "advisory", 5);
+    this.recordTutorialAction("line_built");
     this.clearLineSelection();
   }
 
@@ -1593,6 +1823,7 @@ class GameRuntime {
     const rule = ASSET_RULES[this.buildAssetType];
     if (!rule) return;
     let target = region || null;
+    const clickedOpenPoint = !target;
 
     if (target && this.isTownEntity(target)) {
       this.pushAlert(
@@ -1645,16 +1876,22 @@ class GameRuntime {
     const rawCost = rule.cost * terrainFactor * this.config.infraCostMultiplier * globalCostFactor;
     const cost = Math.ceil(rawCost);
 
-    if (this.state.budget < cost) {
+    if (!this.isDevModeEnabled() && this.state.budget < cost) {
       this.pushAlert("Insufficient budget for selected build.", "warning", 5);
       return null;
     }
 
     target.assets[this.buildAssetType] += 1;
-    this.state.budget -= cost;
+    if (!this.isDevModeEnabled()) {
+      this.state.budget -= cost;
+    }
     this.state.score += 5;
     this.logTimeline(`Built ${rule.label} at ${target.name} (${cost} budget).`);
     this.pushAlert(`${rule.label} commissioned at ${target.name}.`, "advisory", 4);
+    this.recordTutorialAction("build", {
+      assetType: this.buildAssetType,
+      onOpenPoint: clickedOpenPoint,
+    });
     return target;
   }
 
@@ -1674,6 +1911,7 @@ class GameRuntime {
     region.cooldownUntil = this.state.runtimeSeconds + 4.5;
     this.logTimeline(`Demolished ${rule.label} in ${region.name} (+${refund} budget refund).`);
     this.pushAlert(`${rule.label} demolished in ${region.name}.`, "warning", 4);
+    this.recordTutorialAction("demolish");
   }
 
   handleReroute(region) {
@@ -1681,6 +1919,7 @@ class GameRuntime {
     region.priority = PRIORITY_ORDER[(currentIndex + 1) % PRIORITY_ORDER.length];
     this.logTimeline(`${region.name} routing priority set to ${region.priority.toUpperCase()}.`);
     this.pushAlert(`${region.name} rerouted to ${region.priority} priority.`, "advisory", 4);
+    this.recordTutorialAction("reroute", { isTown: this.isTownEntity(region) });
   }
 
   handlePrimaryClick() {
@@ -1770,10 +2009,12 @@ class GameRuntime {
     this.updateDemand(dt);
     this.updateTownCoverage();
     this.resolveGrid();
+    this.evaluateTutorialPassiveProgress();
     this.updateTownServiceStability(dt);
     this.updateTownEmergence();
     this.updateEconomyAndReliability(dt);
     this.updateScoring(dt);
+    this.applyDevModeState();
     this.evaluateObjectiveAndEndConditions(dt);
     this.emitNewsIfNeeded();
 
@@ -1825,6 +2066,9 @@ class GameRuntime {
   }
 
   spawnEventsIfNeeded() {
+    if (this.config.mode === "tutorial") {
+      return;
+    }
     if (this.state.runtimeSeconds < this.state.nextEventAt) {
       return;
     }
@@ -2479,6 +2723,7 @@ class GameRuntime {
 
   updateEconomyAndReliability(dt) {
     const regions = this.state.regions;
+    const tutorialMode = this.config.mode === "tutorial";
 
     const operatingBase = regions.reduce((acc, region) => {
       if (this.isTownEntity(region)) return acc;
@@ -2569,6 +2814,7 @@ class GameRuntime {
     this.state.hiddenTrust = clamp(this.state.hiddenTrust - trustPressure * dt * 1.6, 0, 100);
 
     if (
+      !tutorialMode &&
       this.state.hiddenTrust < 18 &&
       this.state.runtimeSeconds > this.state.nextLawsuitEligibleAt
     ) {
@@ -2578,6 +2824,11 @@ class GameRuntime {
       this.state.budget -= 140;
       this.pushAlert("Underserved-town lawsuit filed against the Power Department.", "critical", 8);
       this.logTimeline("Lawsuit penalty triggered after sustained underserved town service.");
+    }
+
+    if (tutorialMode) {
+      this.state.hiddenTrust = 100;
+      this.state.lawsuits = 0;
     }
 
     if (unmetRatio > 0.32) {
@@ -2628,15 +2879,22 @@ class GameRuntime {
   }
 
   evaluateObjectiveAndEndConditions() {
-    if (this.state.budget <= 0) {
-      this.finishRun("defeat", "Bankruptcy triggered: budget reached zero.");
+    const devMode = this.isDevModeEnabled();
+    if (this.config.mode === "tutorial") {
       return;
     }
 
-    const collapseThreshold = 16 / this.config.failureStrictness;
-    if (this.state.reliability <= collapseThreshold && this.state.collapseSeconds >= 15) {
-      this.finishRun("defeat", "Reliability collapse: sustained national blackout risk.");
-      return;
+    if (!devMode) {
+      if (this.state.budget <= 0) {
+        this.finishRun("defeat", "Bankruptcy triggered: budget reached zero.");
+        return;
+      }
+
+      const collapseThreshold = 16 / this.config.failureStrictness;
+      if (this.state.reliability <= collapseThreshold && this.state.collapseSeconds >= 15) {
+        this.finishRun("defeat", "Reliability collapse: sustained national blackout risk.");
+        return;
+      }
     }
 
     if (this.config.mode === "campaign" && this.config.mission) {
@@ -2657,8 +2915,11 @@ class GameRuntime {
           (objective.budgetFloor == null || this.state.budget >= objective.budgetFloor) &&
           (objective.maxLawsuits == null || this.state.lawsuits <= objective.maxLawsuits);
 
-        if (objectivePass) {
-          this.finishRun("victory", `Mission complete: ${mission.codename}.`);
+        if (objectivePass || devMode) {
+          const reason = objectivePass
+            ? `Mission complete: ${mission.codename}.`
+            : `Mission complete in Dev Mode: ${mission.codename}.`;
+          this.finishRun("victory", reason);
         } else {
           this.finishRun("defeat", `Mission failed: ${mission.codename} objectives not met.`);
         }
@@ -2670,12 +2931,13 @@ class GameRuntime {
       if (this.state.runtimeSeconds >= this.config.runTargetSec) {
         const goodReliability = this.state.reliability >= 64;
         const notBankrupt = this.state.budget > 0;
-        this.finishRun(
-          goodReliability && notBankrupt ? "victory" : "defeat",
-          goodReliability && notBankrupt
-            ? "Custom run target reached with stable grid performance."
-            : "Custom run ended with unstable grid conditions."
-        );
+        if (goodReliability && notBankrupt) {
+          this.finishRun("victory", "Custom run target reached with stable grid performance.");
+        } else if (devMode) {
+          this.finishRun("victory", "Custom run target reached in Dev Mode.");
+        } else {
+          this.finishRun("defeat", "Custom run ended with unstable grid conditions.");
+        }
       }
     }
   }
@@ -3250,6 +3512,7 @@ class GameRuntime {
     this.callbacks.onHud({
       runLabel: this.config.label,
       budget: this.state.budget,
+      devMode: this.isDevModeEnabled(),
       reliability: this.state.reliability,
       unmetDemand: this.state.totalUnmet,
       servedDemand: this.state.totalServed,
@@ -3281,6 +3544,30 @@ class GameRuntime {
   }
 
   buildObjectiveStatus() {
+    if (this.config.mode === "tutorial") {
+      this.state.tutorial = this.createTutorialProgressState(this.state.tutorial);
+      const currentStep = this.getCurrentTutorialStep();
+      const completedSteps = this.state.tutorial.completedSteps || 0;
+      const totalSteps = this.state.tutorial.totalSteps || TUTORIAL_STEP_DEFINITIONS.length;
+      const progress = totalSteps > 0 ? clamp(completedSteps / totalSteps, 0, 1) : 1;
+
+      if (!currentStep) {
+        return {
+          title: "Tutorial",
+          text: "All tutorial steps complete.",
+          progress: 1,
+          detail: `Progress ${totalSteps}/${totalSteps}`,
+        };
+      }
+
+      return {
+        title: `Tutorial: ${currentStep.title}`,
+        text: currentStep.instruction,
+        progress,
+        detail: `Progress ${completedSteps}/${totalSteps}`,
+      };
+    }
+
     if (this.config.mode === "campaign" && this.config.mission) {
       const mission = this.config.mission;
       const requiredStableTowns =
@@ -3361,6 +3648,7 @@ class GameRuntime {
     this.lineCostPreview = snapshotPayload.lineCostPreview || null;
     this.paused = !!snapshotPayload.paused;
     this.resourceRevealHeld = false;
+    this.applyDevModeState();
     this.pushHudUpdate();
   }
 
@@ -3410,6 +3698,7 @@ class GameRuntime {
     const payload = {
       mode: this.config.mode,
       runLabel: this.config.label,
+      devMode: this.isDevModeEnabled(),
       coordinateSystem: {
         origin: "top-left of map world",
         xAxis: "positive right",
@@ -3443,6 +3732,19 @@ class GameRuntime {
           ? this.lineBuildStartRegionId
           : null,
       lineCostPreview: this.lineCostPreview,
+      tutorial:
+        this.config.mode === "tutorial"
+          ? {
+              completed: !!this.state.tutorial?.completed,
+              currentStep: Number(this.state.tutorial?.currentStep || 0),
+              completedSteps: Number(this.state.tutorial?.completedSteps || 0),
+              totalSteps: Number(
+                this.state.tutorial?.totalSteps || TUTORIAL_STEP_DEFINITIONS.length
+              ),
+              currentStepId: this.getCurrentTutorialStep()?.id || null,
+              currentStepTitle: this.getCurrentTutorialStep()?.title || null,
+            }
+          : null,
       townEmergence: {
         mode: this.config.townEmergenceMode,
         townsEmerged: this.state.townsEmerged || 0,
@@ -3537,6 +3839,8 @@ export class SaveTheGridApp {
       missionBest: {},
     });
     this.suspendedRun = readJsonStorage(STORAGE_KEYS.suspendedRun, null);
+    this.devMode = !!readJsonStorage(STORAGE_KEYS.devMode, false);
+    this.tutorialCompleted = !!readJsonStorage(STORAGE_KEYS.tutorialCompleted, false);
 
     this.selectedStandardPresetId = STANDARD_PRESETS[0].id;
     this.customConfig = {
@@ -3616,6 +3920,7 @@ export class SaveTheGridApp {
     this.cleanupRuntime();
 
     const hasContinue = !!this.suspendedRun;
+    const tutorialLabel = this.tutorialCompleted ? "Tutorial (Completed)" : "Tutorial";
 
     this.root.innerHTML = `
       <section class="screen menu-screen">
@@ -3625,6 +3930,7 @@ export class SaveTheGridApp {
             <p class="menu-copy">Direct national power strategy through build, demolish, reroute, and line-routing decisions.</p>
             <div class="menu-actions">
               ${hasContinue ? '<button class="action-btn" id="menu-continue">Continue Run</button>' : ""}
+              <button class="action-btn action-btn-primary" id="menu-tutorial">${tutorialLabel}</button>
               <button class="action-btn action-btn-primary" id="start-btn">Quick Start</button>
               <button class="action-btn action-btn-primary" id="menu-new-run">New Run</button>
               <button class="action-btn" id="menu-campaign">Campaign Missions</button>
@@ -3632,8 +3938,11 @@ export class SaveTheGridApp {
               <button class="action-btn" id="menu-cosmetics" disabled>Cosmetics (Soon)</button>
               <button class="action-btn" id="menu-records">Records</button>
               <button class="action-btn" id="menu-settings">Settings</button>
-              <button class="action-btn" id="menu-exit">Exit</button>
             </div>
+            <label class="menu-dev-toggle" for="menu-dev-mode">
+              <input type="checkbox" id="menu-dev-mode" ${this.devMode ? "checked" : ""}>
+              <span>Dev Mode: infinite money + no defeat</span>
+            </label>
             <p class="menu-footer">Local best score: ${this.bestScoreOverall()}</p>
           </aside>
           <div class="menu-map-preview" aria-hidden="true">
@@ -3664,13 +3973,24 @@ export class SaveTheGridApp {
       const config = buildRunConfigFromStandardPreset(this.selectedStandardPresetId);
       this.startRun(config);
     });
+    this.root.querySelector("#menu-tutorial")?.addEventListener("click", () => {
+      const config = buildRunConfigForTutorial();
+      this.startRun(config);
+    });
     this.root.querySelector("#menu-new-run")?.addEventListener("click", () => this.renderStandardSetup());
     this.root.querySelector("#menu-campaign")?.addEventListener("click", () => this.renderCampaignSelect());
     this.root.querySelector("#menu-custom")?.addEventListener("click", () => this.renderCustomSetup());
     this.root.querySelector("#menu-records")?.addEventListener("click", () => this.renderRecordsScreen());
     this.root.querySelector("#menu-settings")?.addEventListener("click", () => this.renderSettingsScreen());
-    this.root.querySelector("#menu-exit")?.addEventListener("click", () => {
-      this.pushToast("Exit is disabled in browser builds. Close the tab to leave.");
+    this.root.querySelector("#menu-dev-mode")?.addEventListener("change", (event) => {
+      const enabled = !!event.currentTarget?.checked;
+      this.devMode = enabled;
+      writeJsonStorage(STORAGE_KEYS.devMode, enabled);
+      this.pushToast(
+        enabled
+          ? "Dev Mode enabled: infinite budget and defeat disabled."
+          : "Dev Mode disabled."
+      );
     });
   }
 
@@ -3686,6 +4006,22 @@ export class SaveTheGridApp {
     if (!all.length) return "0";
     const best = all.reduce((acc, run) => (run.finalScore > acc ? run.finalScore : acc), 0);
     return String(best);
+  }
+
+  applyDevModeToRunConfig(runConfig) {
+    const next = deepClone(runConfig || {});
+    const devMode = !!this.devMode;
+    next.devMode = devMode;
+    if (devMode) {
+      next.leaderboardEligible = false;
+      next.leaderboardClass = "custom";
+      if (next.label && !String(next.label).includes("[DEV]")) {
+        next.label = `${next.label} [DEV]`;
+      }
+    } else if (next.label) {
+      next.label = String(next.label).replace(/\s*\[DEV\]$/, "");
+    }
+    return next;
   }
 
   renderStandardSetup() {
@@ -4203,10 +4539,11 @@ export class SaveTheGridApp {
     this.root.innerHTML = this.buildRunScreenMarkup("National bulletin feed online.");
 
     const canvas = this.root.querySelector("#game-canvas");
+    const effectiveRunConfig = this.applyDevModeToRunConfig(runConfig);
 
     this.runtime = new GameRuntime({
       canvas,
-      runConfig,
+      runConfig: effectiveRunConfig,
       settings: this.settings,
       callbacks: {
         onHud: (payload) => this.updateRunHud(payload),
@@ -4238,10 +4575,15 @@ export class SaveTheGridApp {
     this.root.innerHTML = this.buildRunScreenMarkup("Resuming archived session...");
 
     const canvas = this.root.querySelector("#game-canvas");
+    const effectiveRunConfig = this.applyDevModeToRunConfig(snapshot.runConfig);
+    const snapshotForRuntime = {
+      ...snapshot,
+      runConfig: effectiveRunConfig,
+    };
 
     this.runtime = new GameRuntime({
       canvas,
-      runConfig: snapshot.runConfig,
+      runConfig: effectiveRunConfig,
       snapshot: snapshot.gameState,
       settings: this.settings,
       callbacks: {
@@ -4255,10 +4597,10 @@ export class SaveTheGridApp {
       },
     });
 
-    this.runtime.hydrateRuntimeState(snapshot);
+    this.runtime.hydrateRuntimeState(snapshotForRuntime);
     this.runtime.start();
     this.attachRunUiListeners();
-    this.suspendedRun = snapshot;
+    this.suspendedRun = snapshotForRuntime;
   }
 
   updateRunHud(payload) {
@@ -4293,7 +4635,7 @@ export class SaveTheGridApp {
     }
 
     if (runLabelNode) runLabelNode.textContent = payload.runLabel;
-    budgetNode.textContent = Math.round(payload.budget).toString();
+    budgetNode.textContent = payload.devMode ? "INF" : Math.round(payload.budget).toString();
     servedNode.textContent = payload.servedDemand.toFixed(1);
     reliabilityNode.textContent = `${payload.reliability.toFixed(1)}%`;
     unmetNode.textContent = payload.unmetDemand.toFixed(1);
@@ -4453,6 +4795,11 @@ export class SaveTheGridApp {
 
     this.suspendedRun = null;
     writeJsonStorage(STORAGE_KEYS.suspendedRun, null);
+
+    if (summary.config.mode === "tutorial" && summary.result === "victory") {
+      this.tutorialCompleted = true;
+      writeJsonStorage(STORAGE_KEYS.tutorialCompleted, true);
+    }
 
     const runClass = summary.leaderboardEligible ? summary.runClass : "custom";
     const targetBucket = this.records[runClass] ? runClass : "custom";

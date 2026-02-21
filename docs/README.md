@@ -35,6 +35,7 @@ If a document mixes both, split it into one design doc and one implementation do
 
 Current gameplay direction highlights:
 
+- Tutorial mode is a guided no-fail onboarding run accessed from Main Menu.
 - Early levels use small maps that keep needs and infrastructure easy to observe.
 - Basic level starts are intentionally sparse: mostly terrain, few towns, little/no prebuilt grid.
 - Later maps are larger and focus on longer routing distances and denser town networks.

@@ -9,63 +9,126 @@
   <body>
     <canvas id="terrain-canvas" aria-label="Generated terrain map"></canvas>
 
-    <section class="floating-controls" aria-label="Terrain controls">
+    <section id="floating-controls" class="floating-controls" aria-label="Terrain controls">
+      <button
+        id="panel-toggle-btn"
+        class="panel-toggle-btn"
+        type="button"
+        aria-expanded="true"
+        aria-controls="controls-body"
+        aria-label="Minimize controls"
+      >
+        -
+      </button>
+
       <header class="controls-header">
         <div>
-          <h1>Terrain Lab</h1>
-          <p>Interactive topology preview</p>
+          <h1 id="panel-title">Terrain Lab</h1>
+          <p id="panel-subtitle">Interactive topology preview</p>
         </div>
-        <button id="regenerate-btn" type="button">Re-generate</button>
+        <div class="header-actions">
+          <button id="regenerate-btn" type="button">Re-generate</button>
+        </div>
       </header>
 
-      <label class="control-row" for="algorithm-toggle">
-        <span>Algorithm</span>
-        <strong id="algorithm-value">Topology</strong>
-      </label>
-      <div id="algorithm-toggle" class="algorithm-toggle" role="group" aria-label="Generation algorithm">
-        <button class="algo-btn is-active" data-algo="topology" type="button">Topology</button>
-        <button class="algo-btn" data-algo="midpoint" type="button">Midpoint</button>
-      </div>
+      <div id="controls-body" class="controls-body">
+        <div id="terrain-controls-group" class="mode-controls is-active">
+          <label class="control-row" for="algorithm-toggle">
+            <span>Algorithm</span>
+            <strong id="algorithm-value">Topology</strong>
+          </label>
+          <div id="algorithm-toggle" class="algorithm-toggle" role="group" aria-label="Generation algorithm">
+            <button class="algo-btn is-active" data-algo="topology" type="button">Topology</button>
+            <button class="algo-btn" data-algo="midpoint" type="button">Midpoint</button>
+          </div>
 
-      <label class="control-row" for="smoothness-slider">
-        <span>Smoothness</span>
-        <strong id="smoothness-value">55</strong>
-      </label>
-      <input id="smoothness-slider" type="range" min="0" max="100" step="1" value="55" />
+          <label class="control-row" for="smoothness-slider">
+            <span>Smoothness</span>
+            <strong id="smoothness-value">55</strong>
+          </label>
+          <input id="smoothness-slider" type="range" min="0" max="100" step="1" value="55" />
 
-      <label class="control-row" for="sea-level-slider">
-        <span>Sea Level</span>
-        <strong id="sea-level-value">58%</strong>
-      </label>
-      <input id="sea-level-slider" type="range" min="20" max="80" step="1" value="58" />
+          <label class="control-row" for="continent-scale-slider">
+            <span>Continent Scale</span>
+            <strong id="continent-scale-value">100%</strong>
+          </label>
+          <input id="continent-scale-slider" type="range" min="50" max="200" step="1" value="100" />
 
-      <label class="control-row" for="mountaintop-slider">
-        <span>Mountaintops Level</span>
-        <strong id="mountaintop-value">95%</strong>
-      </label>
-      <input id="mountaintop-slider" type="range" min="85" max="99" step="1" value="95" />
+          <label class="control-row" for="sea-level-slider">
+            <span>Sea Level</span>
+            <strong id="sea-level-value">58%</strong>
+          </label>
+          <input id="sea-level-slider" type="range" min="20" max="80" step="1" value="58" />
 
-      <div class="control-row counter-row">
-        <span>Rivers</span>
-        <div class="counter-controls" aria-label="Number of rivers">
-          <button id="rivers-dec-btn" class="counter-btn" type="button" aria-label="Decrease rivers">-</button>
-          <strong id="rivers-count-value">6</strong>
-          <button id="rivers-inc-btn" class="counter-btn" type="button" aria-label="Increase rivers">+</button>
+          <label class="control-row" for="mountaintop-slider">
+            <span>Mountaintops Level</span>
+            <strong id="mountaintop-value">95%</strong>
+          </label>
+          <input id="mountaintop-slider" type="range" min="85" max="99" step="1" value="95" />
+
+          <div class="control-row counter-row">
+            <span>Rivers</span>
+            <strong id="rivers-count-value">6</strong>
+          </div>
+          <div class="river-actions">
+            <button id="reset-rivers-btn" class="secondary-btn" type="button">Reset Rivers</button>
+            <button id="remove-all-rivers-btn" class="secondary-btn" type="button">Remove All Rivers</button>
+          </div>
         </div>
+
+        <div id="resource-controls-group" class="mode-controls is-hidden">
+          <label class="control-row" for="resource-type-select">
+            <span>Resource Type</span>
+            <strong id="resource-type-value">Wind</strong>
+          </label>
+          <select id="resource-type-select" class="resource-select">
+            <option value="wind">Wind</option>
+            <option value="sun">Sun</option>
+            <option value="gas">Natural Gas</option>
+          </select>
+
+          <label class="control-row" for="resource-snap-slider">
+            <span>Vertex Snap</span>
+            <strong id="resource-snap-value">16 px</strong>
+          </label>
+          <input id="resource-snap-slider" type="range" min="6" max="36" step="1" value="16" />
+
+          <label class="control-row" for="resource-strength-slider">
+            <span>Zone Strength</span>
+            <strong id="resource-strength-value">70%</strong>
+          </label>
+          <input id="resource-strength-slider" type="range" min="10" max="100" step="1" value="70" />
+
+          <div class="control-row counter-row">
+            <span>Draft Vertices</span>
+            <strong id="resource-draft-count-value">0</strong>
+          </div>
+
+          <div class="control-row counter-row">
+            <span>Resource Zones</span>
+            <strong id="resource-zones-count-value">0</strong>
+          </div>
+
+          <div class="resource-actions">
+            <button id="close-draft-btn" class="secondary-btn" type="button">Close Draft Polygon</button>
+            <button id="undo-draft-vertex-btn" class="secondary-btn" type="button">Undo Draft Vertex</button>
+            <button id="clear-draft-btn" class="secondary-btn" type="button">Clear Draft</button>
+            <button id="undo-zone-btn" class="secondary-btn" type="button">Undo Last Zone</button>
+            <button id="clear-zones-btn" class="secondary-btn" type="button">Clear Zones</button>
+          </div>
+        </div>
+
+        <footer class="control-footer">
+          <div id="seed-value">Seed 0</div>
+          <div id="stats-value">Generating...</div>
+        </footer>
       </div>
-
-      <label class="control-row" for="river-fork-slider">
-        <span>River Forking</span>
-        <strong id="river-fork-value">24%</strong>
-      </label>
-      <input id="river-fork-slider" type="range" min="0" max="100" step="1" value="24" />
-      <button id="reset-rivers-btn" class="secondary-btn" type="button">Reset Rivers</button>
-
-      <footer class="control-footer">
-        <div id="seed-value">Seed 0</div>
-        <div id="stats-value">Generating...</div>
-      </footer>
     </section>
+
+    <nav id="mode-toggle" class="mode-toggle" aria-label="Editor mode">
+      <button class="mode-btn is-active" data-mode="terrain" type="button">Terrain</button>
+      <button class="mode-btn" data-mode="resources" type="button">Resources</button>
+    </nav>
 
     <script type="module" src="./app.js"></script>
   </body>

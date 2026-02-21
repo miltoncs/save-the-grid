@@ -1,7 +1,7 @@
 # Frontend and UX Design
 
 Status: Draft v0.1  
-Last updated: 2026-02-19
+Last updated: 2026-02-20
 
 Reference: See `INSPIRATION.md` for the map-first UI inspiration baseline.
 
@@ -55,13 +55,13 @@ Primary user-facing surfaces:
 ### Core Navigation
 
 1. Continue Run (only visible when a valid suspended run exists).
-2. New Run.
-3. Campaign Missions.
-4. Custom Game.
-5. Cosmetics.
-6. Records.
-7. Settings.
-8. Exit.
+2. Tutorial.
+3. New Run.
+4. Campaign Missions.
+5. Custom Game.
+6. Cosmetics.
+7. Records.
+8. Settings.
 
 ### Layout Concept
 

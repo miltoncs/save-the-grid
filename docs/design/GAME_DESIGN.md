@@ -1,7 +1,7 @@
 # Energy Directory: Grid of Nations
 
 Status: Draft v0.1  
-Last updated: 2026-02-19
+Last updated: 2026-02-20
 
 ## 1. High Concept
 
@@ -25,7 +25,7 @@ The player is the Energy Directory for a fictional country. In real time, they b
 5. Storytelling is present but lightweight and non-intrusive.
 6. Simulation depth should remain relatively shallow for readability and pace.
 7. Gameplay map perspective is 2D overhead only.
-8. Initial product includes three play surfaces: Standard Run, Campaign Missions, and Custom Game.
+8. Initial product includes four play surfaces: Tutorial, Standard Run, Campaign Missions, and Custom Game.
 9. Completing a level unlocks the next level; there are no material completion rewards.
 10. V1 maps are handcrafted (procedural generation deferred).
 11. Visual style is flat 2D with limited color palettes and minimal gradients.

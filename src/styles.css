@@ -225,6 +225,21 @@ select {
   font-size: 0.95rem;
 }
 
+.menu-dev-toggle {
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-soft);
+  font-size: 0.9rem;
+}
+
+.menu-dev-toggle input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent-amber);
+}
+
 .menu-map-preview {
   border: 1px solid var(--line-faint);
   border-radius: 22px;

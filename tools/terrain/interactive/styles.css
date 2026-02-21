@@ -44,6 +44,7 @@ body {
   background: linear-gradient(165deg, rgba(16, 28, 41, 0.82), var(--panel));
   backdrop-filter: blur(8px);
   box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
 }
 
 .controls-header {
@@ -52,6 +53,13 @@ body {
   justify-content: space-between;
   gap: 10px;
   margin-bottom: 12px;
+}
+
+.header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-right: 34px;
 }
 
 .controls-header h1 {
@@ -83,6 +91,63 @@ body {
 #regenerate-btn:hover {
   border-color: #a5dcff;
   background: linear-gradient(180deg, rgba(57, 99, 137, 0.72), rgba(32, 66, 96, 0.72));
+}
+
+.panel-toggle-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  border: 1px solid rgba(137, 176, 208, 0.56);
+  border-radius: 8px;
+  background: rgba(18, 33, 47, 0.66);
+  color: #d8ebff;
+  cursor: pointer;
+  font-size: 1.05rem;
+  font-weight: 700;
+  z-index: 3;
+}
+
+.panel-toggle-btn:hover {
+  border-color: rgba(153, 204, 240, 0.82);
+  background: rgba(29, 51, 72, 0.74);
+}
+
+.controls-body {
+  display: block;
+}
+
+.mode-controls {
+  display: block;
+}
+
+.mode-controls.is-hidden {
+  display: none;
+}
+
+.floating-controls.is-collapsed {
+  width: min(280px, calc(100vw - 32px));
+  padding-bottom: 10px;
+}
+
+.floating-controls.is-collapsed .controls-header {
+  margin-bottom: 0;
+  align-items: center;
+  padding-right: 34px;
+}
+
+.floating-controls.is-collapsed .controls-header p {
+  display: none;
+}
+
+.floating-controls.is-collapsed .controls-body {
+  display: none;
 }
 
 .control-row {
@@ -168,6 +233,23 @@ input[type="range"] {
   accent-color: #83d1ff;
 }
 
+.resource-select {
+  width: 100%;
+  margin-top: 6px;
+  border: 1px solid rgba(126, 165, 198, 0.55);
+  border-radius: 9px;
+  padding: 8px 10px;
+  background: rgba(20, 34, 48, 0.72);
+  color: #e8f3ff;
+  font-size: 0.9rem;
+}
+
+.resource-select:focus {
+  outline: none;
+  border-color: rgba(150, 218, 255, 0.95);
+  box-shadow: 0 0 0 2px rgba(131, 209, 255, 0.2);
+}
+
 .secondary-btn {
   margin-top: 10px;
   width: 100%;
@@ -187,6 +269,36 @@ input[type="range"] {
   background: rgba(29, 51, 72, 0.74);
 }
 
+.river-actions {
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.river-actions .secondary-btn {
+  margin-top: 0;
+}
+
+.resource-actions {
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.resource-actions #close-draft-btn {
+  grid-column: 1 / -1;
+}
+
+.resource-actions #clear-zones-btn {
+  grid-column: 1 / -1;
+}
+
+.resource-actions .secondary-btn {
+  margin-top: 0;
+}
+
 .control-footer {
   margin-top: 12px;
   padding-top: 10px;
@@ -196,6 +308,45 @@ input[type="range"] {
   font-family: "IBM Plex Mono", "Consolas", monospace;
   font-size: 0.76rem;
   color: #b8cde2;
+}
+
+.mode-toggle {
+  position: fixed;
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%);
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  width: min(320px, calc(100vw - 32px));
+  padding: 8px;
+  border-radius: 14px;
+  border: 1px solid rgba(125, 160, 190, 0.36);
+  background: linear-gradient(170deg, rgba(11, 21, 33, 0.86), rgba(9, 17, 27, 0.8));
+  backdrop-filter: blur(8px);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.4);
+}
+
+.mode-btn {
+  border: 1px solid rgba(126, 165, 198, 0.42);
+  border-radius: 10px;
+  padding: 8px 10px;
+  background: rgba(20, 34, 48, 0.62);
+  color: #d3e5f6;
+  font-size: 0.86rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.mode-btn:hover {
+  border-color: rgba(153, 204, 240, 0.8);
+}
+
+.mode-btn.is-active {
+  border-color: rgba(126, 215, 255, 0.95);
+  color: #f0f9ff;
+  background: linear-gradient(180deg, rgba(53, 94, 128, 0.85), rgba(27, 58, 83, 0.8));
+  box-shadow: inset 0 0 0 1px rgba(116, 205, 255, 0.25);
 }
 
 @media (max-width: 640px) {
@@ -213,5 +364,18 @@ input[type="range"] {
   #regenerate-btn {
     padding: 7px 10px;
     font-size: 0.8rem;
+  }
+
+  .panel-toggle-btn {
+    width: 26px;
+    height: 26px;
+    top: 7px;
+    right: 7px;
+    font-size: 1rem;
+  }
+
+  .mode-toggle {
+    bottom: 10px;
+    width: calc(100vw - 20px);
   }
 }

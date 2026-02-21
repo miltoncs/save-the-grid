@@ -1,51 +1,133 @@
 const canvas = document.getElementById("terrain-canvas");
 const ctx = canvas.getContext("2d", { alpha: false });
 
+const floatingControls = document.getElementById("floating-controls");
+const panelToggleBtn = document.getElementById("panel-toggle-btn");
+const panelTitle = document.getElementById("panel-title");
+const panelSubtitle = document.getElementById("panel-subtitle");
 const regenerateBtn = document.getElementById("regenerate-btn");
+const terrainControlsGroup = document.getElementById("terrain-controls-group");
+const resourceControlsGroup = document.getElementById("resource-controls-group");
 const algorithmValue = document.getElementById("algorithm-value");
 const algorithmButtons = Array.from(document.querySelectorAll(".algo-btn"));
 const smoothnessSlider = document.getElementById("smoothness-slider");
+const continentScaleSlider = document.getElementById("continent-scale-slider");
 const seaLevelSlider = document.getElementById("sea-level-slider");
 const mountaintopSlider = document.getElementById("mountaintop-slider");
-const riversDecBtn = document.getElementById("rivers-dec-btn");
-const riversIncBtn = document.getElementById("rivers-inc-btn");
 const riversCountValue = document.getElementById("rivers-count-value");
-const riverForkSlider = document.getElementById("river-fork-slider");
 const resetRiversBtn = document.getElementById("reset-rivers-btn");
+const removeAllRiversBtn = document.getElementById("remove-all-rivers-btn");
+const resourceTypeSelect = document.getElementById("resource-type-select");
+const resourceSnapSlider = document.getElementById("resource-snap-slider");
+const resourceStrengthSlider = document.getElementById("resource-strength-slider");
+const resourceTypeValue = document.getElementById("resource-type-value");
+const resourceSnapValue = document.getElementById("resource-snap-value");
+const resourceStrengthValue = document.getElementById("resource-strength-value");
+const resourceDraftCountValue = document.getElementById("resource-draft-count-value");
+const resourceZonesCountValue = document.getElementById("resource-zones-count-value");
+const closeDraftBtn = document.getElementById("close-draft-btn");
+const undoDraftVertexBtn = document.getElementById("undo-draft-vertex-btn");
+const clearDraftBtn = document.getElementById("clear-draft-btn");
+const undoZoneBtn = document.getElementById("undo-zone-btn");
+const clearZonesBtn = document.getElementById("clear-zones-btn");
+const modeButtons = Array.from(document.querySelectorAll(".mode-btn"));
 const smoothnessValue = document.getElementById("smoothness-value");
+const continentScaleValue = document.getElementById("continent-scale-value");
 const seaLevelValue = document.getElementById("sea-level-value");
 const mountaintopValue = document.getElementById("mountaintop-value");
-const riverForkValue = document.getElementById("river-fork-value");
 const seedValue = document.getElementById("seed-value");
 const statsValue = document.getElementById("stats-value");
 
 const COLORS = {
   water: [68, 134, 195],
-  river: [84, 158, 222],
+  river: [68, 134, 195],
   plains: [132, 190, 116],
   mountain: [204, 175, 136],
   mountaintop: [246, 246, 244],
 };
 
-const RIVER_COUNT_MIN = 0;
-const RIVER_COUNT_MAX = 24;
-const RIVER_DEFAULT_COUNT = clamp(Number(riversCountValue.textContent) || 6, RIVER_COUNT_MIN, RIVER_COUNT_MAX);
-const RIVER_DEFAULT_FORK = clamp(Number(riverForkSlider.value) || 24, 0, 100);
+const RIVER_DEFAULT_COUNT = Math.max(0, Math.round(Number(riversCountValue.textContent) || 6));
 const RIVER_WIDTH_PX = 3;
 const RIVER_ANIMATION_MS = 950;
+const SOURCE_REMOVE_RADIUS_PX = 18;
+const RESOURCE_REMOVE_RADIUS_PX = 14;
+const RESOURCE_VERTEX_RENDER_RADIUS = 4;
+const DELETE_PREVIEW_FILL = "rgba(255, 58, 58, 0.2)";
+const DELETE_PREVIEW_STROKE = "rgba(255, 86, 86, 0.9)";
+const DELETE_PREVIEW_STROKE_WIDTH = 2;
+const VIEW_MIN_ZOOM = 0.25;
+const VIEW_MAX_ZOOM = 5;
+const VIEW_ZOOM_STEP = 1.14;
+const VIEW_DRAG_THRESHOLD_PX = 6;
+const VIEW_KEYPAN_SPEED_PX_PER_SEC = 700;
+
+const RESOURCE_ZONE_STYLES = {
+  wind: {
+    label: "Wind",
+    fill: "rgba(106, 212, 255, 0.28)",
+    stroke: "rgba(138, 223, 255, 0.92)",
+  },
+  sun: {
+    label: "Sun",
+    fill: "rgba(255, 210, 97, 0.28)",
+    stroke: "rgba(255, 223, 142, 0.96)",
+  },
+  gas: {
+    label: "Natural Gas",
+    fill: "rgba(144, 192, 255, 0.24)",
+    stroke: "rgba(172, 209, 255, 0.94)",
+  },
+};
 
 const state = {
   seed: randomSeed(),
   riverSeed: randomSeed(),
+  editorMode: "terrain",
   algorithm: "topology",
   riverCount: RIVER_DEFAULT_COUNT,
+  controlsCollapsed: false,
+  resourceZones: [],
+  resourceDraftVertices: [],
+  manualRiverSources: [],
+  suppressedRiverSources: [],
   renderToken: 0,
   animationFrameId: 0,
+  currentOutput: null,
   lastRaster: null,
+  deletePreview: {
+    active: false,
+    clientX: 0,
+    clientY: 0,
+  },
+  view: {
+    zoom: 1,
+    offsetX: 0,
+    offsetY: 0,
+    pointerDown: false,
+    isPanning: false,
+    pointerStartX: 0,
+    pointerStartY: 0,
+    startOffsetX: 0,
+    startOffsetY: 0,
+    keyPan: {
+      up: false,
+      down: false,
+      left: false,
+      right: false,
+      frameId: 0,
+      lastTs: 0,
+    },
+  },
 };
 
 let resizeTimer = 0;
 let sliderTimer = 0;
+
+function clearPendingSliderRegenerate() {
+  if (!sliderTimer) return;
+  window.clearTimeout(sliderTimer);
+  sliderTimer = 0;
+}
 
 function clamp(value, lo, hi) {
   return Math.max(lo, Math.min(hi, value));
@@ -62,6 +144,14 @@ function smoothstep01(t) {
 
 function randomSeed() {
   return Math.floor(Math.random() * 0xffffffff) >>> 0;
+}
+
+function getResourceStyle(type) {
+  return RESOURCE_ZONE_STYLES[type] || RESOURCE_ZONE_STYLES.wind;
+}
+
+function resourceTypeLabel(type) {
+  return getResourceStyle(type).label;
 }
 
 function createMulberry32(seed) {
@@ -171,8 +261,9 @@ function blurHeightField(source, width, height, passes) {
   return field;
 }
 
-function buildHeightFieldTopology(width, height, seed, smoothness) {
+function buildHeightFieldTopology(width, height, seed, smoothness, continentScalePercent = 100) {
   const smoothnessNorm = clamp(smoothness / 100, 0, 1);
+  const continentScale = clamp(continentScalePercent / 100, 0.5, 2);
   const heights = new Float32Array(width * height);
 
   const warpStrength = lerp(0.12, 0.035, smoothnessNorm);
@@ -196,17 +287,25 @@ function buildHeightFieldTopology(width, height, seed, smoothness) {
       const wx = nx + warpX;
       const wy = ny + warpY;
 
-      const dx = (wx - 0.52) / 0.8;
-      const dy = (wy - 0.53) / 0.66;
+      const lowWx = ((wx - 0.52) * continentScale) + 0.52;
+      const lowWy = ((wy - 0.53) * continentScale) + 0.53;
+
+      const dx = (lowWx - 0.52) / 0.8;
+      const dy = (lowWy - 0.53) / 0.66;
       const radial = Math.sqrt((dx * dx) + (dy * dy));
 
       let continent = 1 - radial;
-      continent += 0.19 * Math.sin((wx * 4.6) + (wy * 2.3));
-      continent += 0.14 * Math.sin((wx * 2.1) - (wy * 3.9));
-      continent += 0.11 * fractalNoise(wx * 1.8, wy * 1.8, seed ^ 0x001f1f1f, 3);
+      continent += 0.19 * Math.sin((lowWx * 4.6) + (lowWy * 2.3));
+      continent += 0.14 * Math.sin((lowWx * 2.1) - (lowWy * 3.9));
+      continent += 0.11 * fractalNoise(lowWx * 1.8, lowWy * 1.8, seed ^ 0x001f1f1f, 3);
       continent = clamp(continent, -1, 1);
 
-      const macro = fractalNoise(wx * macroFreq, wy * macroFreq, seed ^ 0x001a2b3c, 5);
+      const macro = fractalNoise(
+        lowWx * macroFreq,
+        lowWy * macroFreq,
+        seed ^ 0x001a2b3c,
+        5
+      );
       const detail = fractalNoise(wx * detailFreq, wy * detailFreq, seed ^ 0x004d5e6f, 4);
       const ridge = 1 - Math.abs(fractalNoise(wx * ridgeFreq, wy * ridgeFreq, seed ^ 0x00778899, 3));
 
@@ -327,11 +426,11 @@ function buildHeightFieldMidpoint(width, height, seed, smoothness) {
   return blurPasses > 0 ? blurHeightField(heights, width, height, blurPasses) : heights;
 }
 
-function buildHeightField(width, height, seed, smoothness, algorithm) {
+function buildHeightField(width, height, seed, smoothness, algorithm, continentScalePercent = 100) {
   if (algorithm === "midpoint") {
     return buildHeightFieldMidpoint(width, height, seed, smoothness);
   }
-  return buildHeightFieldTopology(width, height, seed, smoothness);
+  return buildHeightFieldTopology(width, height, seed, smoothness, continentScalePercent);
 }
 
 function buildSlopeField(heights, width, height) {
@@ -367,13 +466,9 @@ function findNeighborFlowTargets(
 ) {
   let lowerCount = 0;
   let lowestIdx = -1;
-  let secondLowestIdx = -1;
   let lowestHeight = Infinity;
-  let secondLowestHeight = Infinity;
   let lowestAnyIdx = -1;
-  let secondLowestAnyIdx = -1;
   let lowestAnyHeight = Infinity;
-  let secondLowestAnyHeight = Infinity;
 
   const y0 = Math.max(0, y - 1);
   const y1 = Math.min(height - 1, y + 1);
@@ -390,26 +485,16 @@ function findNeighborFlowTargets(
       if (visitStamp && visitStamp[idx] === branchId) continue;
 
       if (neighborHeight < lowestAnyHeight) {
-        secondLowestAnyHeight = lowestAnyHeight;
-        secondLowestAnyIdx = lowestAnyIdx;
         lowestAnyHeight = neighborHeight;
         lowestAnyIdx = idx;
-      } else if (neighborHeight < secondLowestAnyHeight) {
-        secondLowestAnyHeight = neighborHeight;
-        secondLowestAnyIdx = idx;
       }
 
       if (neighborHeight >= currentHeight - 1e-6) continue;
 
       lowerCount += 1;
       if (neighborHeight < lowestHeight) {
-        secondLowestHeight = lowestHeight;
-        secondLowestIdx = lowestIdx;
         lowestHeight = neighborHeight;
         lowestIdx = idx;
-      } else if (neighborHeight < secondLowestHeight) {
-        secondLowestHeight = neighborHeight;
-        secondLowestIdx = idx;
       }
     }
   }
@@ -417,9 +502,7 @@ function findNeighborFlowTargets(
   return {
     lowerCount,
     lowestIdx,
-    secondLowestIdx,
     lowestAnyIdx,
-    secondLowestAnyIdx,
   };
 }
 
@@ -476,19 +559,27 @@ function buildRiverMask(
   height,
   seaLevel,
   riverCount,
-  riverForkChancePercent,
-  riverSeed
+  riverSeed,
+  manualSourceIndices = [],
+  blockedSourceIndices = [],
+  animateNewestSourceOnly = false
 ) {
-  const targetSources = Math.max(0, Math.round(riverCount));
+  const targetAutoSources = Math.max(0, Math.round(riverCount));
   const riverMask = new Uint8Array(width * height);
   const riverArrivalStep = new Uint32Array(width * height);
+  const newRiverMask = new Uint8Array(width * height);
+  const newRiverArrivalStep = new Uint32Array(width * height);
   const mouthMask = new Uint8Array(width * height);
 
-  if (targetSources === 0) {
+  if (targetAutoSources === 0 && manualSourceIndices.length === 0) {
     return {
       riverMask,
       riverArrivalStep,
+      newRiverMask,
+      newRiverArrivalStep,
       maxArrivalStep: 1,
+      newRiverMaxArrivalStep: 1,
+      hasNewRiverAnimation: false,
       sourceCells: [],
       mouthCells: [],
       sourceCount: 0,
@@ -496,47 +587,102 @@ function buildRiverMask(
     };
   }
 
-  const forkChance = clamp(riverForkChancePercent / 100, 0, 1);
   const seedSalt =
     (riverSeed ^
-      0x52f18e33 ^
-      Math.imul(targetSources + 1, 2654435761) ^
-      Math.imul(Math.round(forkChance * 1000) + 1, 1597334677)) >>> 0;
+      0x52f18e33) >>> 0;
   const rand = createMulberry32(seedSalt);
 
   const sourceMask = new Uint8Array(width * height);
+  const blockedSourceMask = new Uint8Array(width * height);
   const spineMask = new Uint8Array(width * height);
   const orderedSpineCells = [];
-  const sources = [];
+  const orderedSpineOwners = [];
+  const autoSources = [];
+
+  const blockedRadius = Math.max(4, SOURCE_REMOVE_RADIUS_PX);
+  for (let i = 0; i < blockedSourceIndices.length; i += 1) {
+    const idx = blockedSourceIndices[i];
+    if (!Number.isInteger(idx) || idx < 0 || idx >= heights.length) continue;
+    const x = idx % width;
+    const y = Math.floor(idx / width);
+    stampCircle(blockedSourceMask, width, height, x, y, blockedRadius, null, 0);
+  }
 
   const minSourceSpacing = Math.max(8, Math.round(Math.min(width, height) * 0.04));
-  const maxSourceAttempts = Math.max(300, targetSources * 240);
+  const maxSourceAttempts = Math.max(300, targetAutoSources * 240);
   const sourceMinRise = 0.04;
+  let autoSourcesAdded = 0;
 
-  for (let attempt = 0; attempt < maxSourceAttempts && sources.length < targetSources; attempt += 1) {
+  for (let attempt = 0; attempt < maxSourceAttempts && autoSourcesAdded < targetAutoSources; attempt += 1) {
     const x = Math.floor(rand() * width);
     const y = Math.floor(rand() * height);
     const idx = (y * width) + x;
     const h = heights[idx];
     const minRise = attempt < Math.floor(maxSourceAttempts * 0.7) ? sourceMinRise : 0;
 
+    if (blockedSourceMask[idx]) continue;
     if (h <= seaLevel + minRise) continue;
     if (hasNearbySource(sourceMask, width, height, x, y, minSourceSpacing)) continue;
 
     const neighbors = findNeighborFlowTargets(heights, width, height, x, y, h);
     if (neighbors.lowerCount === 0 || neighbors.lowestIdx < 0) continue;
 
-    sources.push(idx);
+    autoSources.push(idx);
     sourceMask[idx] = 1;
+    autoSourcesAdded += 1;
   }
 
-  const stack = sources.slice();
+  const validManualSources = [];
+  const manualSeen = new Set();
+  for (let i = 0; i < manualSourceIndices.length; i += 1) {
+    const idx = manualSourceIndices[i];
+    if (!Number.isInteger(idx) || idx < 0 || idx >= heights.length) continue;
+    if (blockedSourceMask[idx]) continue;
+    if (heights[idx] <= seaLevel || manualSeen.has(idx)) continue;
+    manualSeen.add(idx);
+    validManualSources.push(idx);
+  }
+
+  const sources = autoSources.slice();
+  const sourceSet = new Set(sources);
+  for (let i = 0; i < validManualSources.length; i += 1) {
+    const idx = validManualSources[i];
+    if (sourceSet.has(idx)) continue;
+    sourceSet.add(idx);
+    sources.push(idx);
+  }
+
+  if (sources.length === 0) {
+    return {
+      riverMask,
+      riverArrivalStep,
+      newRiverMask,
+      newRiverArrivalStep,
+      maxArrivalStep: 1,
+      newRiverMaxArrivalStep: 1,
+      hasNewRiverAnimation: false,
+      sourceCells: [],
+      mouthCells: [],
+      sourceCount: 0,
+      riverPixels: 0,
+    };
+  }
+
+  let newestSourceId = -1;
+  if (animateNewestSourceOnly && validManualSources.length > 0) {
+    const newestManualSource = validManualSources[validManualSources.length - 1];
+    newestSourceId = sources.indexOf(newestManualSource);
+  }
+
+  const stack = sources.map((idx, sourceId) => ({ idx, sourceId }));
   const maxStepsPerBranch = Math.max(140, Math.round((width + height) * 3.2));
   const visitStamp = new Uint32Array(width * height);
   let branchId = 1;
 
   while (stack.length > 0) {
-    let current = stack.pop();
+    const branch = stack.pop();
+    const sourceId = branch.sourceId;
+    let current = branch.idx;
     let steps = 0;
     branchId += 1;
 
@@ -547,6 +693,7 @@ function buildRiverMask(
       if (!spineMask[current]) {
         spineMask[current] = 1;
         orderedSpineCells.push(current);
+        orderedSpineOwners.push(sourceId);
       }
 
       visitStamp[current] = branchId;
@@ -579,13 +726,6 @@ function buildRiverMask(
         break;
       }
 
-      if (neighbors.lowerCount > 1 && neighbors.secondLowestIdx >= 0 && rand() < forkChance) {
-        const forkIdx = neighbors.secondLowestIdx;
-        if (!spineMask[forkIdx] && heights[forkIdx] > seaLevel) {
-          stack.push(forkIdx);
-        }
-      }
-
       if (spineMask[primaryIdx]) {
         break;
       }
@@ -596,11 +736,17 @@ function buildRiverMask(
   }
 
   const riverRadius = Math.max(1, Math.floor(RIVER_WIDTH_PX / 2));
+  let newRiverStep = 0;
   for (let i = 0; i < orderedSpineCells.length; i += 1) {
     const idx = orderedSpineCells[i];
     const x = idx % width;
     const y = Math.floor(idx / width);
     stampCircle(riverMask, width, height, x, y, riverRadius, riverArrivalStep, i + 1);
+
+    if (orderedSpineOwners[i] === newestSourceId) {
+      newRiverStep += 1;
+      stampCircle(newRiverMask, width, height, x, y, riverRadius, newRiverArrivalStep, newRiverStep);
+    }
   }
 
   let riverPixels = 0;
@@ -620,7 +766,11 @@ function buildRiverMask(
   return {
     riverMask,
     riverArrivalStep,
+    newRiverMask,
+    newRiverArrivalStep,
     maxArrivalStep: Math.max(1, orderedSpineCells.length),
+    newRiverMaxArrivalStep: Math.max(1, newRiverStep),
+    hasNewRiverAnimation: newestSourceId >= 0 && newRiverStep > 0,
     sourceCells: sources,
     mouthCells,
     sourceCount: sources.length,
@@ -658,8 +808,8 @@ function composeTerrainFrame(output, progress, targetPixels) {
   const clampedProgress = clamp(progress, 0, 1);
   targetPixels.set(output.basePixels);
 
-  const riverCutoff = Math.max(0, Math.floor(output.river.maxArrivalStep * clampedProgress));
-  const riverArrivalStep = output.river.riverArrivalStep;
+  const riverCutoff = Math.max(0, Math.floor(output.animationMaxArrivalStep * clampedProgress));
+  const riverArrivalStep = output.animationArrivalStep;
   const riverShade = output.riverShade;
 
   for (let idx = 0; idx < riverArrivalStep.length; idx += 1) {
@@ -676,6 +826,94 @@ function composeTerrainFrame(output, progress, targetPixels) {
   }
 }
 
+function rasterIndexToNormalized(idx, width, height) {
+  const x = idx % width;
+  const y = Math.floor(idx / width);
+  return {
+    nx: x / Math.max(1, width - 1),
+    ny: y / Math.max(1, height - 1),
+  };
+}
+
+function normalizedToRasterIndex(source, width, height) {
+  const x = clamp(Math.round(source.nx * Math.max(1, width - 1)), 0, width - 1);
+  const y = clamp(Math.round(source.ny * Math.max(1, height - 1)), 0, height - 1);
+  return (y * width) + x;
+}
+
+function buildSourceIndicesFromNormalizedList(sources, width, height) {
+  if (!sources.length) return [];
+
+  const unique = new Set();
+  const output = [];
+  for (let i = 0; i < sources.length; i += 1) {
+    const src = sources[i];
+    const idx = normalizedToRasterIndex(src, width, height);
+    if (unique.has(idx)) continue;
+    unique.add(idx);
+    output.push(idx);
+  }
+  return output;
+}
+
+function hasSourceNear(sources, nx, ny, width, height, epsilonPx = 3) {
+  const epsilon = epsilonPx / Math.max(width, height);
+  const epsilonSq = epsilon * epsilon;
+
+  for (let i = 0; i < sources.length; i += 1) {
+    const source = sources[i];
+    const dx = source.nx - nx;
+    const dy = source.ny - ny;
+    if ((dx * dx) + (dy * dy) <= epsilonSq) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function removeSourcesNear(sources, nx, ny, width, height, epsilonPx) {
+  const epsilon = epsilonPx / Math.max(width, height);
+  const epsilonSq = epsilon * epsilon;
+  return sources.filter((source) => {
+    const dx = source.nx - nx;
+    const dy = source.ny - ny;
+    return (dx * dx) + (dy * dy) > epsilonSq;
+  });
+}
+
+function getViewTransform(viewWidth, viewHeight) {
+  const zoom = clamp(state.view.zoom, VIEW_MIN_ZOOM, VIEW_MAX_ZOOM);
+  const drawWidth = viewWidth * zoom;
+  const drawHeight = viewHeight * zoom;
+  const x = ((viewWidth - drawWidth) * 0.5) + state.view.offsetX;
+  const y = ((viewHeight - drawHeight) * 0.5) + state.view.offsetY;
+  return { x, y, drawWidth, drawHeight };
+}
+
+function clampViewOffset(viewWidth = window.innerWidth, viewHeight = window.innerHeight) {
+  const maxOffsetX = Math.abs(viewWidth * (state.view.zoom - 1)) * 0.5;
+  const maxOffsetY = Math.abs(viewHeight * (state.view.zoom - 1)) * 0.5;
+  state.view.offsetX = clamp(state.view.offsetX, -maxOffsetX, maxOffsetX);
+  state.view.offsetY = clamp(state.view.offsetY, -maxOffsetY, maxOffsetY);
+}
+
+function screenToRasterPosition(clientX, clientY, output) {
+  const rect = canvas.getBoundingClientRect();
+  if (rect.width <= 0 || rect.height <= 0) return null;
+
+  const px = clientX - rect.left;
+  const py = clientY - rect.top;
+  const transform = getViewTransform(rect.width, rect.height);
+  const relX = (px - transform.x) / transform.drawWidth;
+  const relY = (py - transform.y) / transform.drawHeight;
+  if (relX < 0 || relX > 1 || relY < 0 || relY > 1) return null;
+
+  const x = clamp(Math.floor(relX * output.width), 0, output.width - 1);
+  const y = clamp(Math.floor(relY * output.height), 0, output.height - 1);
+  const idx = (y * output.width) + x;
+  return { x, y, idx };
+}
+
 function pickRasterSize(viewWidth, viewHeight) {
   const maxPixels = 520000;
   const current = viewWidth * viewHeight;
@@ -688,22 +926,80 @@ function pickRasterSize(viewWidth, viewHeight) {
 
 function updateLabels() {
   smoothnessValue.textContent = `${smoothnessSlider.value}`;
+  continentScaleValue.textContent = `${continentScaleSlider.value}%`;
   seaLevelValue.textContent = `${seaLevelSlider.value}%`;
   mountaintopValue.textContent = `${mountaintopSlider.value}%`;
-  riversCountValue.textContent = `${state.riverCount}`;
-  riverForkValue.textContent = `${riverForkSlider.value}%`;
+  const visibleRiverCount = state.currentOutput ? state.currentOutput.river.sourceCount : state.riverCount;
+  riversCountValue.textContent = `${visibleRiverCount}`;
   algorithmValue.textContent = state.algorithm === "midpoint" ? "Midpoint" : "Topology";
+  resourceTypeValue.textContent = resourceTypeLabel(resourceTypeSelect.value);
+  resourceSnapValue.textContent = `${resourceSnapSlider.value} px`;
+  resourceStrengthValue.textContent = `${resourceStrengthSlider.value}%`;
+  resourceDraftCountValue.textContent = `${state.resourceDraftVertices.length}`;
+  resourceZonesCountValue.textContent = `${state.resourceZones.length}`;
   seedValue.textContent = `Seed T${state.seed} | R${state.riverSeed}`;
 }
 
+function applyControlsPanelState() {
+  if (!floatingControls || !panelToggleBtn) return;
+  floatingControls.classList.toggle("is-collapsed", state.controlsCollapsed);
+  panelToggleBtn.textContent = state.controlsCollapsed ? "+" : "-";
+  panelToggleBtn.setAttribute(
+    "aria-label",
+    state.controlsCollapsed ? "Maximize controls" : "Minimize controls"
+  );
+  panelToggleBtn.title = state.controlsCollapsed ? "Maximize controls" : "Minimize controls";
+  panelToggleBtn.setAttribute("aria-expanded", state.controlsCollapsed ? "false" : "true");
+}
+
+function applyEditorModeState() {
+  const isTerrain = state.editorMode === "terrain";
+  terrainControlsGroup.classList.toggle("is-hidden", !isTerrain);
+  resourceControlsGroup.classList.toggle("is-hidden", isTerrain);
+  panelTitle.textContent = isTerrain ? "Terrain Lab" : "Resource Lab";
+  panelSubtitle.textContent = isTerrain
+    ? "Interactive topology preview"
+    : "Barebones resource zone setup";
+  floatingControls.setAttribute("aria-label", isTerrain ? "Terrain controls" : "Resource controls");
+  modeButtons.forEach((button) => {
+    const mode = button.getAttribute("data-mode");
+    button.classList.toggle("is-active", mode === state.editorMode);
+    button.setAttribute("aria-pressed", mode === state.editorMode ? "true" : "false");
+  });
+  if (!isTerrain) {
+    state.deletePreview.active = false;
+  }
+}
+
+function updateResourceStats() {
+  const counts = {
+    wind: 0,
+    sun: 0,
+    gas: 0,
+  };
+  for (let i = 0; i < state.resourceZones.length; i += 1) {
+    const zone = state.resourceZones[i];
+    if (counts[zone.type] !== undefined) {
+      counts[zone.type] += 1;
+    }
+  }
+
+  statsValue.textContent =
+    `Zones ${state.resourceZones.length} | Draft ${state.resourceDraftVertices.length} | Wind ${counts.wind} | Sun ${counts.sun} | Gas ${counts.gas}`;
+}
+
 function updateStats(stats) {
+  if (state.editorMode === "resources") {
+    updateResourceStats();
+    return;
+  }
   const landPct = Math.round(stats.landFraction * 100);
   const mountainPct = Math.round(stats.mountainFraction * 100);
   const topPct = Math.round(stats.mountaintopFraction * 100);
   const riverPct = Math.round(stats.riverFraction * 100);
   const topThreshold = Number(mountaintopSlider.value);
   const algoShort = state.algorithm === "midpoint" ? "M" : "T";
-  statsValue.textContent = `Land ${landPct}% | Mountain ${mountainPct}% | Tops ${topPct}% @ ${topThreshold}% | Rivers ${riverPct}% (${stats.riverSourceCount}/${state.riverCount}) | Fork ${Math.round(stats.forkChance * 100)}% | ${algoShort}`;
+  statsValue.textContent = `Land ${landPct}% | Mountain ${mountainPct}% | Tops ${topPct}% @ ${topThreshold}% | Rivers ${riverPct}% (${stats.riverSourceCount}) | ${algoShort}`;
 }
 
 function setStatus(text) {
@@ -716,29 +1012,41 @@ function buildTerrainImage(
   seed,
   riverSeed,
   smoothness,
+  continentScalePercent,
   seaLevelPercent,
   mountaintopPercent,
   algorithm,
   riverCount,
-  riverForkChancePercent
+  animateNewestRiverOnly = false
 ) {
   const smoothnessNorm = clamp(smoothness / 100, 0, 1);
   const seaQuantile = clamp(seaLevelPercent / 100, 0.05, 0.95);
   const mountaintopQuantile = clamp(mountaintopPercent / 100, 0.75, 0.999);
 
-  const heights = buildHeightField(width, height, seed, smoothness, algorithm);
+  const heights = buildHeightField(
+    width,
+    height,
+    seed,
+    smoothness,
+    algorithm,
+    continentScalePercent
+  );
   const slopes = buildSlopeField(heights, width, height);
 
   const seaLevel = quantileFromArray(heights, seaQuantile);
   const mountaintopLevel = quantileFromArray(heights, mountaintopQuantile);
+  const manualSourceIndices = buildSourceIndicesFromNormalizedList(state.manualRiverSources, width, height);
+  const blockedSourceIndices = buildSourceIndicesFromNormalizedList(state.suppressedRiverSources, width, height);
   const riverOutput = buildRiverMask(
     heights,
     width,
     height,
     seaLevel,
     riverCount,
-    riverForkChancePercent,
-    riverSeed
+    riverSeed,
+    manualSourceIndices,
+    blockedSourceIndices,
+    animateNewestRiverOnly
   );
 
   let landCount = 0;
@@ -799,7 +1107,7 @@ function buildTerrainImage(
       }
 
       if (riverOutput.riverMask[idx] && h > seaLevel) {
-        riverShade[idx] = hillshadeFactor(heights, width, height, x, y, 0.12);
+        riverShade[idx] = 1;
       }
 
       const p = idx * 4;
@@ -810,12 +1118,36 @@ function buildTerrainImage(
     }
   }
 
+  let animationArrivalStep = riverOutput.riverArrivalStep;
+  let animationMaxArrivalStep = riverOutput.maxArrivalStep;
+
+  if (animateNewestRiverOnly && riverOutput.hasNewRiverAnimation) {
+    animationArrivalStep = riverOutput.newRiverArrivalStep;
+    animationMaxArrivalStep = riverOutput.newRiverMaxArrivalStep;
+
+    // Keep existing rivers visible while only the newest click-created river is animated.
+    for (let idx = 0; idx < riverOutput.riverMask.length; idx += 1) {
+      if (!riverOutput.riverMask[idx] || riverOutput.newRiverMask[idx]) continue;
+      const shade = riverShade[idx];
+      if (shade <= 0) continue;
+
+      const p = idx * 4;
+      basePixels[p] = clamp(COLORS.river[0] * shade, 0, 255);
+      basePixels[p + 1] = clamp(COLORS.river[1] * shade, 0, 255);
+      basePixels[p + 2] = clamp(COLORS.river[2] * shade, 0, 255);
+    }
+  }
+
   return {
     width,
     height,
+    heights,
+    seaLevel,
     basePixels: new Uint8ClampedArray(basePixels),
     river: riverOutput,
     riverShade,
+    animationArrivalStep,
+    animationMaxArrivalStep,
     stats: {
       landFraction: (plainsCount + mountainCount + mountaintopCount) / (width * height),
       waterFraction: waterCount / (width * height),
@@ -823,7 +1155,6 @@ function buildTerrainImage(
       mountaintopFraction: mountaintopCount / (width * height),
       riverFraction: riverOutput.riverPixels / (width * height),
       riverSourceCount: riverOutput.sourceCount,
-      forkChance: clamp(riverForkChancePercent / 100, 0, 1),
     },
   };
 }
@@ -839,9 +1170,10 @@ function resizeCanvas() {
   canvas.style.height = `${height}px`;
 
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  clampViewOffset(width, height);
 
   if (state.lastRaster) {
-    ctx.drawImage(state.lastRaster, 0, 0, width, height);
+    drawRasterToViewport(state.lastRaster);
   }
 }
 
@@ -853,9 +1185,133 @@ function cancelActiveAnimation() {
 }
 
 function drawRasterToViewport(raster) {
+  clampViewOffset(window.innerWidth, window.innerHeight);
+  const transform = getViewTransform(window.innerWidth, window.innerHeight);
   ctx.imageSmoothingEnabled = true;
   ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
-  ctx.drawImage(raster, 0, 0, window.innerWidth, window.innerHeight);
+  ctx.drawImage(raster, transform.x, transform.y, transform.drawWidth, transform.drawHeight);
+  drawResourceZones(transform);
+  drawDeletePreview();
+}
+
+function getDeletePreviewRadiusOnScreen() {
+  const output = state.currentOutput;
+  if (!output) return SOURCE_REMOVE_RADIUS_PX;
+
+  const rect = canvas.getBoundingClientRect();
+  if (rect.width <= 0 || rect.height <= 0) return SOURCE_REMOVE_RADIUS_PX;
+
+  const transform = getViewTransform(rect.width, rect.height);
+  const pixelsPerRasterPixel = transform.drawWidth / Math.max(1, output.width);
+  return Math.max(2, SOURCE_REMOVE_RADIUS_PX * pixelsPerRasterPixel);
+}
+
+function drawDeletePreview() {
+  if (state.editorMode !== "terrain") return;
+  if (!state.deletePreview.active) return;
+
+  const rect = canvas.getBoundingClientRect();
+  const x = state.deletePreview.clientX - rect.left;
+  const y = state.deletePreview.clientY - rect.top;
+  const radius = getDeletePreviewRadiusOnScreen();
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(x, y, radius, 0, Math.PI * 2);
+  ctx.fillStyle = DELETE_PREVIEW_FILL;
+  ctx.fill();
+  ctx.lineWidth = DELETE_PREVIEW_STROKE_WIDTH;
+  ctx.strokeStyle = DELETE_PREVIEW_STROKE;
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawResourceZones(transform) {
+  if (state.editorMode !== "resources") return;
+  if (!state.currentOutput) return;
+  const output = state.currentOutput;
+  const rasterPxToScreen = transform.drawWidth / Math.max(1, output.width);
+
+  const toScreen = (vertex) => ({
+    x: transform.x + (vertex.nx * transform.drawWidth),
+    y: transform.y + (vertex.ny * transform.drawHeight),
+  });
+
+  ctx.save();
+  ctx.lineJoin = "round";
+  ctx.lineCap = "round";
+
+  for (let i = 0; i < state.resourceZones.length; i += 1) {
+    const zone = state.resourceZones[i];
+    if (!zone.vertices || zone.vertices.length < 3) continue;
+
+    const style = getResourceStyle(zone.type);
+    const strengthAlpha = clamp(zone.strength / 100, 0.2, 1);
+    const first = toScreen(zone.vertices[0]);
+
+    ctx.beginPath();
+    ctx.moveTo(first.x, first.y);
+    for (let j = 1; j < zone.vertices.length; j += 1) {
+      const point = toScreen(zone.vertices[j]);
+      ctx.lineTo(point.x, point.y);
+    }
+    ctx.closePath();
+
+    ctx.globalAlpha = strengthAlpha;
+    ctx.fillStyle = style.fill;
+    ctx.fill();
+
+    ctx.globalAlpha = clamp(0.7 + (strengthAlpha * 0.3), 0.7, 1);
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = style.stroke;
+    ctx.stroke();
+
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = style.stroke;
+    for (let j = 0; j < zone.vertices.length; j += 1) {
+      const point = toScreen(zone.vertices[j]);
+      ctx.beginPath();
+      ctx.arc(point.x, point.y, RESOURCE_VERTEX_RENDER_RADIUS, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  if (state.resourceDraftVertices.length > 0) {
+    const draftPoints = state.resourceDraftVertices.map(toScreen);
+
+    ctx.globalAlpha = 0.9;
+    ctx.strokeStyle = "rgba(203, 237, 255, 0.95)";
+    ctx.lineWidth = 2;
+    ctx.setLineDash([6, 4]);
+    ctx.beginPath();
+    ctx.moveTo(draftPoints[0].x, draftPoints[0].y);
+    for (let i = 1; i < draftPoints.length; i += 1) {
+      ctx.lineTo(draftPoints[i].x, draftPoints[i].y);
+    }
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    ctx.fillStyle = "rgba(203, 237, 255, 0.96)";
+    for (let i = 0; i < draftPoints.length; i += 1) {
+      const point = draftPoints[i];
+      ctx.beginPath();
+      ctx.arc(point.x, point.y, RESOURCE_VERTEX_RENDER_RADIUS, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    if (draftPoints.length >= 3) {
+      const snapRadiusPx = Number(resourceSnapSlider.value);
+      const first = draftPoints[0];
+      ctx.beginPath();
+      ctx.arc(first.x, first.y, Math.max(2, snapRadiusPx * rasterPxToScreen), 0, Math.PI * 2);
+      ctx.strokeStyle = "rgba(174, 239, 255, 0.5)";
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+  }
+
+  ctx.globalAlpha = 1;
+  ctx.restore();
 }
 
 function animateTerrainOutput(output, renderToken) {
@@ -868,8 +1324,8 @@ function animateTerrainOutput(output, renderToken) {
 
   const framePixels = new Uint8ClampedArray(output.basePixels.length);
   const frameImage = new ImageData(framePixels, output.width, output.height);
-  const hasRivers = output.river.sourceCount > 0 && output.river.riverPixels > 0;
-  const duration = hasRivers ? RIVER_ANIMATION_MS : 0;
+  const hasAnimatedRiver = output.river.riverPixels > 0 && output.animationMaxArrivalStep > 0;
+  const duration = hasAnimatedRiver ? RIVER_ANIMATION_MS : 0;
   const startAt = performance.now();
 
   const drawStep = (timestamp) => {
@@ -894,15 +1350,44 @@ function animateTerrainOutput(output, renderToken) {
   state.animationFrameId = window.requestAnimationFrame(drawStep);
 }
 
-async function renderTerrain({ newSeed = false, resetRivers = false } = {}) {
+function drawTerrainOutputImmediate(output) {
+  cancelActiveAnimation();
+  const raster = document.createElement("canvas");
+  raster.width = output.width;
+  raster.height = output.height;
+  const rasterCtx = raster.getContext("2d");
+
+  const framePixels = new Uint8ClampedArray(output.basePixels.length);
+  composeTerrainFrame(output, 1, framePixels);
+  const frameImage = new ImageData(framePixels, output.width, output.height);
+
+  rasterCtx.putImageData(frameImage, 0, 0);
+  state.lastRaster = raster;
+  drawRasterToViewport(raster);
+  updateStats(output.stats);
+}
+
+async function renderTerrain({
+  newSeed = false,
+  resetRivers = false,
+  animateNewestRiverOnly = false,
+  skipRiverAnimation = false,
+} = {}) {
+  clearPendingSliderRegenerate();
   const renderToken = ++state.renderToken;
   cancelActiveAnimation();
 
   if (newSeed) {
     state.seed = randomSeed();
     state.riverSeed = randomSeed();
+    state.manualRiverSources = [];
+    state.suppressedRiverSources = [];
+    state.resourceZones = [];
+    state.resourceDraftVertices = [];
   } else if (resetRivers) {
     state.riverSeed = randomSeed();
+    state.manualRiverSources = [];
+    state.suppressedRiverSources = [];
   }
   updateLabels();
 
@@ -915,9 +1400,10 @@ async function renderTerrain({ newSeed = false, resetRivers = false } = {}) {
   );
 
   const smoothness = Number(smoothnessSlider.value);
+  const continentScale = Number(continentScaleSlider.value);
   const seaLevel = Number(seaLevelSlider.value);
   const mountaintopLevel = Number(mountaintopSlider.value);
-  const riverForkChance = Number(riverForkSlider.value);
+  const effectiveRiverCount = Math.max(0, state.riverCount - state.suppressedRiverSources.length);
 
   const output = buildTerrainImage(
     rasterWidth,
@@ -925,45 +1411,611 @@ async function renderTerrain({ newSeed = false, resetRivers = false } = {}) {
     state.seed,
     state.riverSeed,
     smoothness,
+    continentScale,
     seaLevel,
     mountaintopLevel,
     state.algorithm,
-    state.riverCount,
-    riverForkChance
+    effectiveRiverCount,
+    animateNewestRiverOnly
   );
 
   if (renderToken !== state.renderToken) {
     return;
   }
 
-  setStatus(output.river.sourceCount > 0 ? "Tracing rivers..." : "No rivers to trace");
+  state.currentOutput = output;
+  updateLabels();
+
+  if (skipRiverAnimation) {
+    drawTerrainOutputImmediate(output);
+    return;
+  }
+
+  if (output.river.sourceCount <= 0) {
+    setStatus("No rivers to trace");
+  } else if (animateNewestRiverOnly && output.river.hasNewRiverAnimation) {
+    setStatus("Tracing new river...");
+  } else {
+    setStatus("Tracing rivers...");
+  }
   animateTerrainOutput(output, renderToken);
 }
 
 function scheduleRegenerate(delayMs = 140) {
-  window.clearTimeout(sliderTimer);
+  clearPendingSliderRegenerate();
   sliderTimer = window.setTimeout(() => {
+    sliderTimer = 0;
     renderTerrain({ newSeed: false });
   }, delayMs);
 }
 
-function setRiverCount(nextValue) {
-  const clamped = clamp(Math.round(nextValue), RIVER_COUNT_MIN, RIVER_COUNT_MAX);
-  if (clamped === state.riverCount) return;
-  state.riverCount = clamped;
-  updateLabels();
-  renderTerrain({ newSeed: false });
-}
-
 function resetRivers() {
   state.riverCount = RIVER_DEFAULT_COUNT;
-  riverForkSlider.value = `${RIVER_DEFAULT_FORK}`;
   updateLabels();
   renderTerrain({ resetRivers: true });
 }
 
+function removeAllRivers() {
+  state.riverCount = 0;
+  state.manualRiverSources = [];
+  state.suppressedRiverSources = [];
+  updateLabels();
+  renderTerrain({ newSeed: false, skipRiverAnimation: true });
+}
+
+function findNearestVertexIndex(vertices, nx, ny, width, height, radiusPx) {
+  if (!vertices.length) return -1;
+  const thresholdSq = radiusPx * radiusPx;
+  let nearestIdx = -1;
+  let nearestDistanceSq = Infinity;
+
+  for (let i = 0; i < vertices.length; i += 1) {
+    const vertex = vertices[i];
+    const vx = vertex.nx * Math.max(1, width - 1);
+    const vy = vertex.ny * Math.max(1, height - 1);
+    const px = nx * Math.max(1, width - 1);
+    const py = ny * Math.max(1, height - 1);
+    const dx = vx - px;
+    const dy = vy - py;
+    const distanceSq = (dx * dx) + (dy * dy);
+    if (distanceSq < nearestDistanceSq) {
+      nearestDistanceSq = distanceSq;
+      nearestIdx = i;
+    }
+  }
+
+  if (nearestDistanceSq <= thresholdSq) {
+    return nearestIdx;
+  }
+  return -1;
+}
+
+function commitResourceDraftPolygon(closeAtVertexIdx = 0) {
+  const draft = state.resourceDraftVertices;
+  if (draft.length < 3) return false;
+  const closeIdx = clamp(closeAtVertexIdx, 0, draft.length - 1);
+  const polygonVertices = closeIdx === 0
+    ? draft.slice()
+    : draft.slice(closeIdx).concat(draft.slice(0, closeIdx));
+  if (polygonVertices.length < 3) return false;
+
+  state.resourceZones.push({
+    type: resourceTypeSelect.value,
+    strength: Number(resourceStrengthSlider.value),
+    vertices: polygonVertices,
+  });
+  state.resourceDraftVertices = [];
+  updateLabels();
+  updateResourceStats();
+  if (state.lastRaster) {
+    drawRasterToViewport(state.lastRaster);
+  }
+  return true;
+}
+
+function addResourceZoneFromClick(clientX, clientY) {
+  const output = state.currentOutput;
+  if (!output) return;
+
+  const rasterPos = screenToRasterPosition(clientX, clientY, output);
+  if (!rasterPos) return;
+
+  if (output.heights[rasterPos.idx] <= output.seaLevel) {
+    return;
+  }
+
+  const normalized = rasterIndexToNormalized(rasterPos.idx, output.width, output.height);
+  const snapPx = Number(resourceSnapSlider.value);
+  const closeVertexIdx = findNearestVertexIndex(
+    state.resourceDraftVertices,
+    normalized.nx,
+    normalized.ny,
+    output.width,
+    output.height,
+    snapPx
+  );
+
+  if (closeVertexIdx >= 0) {
+    // Reuse nearby existing vertex and close the polygon.
+    if (state.resourceDraftVertices.length >= 3) {
+      commitResourceDraftPolygon(closeVertexIdx);
+    }
+    return;
+  }
+
+  const last = state.resourceDraftVertices[state.resourceDraftVertices.length - 1];
+  if (last) {
+    const lastNearIdx = findNearestVertexIndex(
+      [last],
+      normalized.nx,
+      normalized.ny,
+      output.width,
+      output.height,
+      2
+    );
+    if (lastNearIdx >= 0) return;
+  }
+
+  state.resourceDraftVertices.push(normalized);
+  updateLabels();
+  updateResourceStats();
+  if (state.lastRaster) {
+    drawRasterToViewport(state.lastRaster);
+  }
+}
+
+function pointInPolygon(nx, ny, vertices) {
+  let inside = false;
+  for (let i = 0, j = vertices.length - 1; i < vertices.length; j = i, i += 1) {
+    const xi = vertices[i].nx;
+    const yi = vertices[i].ny;
+    const xj = vertices[j].nx;
+    const yj = vertices[j].ny;
+    const intersect =
+      ((yi > ny) !== (yj > ny)) &&
+      (nx < ((xj - xi) * (ny - yi)) / ((yj - yi) || 1e-9) + xi);
+    if (intersect) inside = !inside;
+  }
+  return inside;
+}
+
+function removeResourceZoneNearClick(clientX, clientY) {
+  const output = state.currentOutput;
+  if (!output || state.resourceZones.length === 0) return;
+
+  const rasterPos = screenToRasterPosition(clientX, clientY, output);
+  if (!rasterPos) return;
+  const normalized = rasterIndexToNormalized(rasterPos.idx, output.width, output.height);
+
+  // Prefer removing a zone that contains the click point.
+  for (let i = state.resourceZones.length - 1; i >= 0; i -= 1) {
+    const zone = state.resourceZones[i];
+    if (!zone.vertices || zone.vertices.length < 3) continue;
+    if (pointInPolygon(normalized.nx, normalized.ny, zone.vertices)) {
+      state.resourceZones.splice(i, 1);
+      updateLabels();
+      updateResourceStats();
+      if (state.lastRaster) {
+        drawRasterToViewport(state.lastRaster);
+      }
+      return;
+    }
+  }
+
+  // Fallback: nearest vertex within deletion radius.
+  let nearestZoneIdx = -1;
+  let nearestDistanceSq = Infinity;
+  for (let i = 0; i < state.resourceZones.length; i += 1) {
+    const zone = state.resourceZones[i];
+    if (!zone.vertices || zone.vertices.length < 3) continue;
+    for (let j = 0; j < zone.vertices.length; j += 1) {
+      const vertex = zone.vertices[j];
+      const vx = vertex.nx * Math.max(1, output.width - 1);
+      const vy = vertex.ny * Math.max(1, output.height - 1);
+      const dx = vx - rasterPos.x;
+      const dy = vy - rasterPos.y;
+      const distanceSq = (dx * dx) + (dy * dy);
+      if (distanceSq < nearestDistanceSq) {
+        nearestDistanceSq = distanceSq;
+        nearestZoneIdx = i;
+      }
+    }
+  }
+
+  if (nearestZoneIdx < 0) return;
+  if (nearestDistanceSq > (RESOURCE_REMOVE_RADIUS_PX * RESOURCE_REMOVE_RADIUS_PX)) return;
+
+  state.resourceZones.splice(nearestZoneIdx, 1);
+  updateLabels();
+  updateResourceStats();
+  if (state.lastRaster) {
+    drawRasterToViewport(state.lastRaster);
+  }
+}
+
+function clearAllResourceZones() {
+  if (state.resourceZones.length === 0) return;
+  state.resourceZones = [];
+  updateLabels();
+  updateResourceStats();
+  if (state.lastRaster) {
+    drawRasterToViewport(state.lastRaster);
+  }
+}
+
+function clearResourceDraft() {
+  if (state.resourceDraftVertices.length === 0) return;
+  state.resourceDraftVertices = [];
+  updateLabels();
+  updateResourceStats();
+  if (state.lastRaster) {
+    drawRasterToViewport(state.lastRaster);
+  }
+}
+
+function undoLastDraftVertex() {
+  if (state.resourceDraftVertices.length === 0) return;
+  state.resourceDraftVertices.pop();
+  updateLabels();
+  updateResourceStats();
+  if (state.lastRaster) {
+    drawRasterToViewport(state.lastRaster);
+  }
+}
+
+function undoLastResourceZone() {
+  if (state.resourceZones.length === 0) return;
+  state.resourceZones.pop();
+  updateLabels();
+  updateResourceStats();
+  if (state.lastRaster) {
+    drawRasterToViewport(state.lastRaster);
+  }
+}
+
+function addRiverSourceFromClick(clientX, clientY) {
+  const output = state.currentOutput;
+  if (!output) return;
+
+  const rasterPos = screenToRasterPosition(clientX, clientY, output);
+  if (!rasterPos) return;
+
+  const idx = rasterPos.idx;
+  if (output.heights[idx] <= output.seaLevel) {
+    return;
+  }
+
+  const normalized = rasterIndexToNormalized(idx, output.width, output.height);
+  if (hasSourceNear(state.manualRiverSources, normalized.nx, normalized.ny, output.width, output.height)) {
+    return;
+  }
+
+  state.suppressedRiverSources = removeSourcesNear(
+    state.suppressedRiverSources,
+    normalized.nx,
+    normalized.ny,
+    output.width,
+    output.height,
+    SOURCE_REMOVE_RADIUS_PX
+  );
+
+  state.manualRiverSources.push(normalized);
+
+  renderTerrain({ newSeed: false, animateNewestRiverOnly: true });
+}
+
+function removeRiverSourcesByIndex(output, sourceIndices) {
+  if (!output || !sourceIndices.length) return;
+
+  const uniqueSourceIndices = Array.from(new Set(sourceIndices));
+  if (!uniqueSourceIndices.length) return;
+
+  for (let i = 0; i < uniqueSourceIndices.length; i += 1) {
+    const normalized = rasterIndexToNormalized(uniqueSourceIndices[i], output.width, output.height);
+
+    const removedManualSource = hasSourceNear(
+      state.manualRiverSources,
+      normalized.nx,
+      normalized.ny,
+      output.width,
+      output.height,
+      SOURCE_REMOVE_RADIUS_PX
+    );
+    state.manualRiverSources = removeSourcesNear(
+      state.manualRiverSources,
+      normalized.nx,
+      normalized.ny,
+      output.width,
+      output.height,
+      SOURCE_REMOVE_RADIUS_PX
+    );
+
+    if (!removedManualSource) {
+      if (
+        !hasSourceNear(
+          state.suppressedRiverSources,
+          normalized.nx,
+          normalized.ny,
+          output.width,
+          output.height,
+          SOURCE_REMOVE_RADIUS_PX
+        )
+      ) {
+        state.suppressedRiverSources.push(normalized);
+      }
+    }
+  }
+
+  renderTerrain({ newSeed: false, skipRiverAnimation: true });
+}
+
+function removeRiverSourcesNearClick(clientX, clientY) {
+  const output = state.currentOutput;
+  if (!output || !output.river || !output.river.sourceCells.length) return;
+
+  const rasterPos = screenToRasterPosition(clientX, clientY, output);
+  if (!rasterPos) return;
+
+  const radiusSq = SOURCE_REMOVE_RADIUS_PX * SOURCE_REMOVE_RADIUS_PX;
+  const removedSources = [];
+  for (let i = 0; i < output.river.sourceCells.length; i += 1) {
+    const sourceIdx = output.river.sourceCells[i];
+    const sx = sourceIdx % output.width;
+    const sy = Math.floor(sourceIdx / output.width);
+    const dx = sx - rasterPos.x;
+    const dy = sy - rasterPos.y;
+    if ((dx * dx) + (dy * dy) <= radiusSq) {
+      removedSources.push(sourceIdx);
+    }
+  }
+
+  removeRiverSourcesByIndex(output, removedSources);
+}
+
+function beginDeletePreview(clientX, clientY) {
+  state.deletePreview.active = true;
+  state.deletePreview.clientX = clientX;
+  state.deletePreview.clientY = clientY;
+
+  if (state.lastRaster) {
+    drawRasterToViewport(state.lastRaster);
+  }
+}
+
+function updateDeletePreview(clientX, clientY) {
+  if (!state.deletePreview.active) return;
+  state.deletePreview.clientX = clientX;
+  state.deletePreview.clientY = clientY;
+
+  if (state.lastRaster) {
+    drawRasterToViewport(state.lastRaster);
+  }
+}
+
+function endDeletePreview({ deleteRiver = false, clientX = 0, clientY = 0 } = {}) {
+  if (!state.deletePreview.active) return;
+  const endX = clientX || state.deletePreview.clientX;
+  const endY = clientY || state.deletePreview.clientY;
+  state.deletePreview.active = false;
+
+  if (deleteRiver) {
+    removeRiverSourcesNearClick(endX, endY);
+    if (state.lastRaster) {
+      drawRasterToViewport(state.lastRaster);
+    }
+    return;
+  }
+
+  if (state.lastRaster) {
+    drawRasterToViewport(state.lastRaster);
+  }
+}
+
+function zoomAtClientPoint(clientX, clientY, zoomFactor) {
+  const rect = canvas.getBoundingClientRect();
+  if (rect.width <= 0 || rect.height <= 0) return;
+
+  const oldZoom = state.view.zoom;
+  const nextZoom = clamp(oldZoom * zoomFactor, VIEW_MIN_ZOOM, VIEW_MAX_ZOOM);
+  if (Math.abs(nextZoom - oldZoom) < 1e-6) return;
+
+  const px = clientX - rect.left;
+  const py = clientY - rect.top;
+  const oldTransform = getViewTransform(rect.width, rect.height);
+  const relX = (px - oldTransform.x) / oldTransform.drawWidth;
+  const relY = (py - oldTransform.y) / oldTransform.drawHeight;
+  const focusX = clamp(relX, 0, 1);
+  const focusY = clamp(relY, 0, 1);
+
+  state.view.zoom = nextZoom;
+
+  const newDrawWidth = rect.width * nextZoom;
+  const newDrawHeight = rect.height * nextZoom;
+  const newBaseX = (rect.width - newDrawWidth) * 0.5;
+  const newBaseY = (rect.height - newDrawHeight) * 0.5;
+
+  state.view.offsetX = px - (focusX * newDrawWidth) - newBaseX;
+  state.view.offsetY = py - (focusY * newDrawHeight) - newBaseY;
+  clampViewOffset(rect.width, rect.height);
+
+  if (state.lastRaster) {
+    drawRasterToViewport(state.lastRaster);
+  }
+}
+
+function beginPan(clientX, clientY) {
+  state.view.pointerDown = true;
+  state.view.isPanning = false;
+  state.view.pointerStartX = clientX;
+  state.view.pointerStartY = clientY;
+  state.view.startOffsetX = state.view.offsetX;
+  state.view.startOffsetY = state.view.offsetY;
+}
+
+function updatePan(clientX, clientY) {
+  if (!state.view.pointerDown) return;
+
+  const dx = clientX - state.view.pointerStartX;
+  const dy = clientY - state.view.pointerStartY;
+
+  if (!state.view.isPanning) {
+    const distanceSq = (dx * dx) + (dy * dy);
+    if (distanceSq < VIEW_DRAG_THRESHOLD_PX * VIEW_DRAG_THRESHOLD_PX) {
+      return;
+    }
+    state.view.isPanning = true;
+    canvas.style.cursor = "grabbing";
+  }
+
+  state.view.offsetX = state.view.startOffsetX + dx;
+  state.view.offsetY = state.view.startOffsetY + dy;
+  clampViewOffset();
+
+  if (state.lastRaster) {
+    drawRasterToViewport(state.lastRaster);
+  }
+}
+
+function endPan(event) {
+  if (!state.view.pointerDown) return;
+
+  const wasPanning = state.view.isPanning;
+  state.view.pointerDown = false;
+  state.view.isPanning = false;
+  canvas.style.cursor = "";
+
+  if (!wasPanning && event.button === 0) {
+    if (state.editorMode === "resources") {
+      addResourceZoneFromClick(event.clientX, event.clientY);
+      return;
+    }
+    addRiverSourceFromClick(event.clientX, event.clientY);
+  }
+}
+
+function hasActiveKeyPan() {
+  const keyPan = state.view.keyPan;
+  return keyPan.up || keyPan.down || keyPan.left || keyPan.right;
+}
+
+function drawAfterCameraChange() {
+  if (state.lastRaster) {
+    drawRasterToViewport(state.lastRaster);
+  }
+}
+
+function stepKeyPan(ts) {
+  const keyPan = state.view.keyPan;
+  if (!hasActiveKeyPan()) {
+    keyPan.frameId = 0;
+    keyPan.lastTs = 0;
+    return;
+  }
+
+  if (!keyPan.lastTs) {
+    keyPan.lastTs = ts;
+  }
+
+  const dt = clamp((ts - keyPan.lastTs) / 1000, 0, 0.05);
+  keyPan.lastTs = ts;
+
+  let dx = 0;
+  let dy = 0;
+  if (keyPan.left) dx += 1;
+  if (keyPan.right) dx -= 1;
+  if (keyPan.up) dy += 1;
+  if (keyPan.down) dy -= 1;
+
+  const magnitude = Math.hypot(dx, dy);
+  if (magnitude > 0) {
+    dx /= magnitude;
+    dy /= magnitude;
+    const step = VIEW_KEYPAN_SPEED_PX_PER_SEC * dt;
+    state.view.offsetX += dx * step;
+    state.view.offsetY += dy * step;
+    clampViewOffset();
+    drawAfterCameraChange();
+  }
+
+  keyPan.frameId = window.requestAnimationFrame(stepKeyPan);
+}
+
+function ensureKeyPanLoop() {
+  const keyPan = state.view.keyPan;
+  if (keyPan.frameId || !hasActiveKeyPan()) return;
+  keyPan.lastTs = 0;
+  keyPan.frameId = window.requestAnimationFrame(stepKeyPan);
+}
+
+function stopKeyPanLoop() {
+  const keyPan = state.view.keyPan;
+  if (keyPan.frameId) {
+    window.cancelAnimationFrame(keyPan.frameId);
+    keyPan.frameId = 0;
+  }
+  keyPan.lastTs = 0;
+}
+
+function clearKeyPanState() {
+  const keyPan = state.view.keyPan;
+  keyPan.up = false;
+  keyPan.down = false;
+  keyPan.left = false;
+  keyPan.right = false;
+  stopKeyPanLoop();
+}
+
+function handleKeyPanChange(code, isDown) {
+  const keyPan = state.view.keyPan;
+  let changed = false;
+  if (code === "KeyW" && keyPan.up !== isDown) {
+    keyPan.up = isDown;
+    changed = true;
+  } else if (code === "KeyS" && keyPan.down !== isDown) {
+    keyPan.down = isDown;
+    changed = true;
+  } else if (code === "KeyA" && keyPan.left !== isDown) {
+    keyPan.left = isDown;
+    changed = true;
+  } else if (code === "KeyD" && keyPan.right !== isDown) {
+    keyPan.right = isDown;
+    changed = true;
+  }
+
+  if (!changed) return false;
+  if (hasActiveKeyPan()) {
+    ensureKeyPanLoop();
+  } else {
+    stopKeyPanLoop();
+  }
+  return true;
+}
+
 regenerateBtn.addEventListener("click", () => {
   renderTerrain({ newSeed: true });
+});
+
+panelToggleBtn.addEventListener("click", () => {
+  state.controlsCollapsed = !state.controlsCollapsed;
+  applyControlsPanelState();
+});
+
+modeButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    const nextMode = button.getAttribute("data-mode");
+    if (!nextMode || nextMode === state.editorMode) return;
+    state.editorMode = nextMode;
+    applyEditorModeState();
+    updateLabels();
+    if (state.editorMode === "resources") {
+      updateResourceStats();
+    } else if (state.currentOutput) {
+      updateStats(state.currentOutput.stats);
+    }
+    if (state.lastRaster) {
+      drawRasterToViewport(state.lastRaster);
+    }
+  });
 });
 
 algorithmButtons.forEach((button) => {
@@ -984,6 +2036,11 @@ smoothnessSlider.addEventListener("input", () => {
   scheduleRegenerate();
 });
 
+continentScaleSlider.addEventListener("input", () => {
+  updateLabels();
+  scheduleRegenerate();
+});
+
 seaLevelSlider.addEventListener("input", () => {
   updateLabels();
   scheduleRegenerate();
@@ -994,22 +2051,108 @@ mountaintopSlider.addEventListener("input", () => {
   scheduleRegenerate();
 });
 
-riversDecBtn.addEventListener("click", () => {
-  setRiverCount(state.riverCount - 1);
-});
-
-riversIncBtn.addEventListener("click", () => {
-  setRiverCount(state.riverCount + 1);
-});
-
-riverForkSlider.addEventListener("input", () => {
-  updateLabels();
-  scheduleRegenerate();
-});
-
 resetRiversBtn.addEventListener("click", () => {
   resetRivers();
 });
+
+removeAllRiversBtn.addEventListener("click", () => {
+  removeAllRivers();
+});
+
+resourceTypeSelect.addEventListener("input", () => {
+  updateLabels();
+});
+
+resourceSnapSlider.addEventListener("input", () => {
+  updateLabels();
+  if (state.lastRaster && state.editorMode === "resources") {
+    drawRasterToViewport(state.lastRaster);
+  }
+});
+
+resourceStrengthSlider.addEventListener("input", () => {
+  updateLabels();
+  if (state.lastRaster && state.editorMode === "resources") {
+    drawRasterToViewport(state.lastRaster);
+  }
+});
+
+closeDraftBtn.addEventListener("click", () => {
+  commitResourceDraftPolygon(0);
+});
+
+undoDraftVertexBtn.addEventListener("click", () => {
+  undoLastDraftVertex();
+});
+
+clearDraftBtn.addEventListener("click", () => {
+  clearResourceDraft();
+});
+
+undoZoneBtn.addEventListener("click", () => {
+  undoLastResourceZone();
+});
+
+clearZonesBtn.addEventListener("click", () => {
+  clearAllResourceZones();
+});
+
+canvas.addEventListener("mousedown", (event) => {
+  if (event.button === 2) {
+    event.preventDefault();
+    if (state.editorMode === "terrain") {
+      beginDeletePreview(event.clientX, event.clientY);
+    } else {
+      removeResourceZoneNearClick(event.clientX, event.clientY);
+    }
+    return;
+  }
+  if (event.button !== 0) return;
+  beginPan(event.clientX, event.clientY);
+});
+
+canvas.addEventListener("mousemove", (event) => {
+  updatePan(event.clientX, event.clientY);
+  if (state.editorMode === "terrain") {
+    if (state.deletePreview.active && (event.buttons & 2) === 0) {
+      endDeletePreview();
+      return;
+    }
+    updateDeletePreview(event.clientX, event.clientY);
+    return;
+  }
+  endDeletePreview();
+});
+
+canvas.addEventListener("mouseup", (event) => {
+  if (event.button === 2) {
+    if (state.editorMode === "terrain") {
+      event.preventDefault();
+      endDeletePreview({ deleteRiver: true, clientX: event.clientX, clientY: event.clientY });
+    }
+    return;
+  }
+  endPan(event);
+});
+
+canvas.addEventListener("mouseleave", (event) => {
+  endDeletePreview();
+  endPan(event);
+});
+
+canvas.addEventListener("contextmenu", (event) => {
+  event.preventDefault();
+});
+
+canvas.addEventListener(
+  "wheel",
+  (event) => {
+    event.preventDefault();
+    const zoomFactor = event.deltaY < 0 ? VIEW_ZOOM_STEP : 1 / VIEW_ZOOM_STEP;
+    zoomAtClientPoint(event.clientX, event.clientY, zoomFactor);
+  },
+  { passive: false }
+);
 
 window.addEventListener("resize", () => {
   resizeCanvas();
@@ -1017,13 +2160,40 @@ window.addEventListener("resize", () => {
   resizeTimer = window.setTimeout(() => renderTerrain({ newSeed: false }), 180);
 });
 
+window.addEventListener("mouseup", (event) => {
+  if (event.button !== 2) return;
+  endDeletePreview();
+});
+
+window.addEventListener("blur", () => {
+  endDeletePreview();
+  clearKeyPanState();
+});
+
 window.addEventListener("keydown", (event) => {
+  if (!event.metaKey && !event.ctrlKey && !event.altKey) {
+    const handledPan = handleKeyPanChange(event.code, true);
+    if (handledPan) {
+      event.preventDefault();
+      return;
+    }
+  }
   if (event.code === "KeyR") {
     event.preventDefault();
     renderTerrain({ newSeed: true });
   }
 });
 
+window.addEventListener("keyup", (event) => {
+  if (event.metaKey || event.ctrlKey || event.altKey) return;
+  const handledPan = handleKeyPanChange(event.code, false);
+  if (handledPan) {
+    event.preventDefault();
+  }
+});
+
 resizeCanvas();
 updateLabels();
+applyControlsPanelState();
+applyEditorModeState();
 renderTerrain({ newSeed: false });

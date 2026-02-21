@@ -556,6 +556,8 @@ export const STORAGE_KEYS = {
   settings: "stg_settings_v1",
   suspendedRun: "stg_suspended_run_v1",
   campaignProgress: "stg_campaign_progress_v1",
+  devMode: "stg_dev_mode_v1",
+  tutorialCompleted: "stg_tutorial_completed_v1",
 };
 
 export const DEFAULT_SETTINGS = {

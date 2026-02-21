@@ -532,3 +532,492 @@ Original prompt: Develop the game MVP based on all provided documentation
 - Validation:
   - `node --check tools/terrain/interactive/app.js`
   - screenshot: `output/terrain-rivers-animated/anim-06-narrow-no-dots.png`
+
+## 2026-02-19 (Click-to-Add River Sources)
+- Added map click interaction to `tools/terrain/interactive/app.js`:
+  - Clicking on land now adds a manual river source at the clicked position.
+  - Clicking on water is ignored.
+- Manual river-source behavior:
+  - sources are stored as normalized coordinates and converted per render,
+  - persist across slider adjustments,
+  - cleared on full `Re-generate` and `Reset Rivers`,
+  - capped to 64 manual sources.
+- River generation updated to combine:
+  - auto sources from the river-count control,
+  - manual click sources (additional, not replacing auto count).
+- Added current raster/output tracking for click hit-testing against actual terrain height/sea-level.
+- Updated docs in `tools/terrain/interactive/README.md` with map-click behavior.
+
+### Validation
+- `node --check tools/terrain/interactive/app.js`
+- Playwright validation script:
+  - land click increases source count (`(6/6)` -> `(7/6)`),
+  - water click leaves source count unchanged.
+- Screenshots:
+  - `output/terrain-rivers-animated/anim-08-click-land-source.png`
+  - `output/terrain-rivers-animated/anim-09-click-water-no-source.png`
+
+## 2026-02-19 (River Click FIFO Replacement)
+- Updated map-click river behavior to FIFO replacement semantics (instead of additive sources):
+  - each land click replaces one existing river source,
+  - replacement proceeds from the oldest/first source slot onward,
+  - total source count now remains stable at configured river count.
+- Implementation details in `tools/terrain/interactive/app.js`:
+  - `buildRiverMask` now builds deterministic auto source list first, then applies click-source replacement queue onto source slots.
+  - click-source queue is capped to current replacement capacity (`max(1, riverCount)`) so newer clicks replace older ones one-by-one.
+- Water clicks still ignored.
+- Updated docs line in `tools/terrain/interactive/README.md` to describe oldest-first replacement.
+
+### Validation
+- `node --check tools/terrain/interactive/app.js`
+- Playwright click test:
+  - before: `Rivers ... (6/6)`
+  - after land click #1: `Rivers ... (6/6)`
+  - after land click #2: `Rivers ... (6/6)`
+  - after water click: unchanged
+- Screenshot:
+  - `output/terrain-rivers-animated/anim-10-click-replaces-oldest.png`
+
+## 2026-02-19 (Terrain Lab River Click FIFO + Targeted Animation)
+- Updated interactive terrain river behavior in `/Users/mstafford/Projects/local/save-the-grid/tools/terrain/interactive/app.js`:
+  - Land click river insertion now behaves as FIFO replacement of sources:
+    - each click removes the first/oldest active source and appends the new click source.
+    - source count remains capped to configured `Rivers` count.
+  - Click-triggered redraw now animates only the newly added river path.
+  - Existing rivers remain visible and static during that click animation.
+- Added/updated manual source queue handling and replacement mapping in `buildRiverMask(...)`.
+- Added animation routing fields (`animationArrivalStep`, `animationMaxArrivalStep`) and new-river-only rendering path in `buildTerrainImage(...)` and frame composition.
+- Updated map click docs in `/Users/mstafford/Projects/local/save-the-grid/tools/terrain/interactive/README.md`.
+
+### Validation
+- `node --check /Users/mstafford/Projects/local/save-the-grid/tools/terrain/interactive/app.js`
+- Develop-web-game Playwright client run:
+  - `node /Users/mstafford/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js --url http://127.0.0.1:5173/tools/terrain/interactive/ --click 640,360 --actions-json '{"steps":[{"buttons":[],"frames":8}]}' --iterations 4 --pause-ms 220 --screenshot-dir output/terrain-rivers-click-fifo`
+- Additional Playwright verification run with sequential land clicks and full-page captures:
+  - `output/terrain-rivers-click-verify/00-initial.png`
+  - `output/terrain-rivers-click-verify/01-click1-early.png`
+  - `output/terrain-rivers-click-verify/02-click1-mid.png`
+  - `output/terrain-rivers-click-verify/03-click1-end.png`
+  - `output/terrain-rivers-click-verify/04-click2-early.png`
+  - `output/terrain-rivers-click-verify/05-click2-mid.png`
+  - `output/terrain-rivers-click-verify/06-click2-end.png`
+  - `output/terrain-rivers-click-verify/log.json`
+- Verified in captures that click-triggered status shows `Tracing new river...` and that click updates keep source count at `(6/6)`.
+
+## 2026-02-20 (Terrain Lab: Remove Forking + Right-Click River Removal)
+- Removed river forking from the interactive terrain generator.
+  - Deleted UI controls for river forking from `/Users/mstafford/Projects/local/save-the-grid/tools/terrain/interactive/index.html`.
+  - Removed all fork-related state and generation logic from `/Users/mstafford/Projects/local/save-the-grid/tools/terrain/interactive/app.js`.
+  - River tracing now follows a single downstream path (no branch splitting).
+- Added right-click source removal on map:
+  - Right-click near any river start/source now removes that river source.
+  - Implemented via source suppression + removal of nearby manual source entries.
+  - Source removal persists across normal slider redraws.
+- Added source suppression handling:
+  - New suppressed source state bucket and raster blocking in river-source selection.
+  - Effective river generation count now accounts for removed sources so removed rivers do not auto-backfill.
+- Left-click behavior remains FIFO replacement for adding sources; left-clicking near a previously removed source clears nearby suppression so that source can be reintroduced.
+- Updated docs in `/Users/mstafford/Projects/local/save-the-grid/tools/terrain/interactive/README.md`:
+  - Removed `River Forking` control description.
+  - Added explicit `Map Right Click` behavior.
+
+### Validation
+- `node --check /Users/mstafford/Projects/local/save-the-grid/tools/terrain/interactive/app.js`
+- Playwright verification run (Rivers forced to 1):
+  - left click adds/keeps one source `(1/1)`
+  - right click near that source removes it `(0/1)`
+  - artifacts:
+    - `/Users/mstafford/Projects/local/save-the-grid/output/terrain-rivers-rightclick-remove/00-initial.png`
+    - `/Users/mstafford/Projects/local/save-the-grid/output/terrain-rivers-rightclick-remove/01-after-left-click.png`
+    - `/Users/mstafford/Projects/local/save-the-grid/output/terrain-rivers-rightclick-remove/02-after-right-click.png`
+    - `/Users/mstafford/Projects/local/save-the-grid/output/terrain-rivers-rightclick-remove/result.json`
+
+## 2026-02-20 (Terrain Lab: Minimize/Maximize Control Panel)
+- Added a minimize/maximize toggle button to the floating control panel.
+- Updated panel markup:
+  - added `#floating-controls` container id,
+  - added header action group with new `#panel-toggle-btn`,
+  - wrapped control contents in `#controls-body` for collapse handling.
+- Added collapsed-state styling in `styles.css`:
+  - `is-collapsed` class hides control body,
+  - compact header-only panel state,
+  - toggle button visual styling aligned with existing control style.
+- Added app wiring in `app.js`:
+  - `state.controlsCollapsed`,
+  - `applyControlsPanelState()` updates class, button label, and `aria-expanded`,
+  - click handler toggles between `Minimize` and `Maximize`.
+- Updated docs in `tools/terrain/interactive/README.md` with the new control.
+
+### Validation
+- `node --check /Users/mstafford/Projects/local/save-the-grid/tools/terrain/interactive/app.js`
+- Playwright verification:
+  - `/Users/mstafford/Projects/local/save-the-grid/output/terrain-controls-toggle/01-expanded.png`
+  - `/Users/mstafford/Projects/local/save-the-grid/output/terrain-controls-toggle/02-collapsed.png`
+  - `/Users/mstafford/Projects/local/save-the-grid/output/terrain-controls-toggle/03-reexpanded.png`
+  - `/Users/mstafford/Projects/local/save-the-grid/output/terrain-controls-toggle/result.json` (`passed: true`)
+
+## 2026-02-20 (Terrain Lab: Uncapped River Add/Remove, No FIFO)
+- Removed fixed river-cap behavior and removed FIFO replacement semantics for map clicks.
+- Updated river generation model:
+  - map still initializes with 6 random river sources,
+  - left-click on land now adds additional river sources (no queue replacement),
+  - right-click near source removes source,
+  - river network can now grow beyond the initial 6 and shrink via removals.
+- Updated source-composition logic in `buildRiverMask(...)`:
+  - auto sources + manual sources are now merged (deduped),
+  - no replacement queue logic.
+- Updated right-click removal behavior:
+  - manual sources are removed directly,
+  - suppressed-source tracking is used only for removed auto sources,
+  - removed manual sources do not reduce auto baseline count.
+- Removed river increment/decrement controls from UI (now read-only live count).
+- `Rivers` label now reflects current active source count from latest render.
+- Updated stats formatting from `(current/target)` to `(current)`.
+- Updated README controls section to match new behavior.
+
+### Validation
+- `node --check /Users/mstafford/Projects/local/save-the-grid/tools/terrain/interactive/app.js`
+- Playwright behavior verification:
+  - starts at `6` sources,
+  - three successful left-click additions increased count `6 -> 7 -> 8 -> 9`,
+  - right-click near created source reduced count `9 -> 8`,
+  - artifacts:
+    - `/Users/mstafford/Projects/local/save-the-grid/output/terrain-rivers-uncapped/01-initial.png`
+    - `/Users/mstafford/Projects/local/save-the-grid/output/terrain-rivers-uncapped/02-after-add-1.png`
+    - `/Users/mstafford/Projects/local/save-the-grid/output/terrain-rivers-uncapped/03-after-add-2.png`
+    - `/Users/mstafford/Projects/local/save-the-grid/output/terrain-rivers-uncapped/04-after-add-3.png`
+    - `/Users/mstafford/Projects/local/save-the-grid/output/terrain-rivers-uncapped/05-after-right-remove.png`
+    - `/Users/mstafford/Projects/local/save-the-grid/output/terrain-rivers-uncapped/result.json`
+- Console/page error check:
+  - no runtime errors on page load.
+
+## 2026-02-20 (Terrain Lab: Corner +/- Panel Toggle)
+- Updated control-panel toggle button to be a compact symbol button:
+  - expanded state uses `-`
+  - collapsed state uses `+`
+- Moved panel-toggle button to the top-right corner of the floating panel (absolute positioning).
+- Updated accessibility attributes dynamically with state:
+  - `aria-expanded`
+  - `aria-label`
+  - `title`
+- Kept regenerate button in header actions and reserved spacing so it does not overlap corner toggle.
+
+### Validation
+- `node --check /Users/mstafford/Projects/local/save-the-grid/tools/terrain/interactive/app.js`
+- Playwright UI verification:
+  - label/state transitions `- -> + -> -`
+  - panel body visibility toggles as expected
+  - toggle button position verified near top-right corner (`cornerDx=9`, `cornerDy=9`)
+  - artifacts:
+    - `/Users/mstafford/Projects/local/save-the-grid/output/terrain-controls-corner-toggle/01-expanded.png`
+    - `/Users/mstafford/Projects/local/save-the-grid/output/terrain-controls-corner-toggle/02-collapsed.png`
+    - `/Users/mstafford/Projects/local/save-the-grid/output/terrain-controls-corner-toggle/03-reexpanded.png`
+    - `/Users/mstafford/Projects/local/save-the-grid/output/terrain-controls-corner-toggle/result.json`
+
+## 2026-02-20 (Terrain Lab: Remove Button + No Reanimation on Delete)
+- Added a new `Remove River` button next to `Reset Rivers` in the control panel.
+  - UI row uses side-by-side action buttons.
+- Implemented delete-without-reanimation behavior:
+  - Added immediate raster render path (`drawTerrainOutputImmediate`) that skips river trace animation.
+  - `renderTerrain(...)` now accepts `skipRiverAnimation` and uses immediate draw for delete flows.
+  - Right-click removal now redraws with `skipRiverAnimation: true`.
+- Added button-based removal flow:
+  - `removeOneRiver()` removes one current source (deterministic first source) using shared source-removal logic.
+  - Shared helper `removeRiverSourcesByIndex(...)` powers both right-click and button removal.
+- Updated README to document `Remove River` and non-reanimated right-click removal behavior.
+
+### Validation
+- `node --check /Users/mstafford/Projects/local/save-the-grid/tools/terrain/interactive/app.js`
+- Playwright verification run:
+  - `/Users/mstafford/Projects/local/save-the-grid/output/terrain-remove-no-reanimate/result.json`
+  - Verified:
+    - remove button exists next to reset (`riverActionsChildren: 2`),
+    - remove button decrements river count (`6 -> 5`),
+    - no `Tracing rivers`/`Tracing new river` status appears during delete redraws,
+    - right-click delete path also avoids trace animation state.
+
+## 2026-02-20 (Menu Cleanup)
+- Removed `Exit` button from main menu in `/src/game.js` per request.
+- Removed the now-dead `#menu-exit` click handler.
+
+### Validation
+- `node --check src/game.js`
+- Playwright loop: `web_game_playwright_client.js` on `http://127.0.0.1:5180` (1 iteration) completed.
+- Direct UI assertion: `#menu-exit` count is `0`.
+- Screenshot: `/Users/mstafford/Projects/local/energies-game/output/menu-no-exit.png`.
+
+## 2026-02-20 (Campaign Submenu)
+- Added a dedicated `Campaign` submenu screen in `/src/game.js`:
+  - New `renderCampaignMenu()` with:
+    - `Continue Campaign` action (auto-targets recommended unlocked mission),
+    - `Mission Select` action.
+  - Added `getRecommendedCampaignMission()` helper for continue flow.
+- Updated main menu campaign entry:
+  - Button label changed from `Campaign Missions` to `Campaign`.
+  - Button now routes to `renderCampaignMenu()` instead of opening mission grid directly.
+- Updated mission-select navigation:
+  - `Back to Menu` changed to `Back to Campaign`.
+  - Back action now returns to `renderCampaignMenu()`.
+
+### Validation
+- `node --check src/game.js` passed.
+- Playwright assertions verified:
+  - Main-menu campaign label is `Campaign`.
+  - Campaign submenu renders both `#campaign-continue` and `#campaign-mission-select`.
+  - Mission screen back button label is `Back to Campaign` and returns to submenu.
+- Screenshots:
+  - `/Users/mstafford/Projects/local/energies-game/output/campaign-submenu.png`
+  - `/Users/mstafford/Projects/local/energies-game/output/campaign-mission-select.png`
+- Regression loop:
+  - `web_game_playwright_client.js` run on `http://127.0.0.1:5180` completed.
+
+## 2026-02-20 (Docs-only tutorial mode pass)
+- User requested documentation-only (no game code changes for tutorial yet).
+- Added `docs/design/TUTORIAL_MODE_DESIGN.md` defining tutorial goals, no-fail policy, and full guided task sequence.
+- Updated mode references to include Tutorial in:
+  - `docs/design/MISSION_AND_MODE_DESIGN.md`
+  - `docs/design/GAME_DESIGN.md`
+  - `docs/design/FRONTEND_AND_UX.md`
+  - `docs/design/MAP_DESIGN_2D.md`
+  - `docs/design/README.md`
+  - `docs/README.md`
+- Left runtime/source code untouched during this pass.
+
+### Next (when implementation starts)
+- Add `Tutorial` entry to main menu.
+- Add tutorial run config and no-fail behavior.
+- Add tutorial step tracker + objective panel progression.
+- Add completion detection for build/line/service/resource/reroute/demolish/pause tasks.
+
+## 2026-02-20 (Dev Mode Toggle)
+- Added a small main-menu `Dev Mode` switch in `/src/game.js` + `/src/styles.css`.
+  - Label: `Dev Mode: infinite money + no defeat`.
+  - Stored via localStorage key `STORAGE_KEYS.devMode` (`stg_dev_mode_v1`).
+- Wired dev mode into runtime config and flow:
+  - `applyDevModeToRunConfig()` stamps run configs with `devMode` before fresh or resumed runs.
+  - Dev-mode runs are marked non-leaderboard (`leaderboardEligible=false`, `leaderboardClass=custom`) and tagged with `[DEV]` in run label.
+- Implemented dev-mode behavior in simulation:
+  - Infinite budget floor (`DEV_MODE_BUDGET_FLOOR = 1_000_000_000`) maintained each tick.
+  - HUD budget chip renders `INF` while dev mode is active.
+  - Defeat conditions are bypassed (bankruptcy/reliability-collapse no longer end run).
+  - Campaign/custom objective failures resolve as victory in dev mode to honor "no losing".
+- Added dev-mode exposure in text telemetry:
+  - `render_game_to_text()` now includes top-level `devMode`.
+
+### Validation
+- Syntax:
+  - `node --check src/game.js`
+  - `node --check src/data.js`
+  - `node --check src/main.js`
+- Develop-web-game loop:
+  - `web_game_playwright_client.js` against `http://127.0.0.1:5180` (2 iterations) passed.
+- Targeted Playwright verification:
+  - Enabled `#menu-dev-mode`, started run, advanced 30s, confirmed:
+    - still in run (`#game-canvas` present),
+    - `render_game_to_text().devMode === true`,
+    - budget floor maintained (`1000000000`),
+    - HUD shows `Budget INF`.
+  - Screenshots:
+    - `/Users/mstafford/Projects/local/energies-game/output/dev-mode-toggle-menu.png`
+    - `/Users/mstafford/Projects/local/energies-game/output/dev-mode-enabled-run.png`
+- Regression smoke:
+  - `node bot-player/run-bot.mjs --url http://127.0.0.1:5180 --scenario bot-player/scenarios/smoke-controls.json` passed (19/19).
+
+## 2026-02-20 (Terrain Lab Pan + Zoom)
+- Added interactive camera controls to `/tools/terrain/interactive/app.js`:
+  - Mouse wheel zoom around cursor (`VIEW_MIN_ZOOM=1`, `VIEW_MAX_ZOOM=5`).
+  - Left-drag panning with drag threshold to avoid accidental pan on click.
+  - Click-vs-drag split so plain left click still adds a river source while drag pans.
+- Updated coordinate mapping for clicks/removals (`screenToRasterPosition`) to respect current pan/zoom transform.
+- Updated viewport drawing (`drawRasterToViewport`) to render with camera transform and clamped offsets.
+- Kept existing behavior where deleting rivers does not replay full river animation.
+- Updated docs in `/tools/terrain/interactive/README.md` with pan/zoom controls.
+
+### Validation
+- `node --check tools/terrain/interactive/app.js` passed.
+- Ran develop-web-game Playwright client:
+  - `web_game_playwright_client.js --url http://127.0.0.1:5173/tools/terrain/interactive/ --actions-file ... --iterations 1`
+- Ran targeted Playwright assertions:
+  - Zoom changes frame output.
+  - Drag-pan changes frame output.
+  - Pan itself does not trigger tracing animation.
+  - Left-click on visible land after pan/zoom still adds a river (count increased 6 -> 7) and triggers only new-river tracing.
+- Artifacts:
+  - `/output/terrain-pan-zoom-check/result.json`
+  - `/output/terrain-pan-zoom-check/before.png`
+  - `/output/terrain-pan-zoom-check/after-zoom.png`
+  - `/output/terrain-pan-zoom-check/after-pan.png`
+
+## 2026-02-20 (Right-click hold deletion preview)
+- Added right-click hold deletion radius preview in `/tools/terrain/interactive/app.js`:
+  - New overlay state `state.deletePreview` tracks active hold and cursor position.
+  - `drawRasterToViewport(...)` now calls `drawDeletePreview()` to render a transparent red circle overlay while held.
+  - Circle radius is mapped to current zoom so it matches actual deletion radius in raster-space.
+- Updated right-click input flow:
+  - `mousedown` on right button starts preview.
+  - `mousemove` updates preview position.
+  - `mouseup` on right button ends preview and performs deletion at release point.
+  - `contextmenu` is now prevent-default only (no duplicate delete trigger).
+- Updated docs in `/tools/terrain/interactive/README.md` with `Map Right Hold` behavior.
+
+### Validation
+- `node --check tools/terrain/interactive/app.js` passed.
+- Playwright check confirmed held-right-click changes pixel values toward red and shows overlay in screenshot:
+  - `/output/terrain-right-hold-preview/holding-right.png`
+  - `/output/terrain-right-hold-preview/result.json`
+- Ran develop-web-game client regression loop:
+  - `/Users/mstafford/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js`
+- Follow-up fix: right-click delete preview now always clears on release, including no-op delete cases.
+  - Root cause was `endDeletePreview(deleteRiver=true)` returning without redraw when no sources were removed.
+  - Added immediate redraw from `state.lastRaster` after right-button release delete attempt.
+  - Added additional safety clear paths: if right button state is no longer down during `mousemove`, on window `mouseup`, and on window `blur`.
+- Zoom-out bounds update: lowered `VIEW_MIN_ZOOM` to `0.25` and made pan offset clamps symmetric for zoom above/below 1x, so users can zoom out to see beyond image bounds.
+- Validation screenshot: `/output/terrain-zoomout-beyond-bounds.png`.
+
+## 2026-02-20 (Fix: reset-rivers then delete was re-randomizing all rivers)
+- Root cause: auto-river RNG seed salt depended on `targetAutoSources` (river count).
+  - Deleting one river reduces target count by 1, which changed seed salt and re-randomized all auto rivers.
+- Fix in `/tools/terrain/interactive/app.js`:
+  - Removed `targetAutoSources` from `seedSalt`; RNG now depends only on `riverSeed` + constant.
+  - This keeps river candidate sequence stable when source count changes, so deletion removes the intended source instead of regenerating the whole set.
+
+### Validation
+- `node --check tools/terrain/interactive/app.js` passed.
+- Targeted Playwright flow (`Reset Rivers` -> right-click delete):
+  - River source count changed `6 -> 5`.
+  - Result artifact: `/output/terrain-reset-delete-regression/result.json`.
+
+## 2026-02-20 (WASD camera pan)
+- Added keyboard panning for terrain lab camera in `/tools/terrain/interactive/app.js`:
+  - Hold `W/A/S/D` for continuous map pan.
+  - Added key-pan state machine + animation-frame loop (`handleKeyPanChange`, `stepKeyPan`).
+  - Added cleanup on window blur to avoid stuck movement.
+- Updated controls docs in `/tools/terrain/interactive/README.md` with `Map WASD`.
+
+### Validation
+- `node --check tools/terrain/interactive/app.js` passed.
+- Ran develop-web-game Playwright client on terrain lab URL (1 iteration).
+- Ran targeted Playwright check:
+  - zoom-in, hold `D`, hold `W` each changed canvas frame output.
+  - result artifact: `/output/terrain-wasd-check/result.json`.
+
+## 2026-02-20 (Continent Scale control)
+- Added new `Continent Scale` slider to terrain lab UI:
+  - `/tools/terrain/interactive/index.html`
+  - Range `50..200`, default `100%`.
+- Wired control in `/tools/terrain/interactive/app.js`:
+  - Added `continentScaleSlider` + `continentScaleValue` bindings.
+  - Added label updates and `input` listener with debounced regenerate.
+  - Passed `continentScale` through `renderTerrain -> buildTerrainImage -> buildHeightField`.
+- Topology generation change (low-frequency only):
+  - Updated `buildHeightFieldTopology(...)` to apply continent scale only to low-frequency layers:
+    - continent mask shaping coordinates (`lowWx`, `lowWy`)
+    - continent sinusoidal terms
+    - continent low-octave noise term
+    - macro noise sampling
+  - Left high-frequency layers unchanged:
+    - detail noise
+    - ridge noise
+  - Midpoint algorithm remains unaffected by continent scale.
+- Updated docs:
+  - `/tools/terrain/interactive/README.md` with `Continent Scale` behavior.
+
+### Validation
+- `node --check tools/terrain/interactive/app.js` passed.
+- Ran develop-web-game Playwright client loop against terrain lab URL.
+- Targeted Playwright checks (`/output/terrain-continent-scale-check/result.json`):
+  - `topologyChangedWithContinentScale: true`
+  - `midpointUnchangedWithContinentScale: true`
+- Visual artifacts:
+  - `/output/terrain-continent-scale-check/topology-60.png`
+  - `/output/terrain-continent-scale-check/topology-180.png`
+
+## 2026-02-21 (Terrain/Resources mode split)
+- Added bottom mode toggle (`Terrain` / `Resources`) to interactive terrain lab.
+- Split floating controls into mode-specific sections:
+  - Terrain mode keeps existing generation + river controls.
+  - Resources mode now shows barebones zone authoring controls (type, radius, strength, undo, clear).
+- Added resource-zone overlay rendering on top of map raster in resources mode.
+- Added resource interactions:
+  - Left click on land adds a zone.
+  - Right click removes nearest zone.
+- Preserved existing terrain interactions in terrain mode (left-click river source, right-click river source deletion preview).
+- Updated `/tools/terrain/interactive/README.md` for mode toggle + resources controls.
+- Validation:
+  - `node --check tools/terrain/interactive/app.js` passes.
+  - Playwright skill client run saved screenshot to `/output/terrain-mode-toggle-check/shot-0.png` (no console errors).
+  - Custom Playwright validation confirms:
+    - bottom mode toggle exists,
+    - terrain controls visible by default,
+    - resources controls replace terrain controls in resources mode,
+    - left-click adds resource zones in resources mode,
+    - right-click removes nearest resource zone.
+  - Result artifacts: `/output/terrain-mode-toggle-ui-check/result.json`, `/output/terrain-mode-toggle-ui-check/full-ui.png`.
+- Follow-up fix: called `applyEditorModeState()` during startup so initial mode state and ARIA state are consistently applied before first render.
+- Re-ran skill Playwright client after final patch (`/output/terrain-mode-toggle-check`), no console errors observed.
+
+## 2026-02-21 (Tutorial mode implementation + verification)
+- Implemented Tutorial mode per new docs (`docs/design/TUTORIAL_MODE_DESIGN.md`) in `src/game.js`:
+  - Added direct main-menu Tutorial entry that launches straight into gameplay (no setup screen).
+  - Added tutorial run config (`mode: tutorial`) with low-pressure parameters, sparse start, no population growth, neutral season, emergence off, and budget headroom.
+  - Added sequential 8-step guided task system with objective-card progress (`N/Total`), step-complete alerts, and next-step alerts.
+  - Wired completion checks for:
+    1) build plant on open point,
+    2) build substation on open point,
+    3) build line,
+    4) active town service,
+    5) hold `R` resource reveal,
+    6) reroute town,
+    7) demolish asset,
+    8) pause + resume.
+  - Added tutorial no-fail behavior:
+    - disabled defeat checks (bankruptcy/reliability collapse) in tutorial,
+    - disabled incident spawning in tutorial.
+  - Added tutorial state to save/restore and `render_game_to_text` output for bot/testing visibility.
+  - Final tutorial step now triggers immediate victory with reason: `Tutorial complete: core controls verified.`
+- Added tutorial-completion persistence flag:
+  - Added `STORAGE_KEYS.tutorialCompleted` in `src/data.js`.
+  - On tutorial victory, write/read profile boolean and show `Tutorial (Completed)` in main menu button label.
+
+### Validation
+- Syntax checks:
+  - `node --check src/game.js`
+  - `node --check src/data.js`
+  - `node --check src/main.js`
+- Develop-web-game client run:
+  - `node "$WEB_GAME_CLIENT" --url http://127.0.0.1:5173 --actions-file "$WEB_GAME_ACTIONS" --click-selector "#menu-tutorial" --iterations 3 --pause-ms 250 --screenshot-dir output/tutorial-mode-check-postflag`
+- Targeted Playwright end-to-end tutorial completion check:
+  - Ran scripted flow covering all 8 tutorial tasks and asserted transition to end screen + tutorial completion text.
+  - Artifact: `output/tutorial-mode-check/tutorial-complete.png`
+- Targeted persistence verification:
+  - Completed tutorial, returned to menu, asserted tutorial button label updates to `Tutorial (Completed)`.
+  - Artifact: `output/tutorial-mode-check-postflag/menu-tutorial-completed.png`
+
+## 2026-02-21 (Resources polygons instead of circles)
+- Reworked resources mode from circle stamps to polygon tracing.
+- New resource tracing behavior:
+  - Left click on land adds a draft polygon vertex.
+  - If a click is within `Vertex Snap` distance of an existing draft vertex, that vertex is reused and the polygon closes/commits.
+- Resource zones are now stored as polygon vertex arrays (`vertices`) with `type` and `strength`.
+- Added draft controls:
+  - `Close Draft Polygon`
+  - `Undo Draft Vertex`
+  - `Clear Draft`
+- Replaced `Zone Radius` control with `Vertex Snap` slider.
+- Rendering changes:
+  - Draw committed resource polygons with fill/stroke + vertex markers.
+  - Draw draft polygon with dashed stroke and draft vertices.
+  - Draw a snap hint ring around the first draft vertex when draft has >= 3 points.
+- Right-click delete in resources mode now removes:
+  - zone containing the click (preferred), else
+  - nearest zone vertex within deletion radius.
+- Validation:
+  - `node --check tools/terrain/interactive/app.js` passes.
+  - Playwright skill client run: `/output/resource-polygon-check/shot-0.png` (no console errors).
+  - Adaptive Playwright DOM validation confirms:
+    - collected 3 draft vertices,
+    - snap-close committed polygon,
+    - right-click removed the committed polygon.
+  - Artifact: `/output/resource-polygon-adaptive-check/result.json`.
+- Follow-up fix: closing a draft near any existing draft vertex now reuses that vertex by rotating vertex order so the polygon remains valid.
+- Additional adaptive validation confirms snap-close behavior with reused non-first vertex (`/output/resource-polygon-adaptive-check/result.json` => `closedOnSnap: true`).

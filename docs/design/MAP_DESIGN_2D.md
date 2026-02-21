@@ -1,7 +1,7 @@
 # 2D Overhead Map Design
 
 Status: Draft v0.1  
-Last updated: 2026-02-19
+Last updated: 2026-02-20
 
 Reference: See `INSPIRATION.md` for map visual language, hierarchy, and zoom behavior targets.
 
@@ -178,8 +178,9 @@ At every zoom level, hide non-essential detail before reducing legibility of cri
 ## 9. Mission and Mode Interaction with Map
 
 1. Standard Run: handcrafted map with dynamic demand/event sequences.
-2. Campaign Missions: handcrafted curated map states with deliberate map-size progression and line-routing goals.
-3. Custom Game: handcrafted map selection plus population/season/condition modifiers.
+2. Tutorial: small handcrafted onboarding map with low-pressure conditions and guided mechanic tasks.
+3. Campaign Missions: handcrafted curated map states with deliberate map-size progression and line-routing goals.
+4. Custom Game: handcrafted map selection plus population/season/condition modifiers.
 
 All modes should share the same base map interaction vocabulary.
 

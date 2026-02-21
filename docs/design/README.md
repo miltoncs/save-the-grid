@@ -7,6 +7,7 @@ This folder contains product intent, gameplay design, UX direction, and forward-
 - `GAME_DESIGN.md`: Core game vision, design pillars, systems boundaries, and MVP design scope.
 - `FRONTEND_AND_UX.md`: UX flow, interface surfaces, HUD behavior, and readability/accessibility guidance.
 - `MISSION_AND_MODE_DESIGN.md`: Standard run, campaign mission structure, and custom mode policy.
+- `TUTORIAL_MODE_DESIGN.md`: Tutorial mode goals, task sequence, and no-fail onboarding policy.
 - `MAP_DESIGN_2D.md`: 2D map model, readability constraints, and map interaction rules.
 - `INSPIRATION.md`: Visual and UX inspiration references translated into concrete design rules.
 - `MULTIPLAYER_NOTES.md`: Singleplayer-first multiplayer compatibility constraints for future phases.

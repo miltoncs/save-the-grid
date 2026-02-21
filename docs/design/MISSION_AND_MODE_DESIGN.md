@@ -1,19 +1,39 @@
 # Mission and Mode Design
 
 Status: Draft v0.1  
-Last updated: 2026-02-19
+Last updated: 2026-02-20
 
 ## 1. Mode Strategy
 
-The game is singleplayer-first with three player-facing play modes:
+The game is singleplayer-first with four player-facing play modes:
 
-1. `Standard Run` (core roguelike score mode).
-2. `Campaign Missions` (handcrafted scenario chain).
-3. `Custom Game` (parameterized scenario builder with separate scoring class).
+1. `Tutorial` (guided onboarding, no fail state).
+2. `Standard Run` (core roguelike score mode).
+3. `Campaign Missions` (handcrafted scenario chain).
+4. `Custom Game` (parameterized scenario builder with separate scoring class).
 
 All modes run in real time by default, with optional player-controlled pause in singleplayer.
 
-## 2. Standard Run (Primary Mode)
+## 2. Tutorial Mode (Onboarding)
+
+Tutorial mode is a linear, task-based onboarding run that teaches core mechanics in live play.
+
+Key rules:
+
+1. Accessed directly from Main Menu.
+2. No lose condition is active.
+3. Player wins by completing all tutorial tasks.
+4. Tutorial tasks cover the full base interaction set:
+   - build,
+   - line routing,
+   - substation-to-town service,
+   - resource layer reveal,
+   - reroute,
+   - demolish,
+   - pause/resume.
+5. Tutorial design details are defined in `TUTORIAL_MODE_DESIGN.md`.
+
+## 3. Standard Run (Primary Mode)
 
 ### Purpose
 
@@ -29,7 +49,7 @@ All modes run in real time by default, with optional player-controlled pause in 
 4. Run ends on collapse conditions.
 5. Standard Run completion has no material reward; outcome is score and records.
 
-## 3. Campaign Missions
+## 4. Campaign Missions
 
 ### Role in Product
 
@@ -96,7 +116,7 @@ Each mission defines:
 - Completing a mission unlocks the next mission.
 - No money carryover or material reward is granted on completion.
 
-## 4. Campaign Story Delivery
+## 5. Campaign Story Delivery
 
 Story is mission-framed and concise:
 
@@ -106,12 +126,12 @@ Story is mission-framed and concise:
 
 No branching dialogue trees are required for v1.
 
-### 4.1 In-Level Capital Rule
+### 5.1 In-Level Capital Rule
 
 - All build, maintenance, and penalty costs are funded only by money earned within the current mission.
 - On mission completion, budget resets for the next mission.
 
-## 5. Custom Game
+## 6. Custom Game
 
 ### Purpose
 
@@ -142,7 +162,7 @@ No branching dialogue trees are required for v1.
 - Any modified parameter marks run class as `Custom`.
 - Custom runs write to separate records table.
 
-## 6. Difficulty Model Across Modes
+## 7. Difficulty Model Across Modes
 
 Difficulty should scale through a small set of readable knobs:
 
@@ -157,7 +177,7 @@ Difficulty should scale through a small set of readable knobs:
 
 Avoid hidden multipliers that reduce player confidence in outcomes.
 
-## 7. Suggested Launch Mission Set (Example)
+## 8. Suggested Launch Mission Set (Example)
 
 1. `Cold Start`: bootstrap power to a starter town cluster on a small map.
 2. `Rolling Summer`: survive heat-wave demand spikes.
@@ -172,7 +192,7 @@ Avoid hidden multipliers that reduce player confidence in outcomes.
 11. `Green Mandate`: meet demand with limited fossil capacity across a large map.
 12. `National Peak`: final full-map management scenario with high town density and peak seasonal stress.
 
-## 8. Open Questions
+## 9. Open Questions
 
 1. Exact mission count target for v1 (8, 10, or 12).
 2. Whether mission unlocks are linear or choice-based by arc.
