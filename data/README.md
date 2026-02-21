@@ -4,7 +4,9 @@ This directory contains structured runtime metadata/content files consumed by th
 
 ## Layout
 
-- `maps/terrain/`: terrain metadata and map-linked data payloads.
+- `maps/index.json`: map catalog and default map ID.
+- `maps/*.map.json`: one authored gameplay map file per map.
+- `maps/terrain/`: terrain metadata linked from map documents.
 
 ## Rule
 

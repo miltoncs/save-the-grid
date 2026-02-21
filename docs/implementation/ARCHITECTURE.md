@@ -1,7 +1,7 @@
 # Save the Grid Architecture
 
-Status: Draft v0.1  
-Last updated: 2026-02-19
+Status: Draft v0.2
+Last updated: 2026-02-21
 
 ## 1. Purpose and Scope
 
@@ -26,32 +26,32 @@ This document covers MVP implementation structure and near-term extension points
 5. Local-only persistence for saves, settings, and records in MVP.
 6. Testability through headless simulation and browser integration automation.
 
-## 3. Technology Stack (MVP)
+## 3. Technology Stack (Current MVP)
 
 ### Runtime and language
 
-- TypeScript (`strict`) across client code.
+- JavaScript ES modules (browser-native, no bundler requirement).
 - Browser-only runtime for MVP.
 
 ### Rendering and UI
 
-- PixiJS for map/canvas rendering and visual overlays.
-- React for app shell screens and HUD chrome.
-- CSS variables + modular styles for theming and accessibility modes.
+- HTML/CSS + Canvas 2D rendering for map and overlays.
+- Vanilla JS app-shell surface rendering (menu/setup/run/end).
+- Split stylesheet modules imported through `src/styles.css`.
 
 ### State and validation
 
-- Simulation state in pure TypeScript domain modules (no UI framework dependency).
-- Zustand for UI/workflow state and app session orchestration.
-- Zod for validating authored content packs (maps, missions, scenarios, presets).
+- In-memory simulation/runtime state managed by `GameRuntime`.
+- Run/surface orchestration managed by `SaveTheGridApp`.
+- JSON-based content contracts for authored maps and terrain metadata.
 
 ### Persistence and tooling
 
-- IndexedDB (via Dexie) for save slots, records, and progression.
-- localStorage for lightweight settings and last-used options.
-- Vite for dev/build pipeline.
-- Vitest for unit/simulation tests.
-- Playwright for end-to-end and visual-state validation.
+- localStorage for saves, records, progression, settings, and dev flags.
+- Python static server (`python3 -m http.server`) for local runtime.
+- Playwright validation via:
+  - `bot-player/` smoke scenarios
+  - `develop-web-game` client script.
 
 ## 4. Runtime Architecture
 
@@ -71,73 +71,44 @@ The application is split into four runtime layers:
   Saves/restores run snapshots and campaign progression.
   Stores records with run-class partitioning (`standard`, `campaign`, `custom`).
 
-## 5. Proposed Repository Structure
+## 5. Repository Structure (Current + Near-Term)
 
 ```txt
 docs/
   design/
   implementation/
 src/
-  app/
-    bootstrap.ts
-    router.ts
-    surfaces/
-      SplashScreen.tsx
-      MainMenu.tsx
-      RunSetup.tsx
-      CampaignSelect.tsx
-      CustomSetup.tsx
-      InRunScreen.tsx
-      EndRunSummary.tsx
+  main.js
+  game.js
   game/
-    engine/
-      GameSession.ts
-      FixedStepClock.ts
-      RNG.ts
-    domain/
-      economy/
-      demand/
-      grid/
-      incidents/
-      objectives/
-      scoring/
-      progression/
-    map/
-      topology/
-      camera/
-      placement/
-      routing/
-    state/
-      GameState.ts
-      selectors.ts
-      commands.ts
-    content/
-      schemas/
-      loaders/
-      packs/
-    adapters/
-      render/
-      ui/
-      persistence/
-  ui/
-    hud/
-    controls/
-    alerts/
-    story/
-    accessibility/
-  data/
-    maps/
-    missions/
-    presets/
-  persistence/
-    db.ts
-    saveRepo.ts
-    recordsRepo.ts
-    settingsRepo.ts
-  test/
-    unit/
-    integration/
-    e2e/
+    core.js
+  data.js
+  styles.css
+  styles/
+    base.css
+    setup.css
+    run.css
+    end.css
+    responsive.css
+data/
+  maps/
+    index.json
+    *.map.json
+    terrain/
+assets/
+  maps/
+  icons/
+tools/
+  terrain/
+    generate_terrain_map_png.py
+    generate_mission_terrain_maps.py
+    compat/
+    interactive/
+      app.js
+      lib/
+bot-player/
+  run-bot.mjs
+  scenarios/
 ```
 
 ## 6. Simulation Model

@@ -1,0 +1,311 @@
+:root {
+  --bg-ink: #07131c;
+  --bg-panel: #0f2029;
+  --bg-panel-soft: #15303d;
+  --bg-accent: #13343f;
+  --line-faint: rgba(187, 234, 205, 0.24);
+  --line-strong: rgba(219, 250, 232, 0.38);
+  --text-main: #edf7f0;
+  --text-soft: #b8d6c5;
+  --text-muted: #8cae9e;
+  --accent-amber: #f4ba67;
+  --accent-green: #7dda95;
+  --accent-cyan: #79c8c1;
+  --accent-red: #ff6c6c;
+  --accent-blue: #5aa8ff;
+  --radius-md: 12px;
+  --radius-lg: 20px;
+  --shadow-heavy: 0 30px 70px rgba(0, 0, 0, 0.45);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  width: 100%;
+  min-height: 100%;
+  background: radial-gradient(circle at 15% 20%, #10313c 0, #07131c 55%);
+  color: var(--text-main);
+  font-family: "IBM Plex Sans", sans-serif;
+}
+
+body {
+  min-height: 100vh;
+}
+
+body.run-mode {
+  overflow: hidden;
+}
+
+button,
+input,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+#app {
+  min-height: 100vh;
+}
+
+.screen {
+  min-height: 100vh;
+  padding: clamp(14px, 2.2vw, 28px);
+}
+
+.eyebrow {
+  font-family: "IBM Plex Mono", monospace;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--accent-cyan);
+  margin: 0;
+}
+
+.splash-screen {
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  position: relative;
+  background: radial-gradient(circle at 40% 30%, #1b5360 0, #091822 48%, #050f16 100%);
+}
+
+.pulse-grid {
+  position: absolute;
+  inset: -35%;
+  background:
+    linear-gradient(transparent 96%, rgba(162, 225, 186, 0.14) 100%),
+    linear-gradient(90deg, transparent 96%, rgba(162, 225, 186, 0.14) 100%);
+  background-size: 90px 90px;
+  animation: pulse-grid 7s linear infinite;
+}
+
+@keyframes pulse-grid {
+  from {
+    transform: rotate(0deg) scale(1);
+    opacity: 0.66;
+  }
+  50% {
+    transform: rotate(1.5deg) scale(1.03);
+    opacity: 0.86;
+  }
+  to {
+    transform: rotate(0deg) scale(1);
+    opacity: 0.66;
+  }
+}
+
+.splash-content {
+  position: relative;
+  z-index: 1;
+  max-width: 700px;
+  text-align: center;
+  padding: clamp(20px, 4vw, 40px);
+  border: 1px solid var(--line-faint);
+  border-radius: var(--radius-lg);
+  background: linear-gradient(150deg, rgba(20, 42, 52, 0.84), rgba(9, 24, 33, 0.9));
+  box-shadow: var(--shadow-heavy);
+}
+
+.splash-content h1 {
+  margin: 10px 0 8px;
+  font-family: "Rajdhani", sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: clamp(2.1rem, 5.2vw, 4.6rem);
+}
+
+.splash-content .subtitle {
+  margin: 0 0 18px;
+  color: var(--text-soft);
+}
+
+.splash-content .hint {
+  margin: 0;
+  color: #f3f6d7;
+  font-family: "IBM Plex Mono", monospace;
+  animation: pulse-hint 1.2s infinite ease-in-out;
+}
+
+.splash-content .status {
+  margin-top: 14px;
+  color: var(--text-muted);
+  font-size: 0.94rem;
+}
+
+@keyframes pulse-hint {
+  0%,
+  100% {
+    opacity: 0.38;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.menu-screen {
+  display: grid;
+  align-items: center;
+}
+
+.menu-layout {
+  display: grid;
+  grid-template-columns: minmax(240px, 320px) 1fr minmax(220px, 300px);
+  gap: clamp(14px, 2vw, 22px);
+}
+
+.menu-column,
+.menu-bulletin {
+  border: 1px solid var(--line-faint);
+  border-radius: var(--radius-lg);
+  background: linear-gradient(160deg, rgba(15, 32, 41, 0.95), rgba(12, 23, 29, 0.9));
+  padding: clamp(16px, 2vw, 24px);
+  box-shadow: var(--shadow-heavy);
+}
+
+.menu-column h2 {
+  margin: 0;
+  font-family: "Rajdhani", sans-serif;
+  font-size: clamp(1.5rem, 2.4vw, 2.2rem);
+  text-transform: uppercase;
+}
+
+.menu-copy {
+  margin: 10px 0 16px;
+  color: var(--text-soft);
+}
+
+.menu-actions {
+  display: grid;
+  gap: 10px;
+}
+
+.action-btn,
+.ghost-btn,
+.preset-card,
+.tool-btn,
+.asset-btn {
+  border: 1px solid rgba(202, 237, 219, 0.27);
+  border-radius: 12px;
+  background: linear-gradient(160deg, rgba(19, 52, 63, 0.7), rgba(9, 26, 34, 0.95));
+  color: var(--text-main);
+  padding: 10px 12px;
+  text-align: left;
+  transition: transform 140ms ease, border-color 140ms ease, background 140ms ease;
+  cursor: pointer;
+}
+
+.action-btn:hover,
+.ghost-btn:hover,
+.preset-card:hover,
+.tool-btn:hover,
+.asset-btn:hover {
+  transform: translateY(-1px);
+  border-color: rgba(242, 245, 212, 0.66);
+}
+
+.action-btn-primary {
+  background: linear-gradient(145deg, rgba(245, 185, 96, 0.9), rgba(238, 144, 74, 0.92));
+  color: #131011;
+  border-color: rgba(255, 217, 169, 0.85);
+  font-weight: 700;
+}
+
+.action-btn:disabled,
+.ghost-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.menu-footer {
+  margin: 16px 0 0;
+  color: var(--text-muted);
+  font-size: 0.95rem;
+}
+
+.menu-dev-toggle {
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-soft);
+  font-size: 0.9rem;
+}
+
+.menu-dev-toggle input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent-amber);
+}
+
+.menu-map-preview {
+  border: 1px solid var(--line-faint);
+  border-radius: 22px;
+  position: relative;
+  overflow: hidden;
+  background: radial-gradient(circle at 25% 25%, #194657, #0a1c2a 70%);
+  min-height: clamp(320px, 58vh, 680px);
+  box-shadow: var(--shadow-heavy);
+}
+
+.grid-silhouette {
+  position: absolute;
+  inset: 12% 9% 10%;
+  border-radius: 30% 38% 34% 41% / 36% 31% 44% 35%;
+  border: 1px solid rgba(191, 240, 210, 0.24);
+  background: radial-gradient(circle at 42% 37%, rgba(108, 170, 124, 0.34), rgba(15, 39, 48, 0.25));
+}
+
+.energy-rings {
+  position: absolute;
+  inset: 16%;
+  border-radius: 50%;
+  border: 2px dashed rgba(229, 244, 220, 0.28);
+  animation: ring-scan 6s linear infinite;
+}
+
+.energy-rings::before,
+.energy-rings::after {
+  content: "";
+  position: absolute;
+  border-radius: 50%;
+  border: 1px solid rgba(117, 201, 164, 0.4);
+}
+
+.energy-rings::before {
+  inset: 16%;
+}
+
+.energy-rings::after {
+  inset: 34%;
+}
+
+@keyframes ring-scan {
+  from {
+    transform: rotate(0deg) scale(1);
+  }
+  50% {
+    transform: rotate(180deg) scale(1.06);
+  }
+  to {
+    transform: rotate(360deg) scale(1);
+  }
+}
+
+.menu-bulletin h3 {
+  margin: 0 0 10px;
+  font-family: "Rajdhani", sans-serif;
+  font-size: 1.45rem;
+  text-transform: uppercase;
+}
+
+.menu-bulletin ul {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 10px;
+  color: var(--text-soft);
+}
+

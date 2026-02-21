@@ -1021,3 +1021,36 @@ Original prompt: Develop the game MVP based on all provided documentation
   - Artifact: `/output/resource-polygon-adaptive-check/result.json`.
 - Follow-up fix: closing a draft near any existing draft vertex now reuses that vertex by rotating vertex order so the polygon remains valid.
 - Additional adaptive validation confirms snap-close behavior with reused non-first vertex (`/output/resource-polygon-adaptive-check/result.json` => `closedOnSnap: true`).
+
+## 2026-02-21 (Structure + Content Refactor)
+- Moved terrain generation compatibility wrappers out of `docs/mockups-ui-design/` into `tools/terrain/compat/`.
+- Removed tracked generated artifact `docs/mockups-ui-design/__pycache__/generate_terrain_map_png.cpython-314.pyc`.
+- Added/updated structure docs:
+  - `README.md` (new root structure guide)
+  - `src/README.md` (runtime source layout)
+  - `tools/terrain/compat/README.md`
+  - updated `docs/README.md`, `docs/mockups-ui-design/README.md`, `tools/README.md`, `tools/terrain/README.md`, `tools/terrain/interactive/README.md`, `data/README.md`.
+- Implemented canonical map JSON storage files:
+  - `data/maps/index.json`
+  - `data/maps/national_core.map.json`
+  - `data/maps/README.md`
+- Added runtime preload path from JSON maps:
+  - `src/data.js` now exports `preloadRuntimeMapContent()` and hydrates mutable `BASE_MAP` from map JSON.
+  - `src/main.js` now awaits map preload before booting app.
+- Normalized map schema usage in gameplay code to use `BASE_MAP.towns` (removed map-level `regions` alias fallback).
+- Added resource-zone fallback so gameplay can use `BASE_MAP.resourceZones` when terrain metadata is absent.
+- Split oversized source files:
+  - Extracted shared game constants/helpers/config builders to `src/game/core.js` and updated `src/game.js` to import from it.
+  - Split CSS entry into modular files under `src/styles/`.
+  - Split terrain editor helper modules into `tools/terrain/interactive/lib/{dom,math,resource-zones}.js`.
+- Kept root and `bot-player` Playwright dependencies aligned at `^1.50.0` because the shared `develop-web-game` client resolves `playwright` from repo root.
+
+### TODO (current pass)
+- Run syntax and smoke checks across both game runtime and terrain interactive tool.
+- Verify no regression in menu/run flow and terrain editor interactions after module extraction.
+- Optionally move campaign mission source-of-truth from `src/data.js` into dedicated mission JSON files.
+- Validation checks completed:
+  - `node --check` passed for updated runtime files and terrain interactive modules.
+  - `bot-player` smoke run (`smoke-menu-to-run`) passed after refactor.
+  - Terrain interactive page smoke check passed with no console/page errors; screenshot emitted to `output/terrain-interactive-smoke.png`.
+  - `develop-web-game` Playwright client run passed after reinstalling Chromium (`npx playwright install chromium`).

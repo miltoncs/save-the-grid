@@ -1,0 +1,150 @@
+.setup-screen,
+.campaign-screen,
+.custom-screen,
+.records-screen,
+.settings-screen,
+.end-screen {
+  display: grid;
+  gap: 18px;
+  align-content: start;
+}
+
+.setup-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.setup-header h2 {
+  margin: 0;
+  font-family: "Rajdhani", sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: clamp(1.6rem, 2.2vw, 2.25rem);
+}
+
+.setup-copy {
+  margin: -2px 0 0;
+  color: var(--text-soft);
+}
+
+.preset-grid,
+.mission-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 12px;
+}
+
+.preset-card,
+.mission-card {
+  padding: 14px;
+}
+
+.preset-card h3,
+.mission-card h3 {
+  margin: 0 0 8px;
+  font-family: "Rajdhani", sans-serif;
+  letter-spacing: 0.04em;
+}
+
+.preset-card p,
+.mission-card p {
+  margin: 0 0 8px;
+  color: var(--text-soft);
+  font-size: 0.92rem;
+}
+
+.preset-card.active,
+.tool-btn.active,
+.asset-btn.active {
+  border-color: rgba(244, 245, 210, 0.9);
+  background: linear-gradient(160deg, rgba(37, 89, 98, 0.78), rgba(14, 36, 43, 0.95));
+}
+
+.mission-card {
+  border: 1px solid var(--line-faint);
+  border-radius: 14px;
+  background: linear-gradient(160deg, rgba(15, 32, 41, 0.9), rgba(12, 23, 29, 0.92));
+  cursor: pointer;
+  transition: transform 140ms ease, border-color 140ms ease;
+}
+
+.mission-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(245, 236, 203, 0.7);
+}
+
+.mission-card.locked {
+  opacity: 0.48;
+  cursor: not-allowed;
+}
+
+.mission-arc {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.8rem;
+  color: var(--accent-cyan);
+  text-transform: uppercase;
+}
+
+.mission-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.mission-tags span {
+  border: 1px solid rgba(194, 231, 207, 0.28);
+  border-radius: 999px;
+  padding: 3px 8px;
+  font-size: 0.76rem;
+}
+
+.mission-best {
+  color: var(--accent-green);
+}
+
+.mission-locked-label {
+  color: var(--accent-red);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.82rem;
+}
+
+.setup-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.custom-form,
+.settings-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.custom-form label,
+.settings-form label {
+  display: grid;
+  gap: 7px;
+  border: 1px solid var(--line-faint);
+  border-radius: 12px;
+  background: rgba(16, 36, 45, 0.72);
+  padding: 12px;
+  color: var(--text-soft);
+}
+
+.custom-form input,
+.custom-form select,
+.settings-form select {
+  border: 1px solid rgba(200, 231, 213, 0.28);
+  border-radius: 9px;
+  background: rgba(7, 22, 29, 0.9);
+  padding: 8px 10px;
+}
+
+.checkbox-row {
+  grid-template-columns: auto 1fr;
+  align-items: center;
+}
+

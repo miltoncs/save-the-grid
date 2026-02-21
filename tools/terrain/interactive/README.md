@@ -46,3 +46,10 @@ npm run serve
 Open:
 
 - `http://127.0.0.1:5173/tools/terrain/interactive/`
+
+## Source Modules
+
+- `app.js`: orchestration and rendering loop.
+- `lib/dom.js`: DOM element bindings.
+- `lib/math.js`: pure math/noise helpers.
+- `lib/resource-zones.js`: resource zone styles + labels.

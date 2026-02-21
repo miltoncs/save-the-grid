@@ -1,0 +1,13 @@
+{
+  "contentVersion": 1,
+  "defaultMapId": "national-core",
+  "maps": [
+    {
+      "id": "national-core",
+      "file": "national_core.map.json",
+      "displayName": "National Grid Core",
+      "sizeClass": "large",
+      "routingComplexity": "moderate"
+    }
+  ]
+}

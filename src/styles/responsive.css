@@ -1,0 +1,111 @@
+@media (max-width: 1180px) {
+  .menu-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .floating-objective {
+    width: min(420px, 56vw);
+  }
+
+  .floating-alerts,
+  .floating-incidents {
+    width: min(280px, 32vw);
+  }
+
+  .floating-bottom-left {
+    max-width: min(640px, 58vw);
+  }
+
+  .floating-bottom-center {
+    width: min(700px, calc(100vw - 340px));
+  }
+
+  .floating-bottom-right {
+    width: min(320px, 32vw);
+  }
+}
+
+@media (max-width: 760px) {
+  .screen {
+    padding: 10px;
+  }
+
+  .run-screen {
+    padding: 0;
+  }
+
+  .floating-top-left,
+  .floating-top-right {
+    top: 10px;
+  }
+
+  .floating-top-left {
+    left: 10px;
+  }
+
+  .floating-top-right {
+    right: 10px;
+    gap: 6px;
+  }
+
+  .floating-objective {
+    top: 72px;
+    left: 10px;
+    right: 10px;
+    transform: none;
+    width: auto;
+  }
+
+  .floating-alerts,
+  .floating-incidents,
+  .floating-bottom-right {
+    display: none;
+  }
+
+  .floating-bottom-left {
+    left: 10px;
+    right: 10px;
+    bottom: 138px;
+    max-width: none;
+  }
+
+  .floating-chip {
+    font-size: 0.76rem;
+    padding: 7px 9px;
+  }
+
+  .floating-bottom-center {
+    left: 10px;
+    right: 10px;
+    bottom: 10px;
+    width: auto;
+    transform: none;
+  }
+
+  .floating-dock {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .floating-dock-btn {
+    flex: 1 1 92px;
+    min-width: 92px;
+  }
+
+  .dock-separator {
+    display: none;
+  }
+
+  .floating-map-controls {
+    right: 10px;
+    bottom: 232px;
+  }
+
+  .setup-actions {
+    width: 100%;
+  }
+
+  .setup-actions .action-btn {
+    flex: 1;
+  }
+}

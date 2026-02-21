@@ -23,9 +23,9 @@ It contains simple SVG mockups so we can discuss visual direction quickly withou
   - `../../assets/maps/terrain/mission-terrain-maps/`
 - Terrain generation scripts:
   - `../../tools/terrain/`
-  - compatibility wrappers in this folder:
-    - `generate_terrain_map_png.py`
-    - `generate_mission_terrain_maps.py`
+  - optional legacy wrappers:
+    - `../../tools/terrain/compat/generate_terrain_map_png.py`
+    - `../../tools/terrain/compat/generate_mission_terrain_maps.py`
 
 ## Current Visual Direction
 

@@ -16,6 +16,10 @@ Core generation logic lives in the shared submodule:
   - below sea level as water (blue).
 - `generate_mission_terrain_maps.py`:
   Generates mission terrain set under `/assets/maps/terrain/mission-terrain-maps/`.
+- `compat/generate_terrain_map_png.py`:
+  Compatibility wrapper that forwards to `generate_terrain_map_png.py`.
+- `compat/generate_mission_terrain_maps.py`:
+  Compatibility wrapper that forwards to `generate_mission_terrain_maps.py`.
 
 ## Notes
 

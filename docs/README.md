@@ -30,6 +30,7 @@ Use this rule when adding or updating docs:
 
 Do not store runtime assets or generation scripts under `docs/`.
 Keep executable tools under `tools/` and game-consumed files under `assets/` or `data/`.
+Legacy wrapper scripts now live in `tools/terrain/compat/` rather than under `docs/`.
 
 If a document mixes both, split it into one design doc and one implementation doc that cross-link each other.
 

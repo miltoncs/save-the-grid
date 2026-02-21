@@ -1,42 +1,53 @@
-const canvas = document.getElementById("terrain-canvas");
-const ctx = canvas.getContext("2d", { alpha: false });
-
-const floatingControls = document.getElementById("floating-controls");
-const panelToggleBtn = document.getElementById("panel-toggle-btn");
-const panelTitle = document.getElementById("panel-title");
-const panelSubtitle = document.getElementById("panel-subtitle");
-const regenerateBtn = document.getElementById("regenerate-btn");
-const terrainControlsGroup = document.getElementById("terrain-controls-group");
-const resourceControlsGroup = document.getElementById("resource-controls-group");
-const algorithmValue = document.getElementById("algorithm-value");
-const algorithmButtons = Array.from(document.querySelectorAll(".algo-btn"));
-const smoothnessSlider = document.getElementById("smoothness-slider");
-const continentScaleSlider = document.getElementById("continent-scale-slider");
-const seaLevelSlider = document.getElementById("sea-level-slider");
-const mountaintopSlider = document.getElementById("mountaintop-slider");
-const riversCountValue = document.getElementById("rivers-count-value");
-const resetRiversBtn = document.getElementById("reset-rivers-btn");
-const removeAllRiversBtn = document.getElementById("remove-all-rivers-btn");
-const resourceTypeSelect = document.getElementById("resource-type-select");
-const resourceSnapSlider = document.getElementById("resource-snap-slider");
-const resourceStrengthSlider = document.getElementById("resource-strength-slider");
-const resourceTypeValue = document.getElementById("resource-type-value");
-const resourceSnapValue = document.getElementById("resource-snap-value");
-const resourceStrengthValue = document.getElementById("resource-strength-value");
-const resourceDraftCountValue = document.getElementById("resource-draft-count-value");
-const resourceZonesCountValue = document.getElementById("resource-zones-count-value");
-const closeDraftBtn = document.getElementById("close-draft-btn");
-const undoDraftVertexBtn = document.getElementById("undo-draft-vertex-btn");
-const clearDraftBtn = document.getElementById("clear-draft-btn");
-const undoZoneBtn = document.getElementById("undo-zone-btn");
-const clearZonesBtn = document.getElementById("clear-zones-btn");
-const modeButtons = Array.from(document.querySelectorAll(".mode-btn"));
-const smoothnessValue = document.getElementById("smoothness-value");
-const continentScaleValue = document.getElementById("continent-scale-value");
-const seaLevelValue = document.getElementById("sea-level-value");
-const mountaintopValue = document.getElementById("mountaintop-value");
-const seedValue = document.getElementById("seed-value");
-const statsValue = document.getElementById("stats-value");
+import {
+  algorithmButtons,
+  algorithmValue,
+  canvas,
+  clearDraftBtn,
+  clearZonesBtn,
+  closeDraftBtn,
+  continentScaleSlider,
+  continentScaleValue,
+  floatingControls,
+  modeButtons,
+  mountaintopSlider,
+  mountaintopValue,
+  panelSubtitle,
+  panelTitle,
+  panelToggleBtn,
+  regenerateBtn,
+  removeAllRiversBtn,
+  resourceControlsGroup,
+  resourceDraftCountValue,
+  resourceSnapSlider,
+  resourceSnapValue,
+  resourceStrengthSlider,
+  resourceStrengthValue,
+  resourceTypeSelect,
+  resourceTypeValue,
+  resourceZonesCountValue,
+  resetRiversBtn,
+  riversCountValue,
+  seaLevelSlider,
+  seaLevelValue,
+  smoothnessSlider,
+  smoothnessValue,
+  statsValue,
+  terrainControlsGroup,
+  undoDraftVertexBtn,
+  undoZoneBtn,
+  seedValue,
+  ctx,
+} from "./lib/dom.js";
+import {
+  clamp,
+  createMulberry32,
+  fractalNoise,
+  lerp,
+  quantileFromArray,
+  randomSeed,
+  smoothstep01,
+} from "./lib/math.js";
+import { getResourceStyle, resourceTypeLabel } from "./lib/resource-zones.js";
 
 const COLORS = {
   water: [68, 134, 195],
@@ -60,24 +71,6 @@ const VIEW_MAX_ZOOM = 5;
 const VIEW_ZOOM_STEP = 1.14;
 const VIEW_DRAG_THRESHOLD_PX = 6;
 const VIEW_KEYPAN_SPEED_PX_PER_SEC = 700;
-
-const RESOURCE_ZONE_STYLES = {
-  wind: {
-    label: "Wind",
-    fill: "rgba(106, 212, 255, 0.28)",
-    stroke: "rgba(138, 223, 255, 0.92)",
-  },
-  sun: {
-    label: "Sun",
-    fill: "rgba(255, 210, 97, 0.28)",
-    stroke: "rgba(255, 223, 142, 0.96)",
-  },
-  gas: {
-    label: "Natural Gas",
-    fill: "rgba(144, 192, 255, 0.24)",
-    stroke: "rgba(172, 209, 255, 0.94)",
-  },
-};
 
 const state = {
   seed: randomSeed(),
@@ -127,104 +120,6 @@ function clearPendingSliderRegenerate() {
   if (!sliderTimer) return;
   window.clearTimeout(sliderTimer);
   sliderTimer = 0;
-}
-
-function clamp(value, lo, hi) {
-  return Math.max(lo, Math.min(hi, value));
-}
-
-function lerp(a, b, t) {
-  return a + (b - a) * t;
-}
-
-function smoothstep01(t) {
-  const x = clamp(t, 0, 1);
-  return x * x * (3 - (2 * x));
-}
-
-function randomSeed() {
-  return Math.floor(Math.random() * 0xffffffff) >>> 0;
-}
-
-function getResourceStyle(type) {
-  return RESOURCE_ZONE_STYLES[type] || RESOURCE_ZONE_STYLES.wind;
-}
-
-function resourceTypeLabel(type) {
-  return getResourceStyle(type).label;
-}
-
-function createMulberry32(seed) {
-  let value = seed >>> 0;
-  return () => {
-    value = (value + 0x6d2b79f5) >>> 0;
-    let t = Math.imul(value ^ (value >>> 15), value | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-function hash2(ix, iy, seed) {
-  let n =
-    (Math.imul(ix, 374761393) + Math.imul(iy, 668265263) + Math.imul(seed, 73856093)) >>> 0;
-  n = (n ^ (n >>> 13)) >>> 0;
-  n = Math.imul(n, 1274126177) >>> 0;
-  n = (n ^ (n >>> 16)) >>> 0;
-  return n / 4294967295;
-}
-
-function valueNoise(x, y, seed) {
-  const ix = Math.floor(x);
-  const iy = Math.floor(y);
-  const fx = x - ix;
-  const fy = y - iy;
-
-  const sx = smoothstep01(fx);
-  const sy = smoothstep01(fy);
-
-  const v00 = hash2(ix, iy, seed);
-  const v10 = hash2(ix + 1, iy, seed);
-  const v01 = hash2(ix, iy + 1, seed);
-  const v11 = hash2(ix + 1, iy + 1, seed);
-
-  const i0 = lerp(v00, v10, sx);
-  const i1 = lerp(v01, v11, sx);
-  return (lerp(i0, i1, sy) * 2) - 1;
-}
-
-function fractalNoise(x, y, seed, octaves = 5, lacunarity = 2.02, gain = 0.5) {
-  let amplitude = 1;
-  let frequency = 1;
-  let value = 0;
-  let normalizer = 0;
-
-  for (let octave = 0; octave < octaves; octave += 1) {
-    const octaveSeed = (seed + (octave * 911)) >>> 0;
-    value += amplitude * valueNoise(x * frequency, y * frequency, octaveSeed);
-    normalizer += amplitude;
-    amplitude *= gain;
-    frequency *= lacunarity;
-  }
-
-  return normalizer > 0 ? value / normalizer : 0;
-}
-
-function quantileFromArray(values, q) {
-  if (!values.length) return 0;
-  const clampedQ = clamp(q, 0, 1);
-  const sorted = new Float32Array(values.length);
-  sorted.set(values);
-  sorted.sort();
-
-  if (sorted.length === 1) return sorted[0];
-
-  const pos = clampedQ * (sorted.length - 1);
-  const lo = Math.floor(pos);
-  const hi = Math.ceil(pos);
-  if (lo === hi) return sorted[lo];
-
-  const t = pos - lo;
-  return lerp(sorted[lo], sorted[hi], t);
 }
 
 function blurHeightField(source, width, height, passes) {

@@ -180,6 +180,12 @@ At command execution (`build`):
 3. Apply zone multipliers to placement preview and committed asset stats.
 4. Persist zone-linked state in run snapshot for deterministic save/load.
 
+Current MVP implementation status:
+
+1. Runtime preloads `data/maps/index.json` to resolve the default map file.
+2. Runtime hydrates `BASE_MAP` from the resolved `*.map.json` document before app boot.
+3. Resource zones are loaded from terrain metadata when available, and fall back to `resourceZones[]` in the map document.
+
 ## 7. Validation Rules
 
 `ResourceZoneSchema` should enforce:
