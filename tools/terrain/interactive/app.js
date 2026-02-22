@@ -2,9 +2,7 @@ import {
   algorithmButtons,
   algorithmValue,
   canvas,
-  clearDraftBtn,
   clearZonesBtn,
-  closeDraftBtn,
   continentScaleSlider,
   continentScaleValue,
   floatingControls,
@@ -18,7 +16,6 @@ import {
   removeAllRiversBtn,
   resourceControlsGroup,
   resourceDraftCountValue,
-  resourceSnapSlider,
   resourceSnapValue,
   resourceStrengthSlider,
   resourceStrengthValue,
@@ -33,7 +30,6 @@ import {
   smoothnessValue,
   statsValue,
   terrainControlsGroup,
-  undoDraftVertexBtn,
   undoZoneBtn,
   seedValue,
   ctx,
@@ -52,6 +48,8 @@ import { getResourceStyle, resourceTypeLabel } from "./lib/resource-zones.js";
 const COLORS = {
   water: [68, 134, 195],
   river: [68, 134, 195],
+  coastWater: [108, 173, 224],
+  coastLand: [156, 170, 112],
   plains: [132, 190, 116],
   mountain: [204, 175, 136],
   mountaintop: [246, 246, 244],
@@ -63,6 +61,7 @@ const RIVER_ANIMATION_MS = 950;
 const SOURCE_REMOVE_RADIUS_PX = 18;
 const RESOURCE_REMOVE_RADIUS_PX = 14;
 const RESOURCE_VERTEX_RENDER_RADIUS = 4;
+const RESOURCE_VERTEX_SNAP_PX = 10;
 const DELETE_PREVIEW_FILL = "rgba(255, 58, 58, 0.2)";
 const DELETE_PREVIEW_STROKE = "rgba(255, 86, 86, 0.9)";
 const DELETE_PREVIEW_STROKE_WIDTH = 2;
@@ -71,6 +70,9 @@ const VIEW_MAX_ZOOM = 5;
 const VIEW_ZOOM_STEP = 1.14;
 const VIEW_DRAG_THRESHOLD_PX = 6;
 const VIEW_KEYPAN_SPEED_PX_PER_SEC = 700;
+const NEW_MAP_RESOURCE_ZONE_FRACTION = 0.05;
+const NEW_MAP_RESOURCE_ZONE_STRENGTH = 70;
+const NEW_MAP_RESOURCE_ZONE_TYPES = ["wind", "sun", "gas"];
 
 const state = {
   seed: randomSeed(),
@@ -156,6 +158,130 @@ function blurHeightField(source, width, height, passes) {
   return field;
 }
 
+function computePolygonAreaPx(points) {
+  if (!points || points.length < 3) return 0;
+  let twiceArea = 0;
+  for (let i = 0, j = points.length - 1; i < points.length; j = i, i += 1) {
+    const a = points[j];
+    const b = points[i];
+    twiceArea += (a.x * b.y) - (b.x * a.y);
+  }
+  return Math.abs(twiceArea) * 0.5;
+}
+
+function buildSeededResourcePolygonVertices(
+  rand,
+  width,
+  height,
+  centerX,
+  centerY,
+  targetAreaPx
+) {
+  const vertexCount = 8 + Math.floor(rand() * 4);
+  const angleOffset = rand() * Math.PI * 2;
+  const baseRadius = Math.sqrt(targetAreaPx / Math.PI);
+  const angleJitterMax = (Math.PI * 2 / vertexCount) * 0.34;
+  const points = [];
+
+  for (let i = 0; i < vertexCount; i += 1) {
+    const baseAngle = angleOffset + ((i / vertexCount) * Math.PI * 2);
+    const angle = baseAngle + (((rand() * 2) - 1) * angleJitterMax);
+    const radius = baseRadius * lerp(0.78, 1.2, rand());
+    points.push({
+      x: centerX + (Math.cos(angle) * radius),
+      y: centerY + (Math.sin(angle) * radius),
+    });
+  }
+
+  const area = computePolygonAreaPx(points);
+  if (area > 0) {
+    const areaScale = clamp(Math.sqrt(targetAreaPx / area), 0.72, 1.42);
+    for (let i = 0; i < points.length; i += 1) {
+      const p = points[i];
+      p.x = centerX + ((p.x - centerX) * areaScale);
+      p.y = centerY + ((p.y - centerY) * areaScale);
+    }
+  }
+
+  const edgePadding = 2;
+  return points.map((point) => ({
+    nx: clamp(
+      clamp(point.x, edgePadding, (width - 1) - edgePadding) / Math.max(1, width - 1),
+      0,
+      1
+    ),
+    ny: clamp(
+      clamp(point.y, edgePadding, (height - 1) - edgePadding) / Math.max(1, height - 1),
+      0,
+      1
+    ),
+  }));
+}
+
+function generateSeededResourceZones(width, height, seed) {
+  const rand = createMulberry32((seed ^ 0x6a09e667) >>> 0);
+  const targetAreaPx = Math.max(1, width * height * NEW_MAP_RESOURCE_ZONE_FRACTION);
+  const targetRadius = Math.sqrt(targetAreaPx / Math.PI);
+  const minCenterMargin = Math.max(12, targetRadius * 1.25);
+  const placedCenters = [];
+
+  return NEW_MAP_RESOURCE_ZONE_TYPES.map((type) => {
+    let chosenCenter = null;
+    let bestFallbackCenter = null;
+    let bestFallbackDistance = -Infinity;
+
+    for (let attempt = 0; attempt < 160; attempt += 1) {
+      const xMin = minCenterMargin;
+      const xMax = (width - 1) - minCenterMargin;
+      const yMin = minCenterMargin;
+      const yMax = (height - 1) - minCenterMargin;
+
+      const cx = xMax > xMin ? lerp(xMin, xMax, rand()) : lerp(0, width - 1, rand());
+      const cy = yMax > yMin ? lerp(yMin, yMax, rand()) : lerp(0, height - 1, rand());
+
+      let nearestDistance = Infinity;
+      for (let i = 0; i < placedCenters.length; i += 1) {
+        const prev = placedCenters[i];
+        const dx = prev.x - cx;
+        const dy = prev.y - cy;
+        nearestDistance = Math.min(nearestDistance, Math.sqrt((dx * dx) + (dy * dy)));
+      }
+
+      if (placedCenters.length === 0 || nearestDistance >= (targetRadius * 1.35) || attempt > 120) {
+        chosenCenter = { x: cx, y: cy };
+        break;
+      }
+
+      if (nearestDistance > bestFallbackDistance) {
+        bestFallbackDistance = nearestDistance;
+        bestFallbackCenter = { x: cx, y: cy };
+      }
+    }
+
+    if (!chosenCenter) {
+      chosenCenter = bestFallbackCenter || {
+        x: lerp(0, width - 1, rand()),
+        y: lerp(0, height - 1, rand()),
+      };
+    }
+
+    placedCenters.push(chosenCenter);
+
+    return {
+      type,
+      strength: NEW_MAP_RESOURCE_ZONE_STRENGTH,
+      vertices: buildSeededResourcePolygonVertices(
+        rand,
+        width,
+        height,
+        chosenCenter.x,
+        chosenCenter.y,
+        targetAreaPx
+      ),
+    };
+  });
+}
+
 function buildHeightFieldTopology(width, height, seed, smoothness, continentScalePercent = 100) {
   const smoothnessNorm = clamp(smoothness / 100, 0, 1);
   const continentScale = clamp(continentScalePercent / 100, 0.5, 2);
@@ -222,8 +348,9 @@ function buildHeightFieldTopology(width, height, seed, smoothness, continentScal
   return heights;
 }
 
-function buildHeightFieldMidpoint(width, height, seed, smoothness) {
+function buildHeightFieldMidpoint(width, height, seed, smoothness, continentScalePercent = 100) {
   const smoothnessNorm = clamp(smoothness / 100, 0, 1);
+  const continentScale = clamp(continentScalePercent / 100, 0.5, 2);
   const maxDim = Math.max(width, height);
   let side = 1;
   while (side < maxDim - 1) {
@@ -317,13 +444,43 @@ function buildHeightFieldMidpoint(width, height, seed, smoothness) {
     }
   }
 
+  // Apply low-frequency continent shaping so Continent Scale also affects midpoint generation.
+  const macroFreq = lerp(3.6, 2.0, smoothnessNorm);
+  for (let y = 0; y < height; y += 1) {
+    const ny = y / Math.max(1, height - 1);
+    for (let x = 0; x < width; x += 1) {
+      const nx = x / Math.max(1, width - 1);
+      const idx = (y * width) + x;
+
+      const lowNx = ((nx - 0.52) * continentScale) + 0.52;
+      const lowNy = ((ny - 0.53) * continentScale) + 0.53;
+
+      const dx = (lowNx - 0.52) / 0.82;
+      const dy = (lowNy - 0.53) / 0.68;
+      const radial = Math.sqrt((dx * dx) + (dy * dy));
+
+      let continent = 1 - radial;
+      continent += 0.17 * Math.sin((lowNx * 4.2) + (lowNy * 2.4));
+      continent += 0.12 * Math.sin((lowNx * 2.3) - (lowNy * 3.4));
+      continent += 0.1 * fractalNoise(lowNx * 1.7, lowNy * 1.7, seed ^ 0x13579bdf, 3);
+      continent = clamp(continent, -1, 1);
+
+      const macro = fractalNoise(lowNx * macroFreq, lowNy * macroFreq, seed ^ 0x2468ace0, 4);
+
+      let value = heights[idx];
+      value += continent * 0.22;
+      value += macro * 0.14;
+      heights[idx] = clamp(value, 0, 1);
+    }
+  }
+
   const blurPasses = Math.round(lerp(0, 5, smoothnessNorm));
   return blurPasses > 0 ? blurHeightField(heights, width, height, blurPasses) : heights;
 }
 
 function buildHeightField(width, height, seed, smoothness, algorithm, continentScalePercent = 100) {
   if (algorithm === "midpoint") {
-    return buildHeightFieldMidpoint(width, height, seed, smoothness);
+    return buildHeightFieldMidpoint(width, height, seed, smoothness, continentScalePercent);
   }
   return buildHeightFieldTopology(width, height, seed, smoothness, continentScalePercent);
 }
@@ -828,7 +985,7 @@ function updateLabels() {
   riversCountValue.textContent = `${visibleRiverCount}`;
   algorithmValue.textContent = state.algorithm === "midpoint" ? "Midpoint" : "Topology";
   resourceTypeValue.textContent = resourceTypeLabel(resourceTypeSelect.value);
-  resourceSnapValue.textContent = `${resourceSnapSlider.value} px`;
+  resourceSnapValue.textContent = `${RESOURCE_VERTEX_SNAP_PX} px`;
   resourceStrengthValue.textContent = `${resourceStrengthSlider.value}%`;
   resourceDraftCountValue.textContent = `${state.resourceDraftVertices.length}`;
   resourceZonesCountValue.textContent = `${state.resourceZones.length}`;
@@ -964,6 +1121,7 @@ function buildTerrainImage(
   const baseImageData = new ImageData(width, height);
   const basePixels = baseImageData.data;
   const riverShade = new Float32Array(width * height);
+  const terrainMask = new Uint8Array(width * height); // 0 = sea, 1 = land
 
   let waterCount = 0;
   let plainsCount = 0;
@@ -982,7 +1140,9 @@ function buildTerrainImage(
       if (h < seaLevel) {
         [r, g, b] = COLORS.water;
         waterCount += 1;
+        terrainMask[idx] = 0;
       } else {
+        terrainMask[idx] = 1;
         let baseColor;
         if (h >= mountaintopLevel) {
           baseColor = COLORS.mountaintop;
@@ -1010,6 +1170,52 @@ function buildTerrainImage(
       basePixels[p + 1] = g;
       basePixels[p + 2] = b;
       basePixels[p + 3] = 255;
+    }
+  }
+
+  // Coastline pass: recolor only immediate land/sea boundaries.
+  for (let y = 0; y < height; y += 1) {
+    const y0 = Math.max(0, y - 1);
+    const y1 = Math.min(height - 1, y + 1);
+    for (let x = 0; x < width; x += 1) {
+      const idx = (y * width) + x;
+      const isLand = terrainMask[idx] === 1;
+      const isRiver = riverOutput.riverMask[idx] === 1;
+      if (isRiver) continue;
+
+      let bordersOpposite = false;
+      const x0 = Math.max(0, x - 1);
+      const x1 = Math.min(width - 1, x + 1);
+
+      for (let yy = y0; yy <= y1 && !bordersOpposite; yy += 1) {
+        const row = yy * width;
+        for (let xx = x0; xx <= x1; xx += 1) {
+          if (xx === x && yy === y) continue;
+          const nIdx = row + xx;
+          if (isLand) {
+            if (terrainMask[nIdx] === 0) {
+              bordersOpposite = true;
+              break;
+            }
+          } else if (terrainMask[nIdx] === 1) {
+            bordersOpposite = true;
+            break;
+          }
+        }
+      }
+
+      if (!bordersOpposite) continue;
+
+      const p = idx * 4;
+      if (isLand) {
+        basePixels[p] = COLORS.coastLand[0];
+        basePixels[p + 1] = COLORS.coastLand[1];
+        basePixels[p + 2] = COLORS.coastLand[2];
+      } else {
+        basePixels[p] = COLORS.coastWater[0];
+        basePixels[p + 1] = COLORS.coastWater[1];
+        basePixels[p + 2] = COLORS.coastWater[2];
+      }
     }
   }
 
@@ -1082,7 +1288,7 @@ function cancelActiveAnimation() {
 function drawRasterToViewport(raster) {
   clampViewOffset(window.innerWidth, window.innerHeight);
   const transform = getViewTransform(window.innerWidth, window.innerHeight);
-  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingEnabled = false;
   ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
   ctx.drawImage(raster, transform.x, transform.y, transform.drawWidth, transform.drawHeight);
   drawResourceZones(transform);
@@ -1195,10 +1401,9 @@ function drawResourceZones(transform) {
     }
 
     if (draftPoints.length >= 3) {
-      const snapRadiusPx = Number(resourceSnapSlider.value);
       const first = draftPoints[0];
       ctx.beginPath();
-      ctx.arc(first.x, first.y, Math.max(2, snapRadiusPx * rasterPxToScreen), 0, Math.PI * 2);
+      ctx.arc(first.x, first.y, Math.max(2, RESOURCE_VERTEX_SNAP_PX * rasterPxToScreen), 0, Math.PI * 2);
       ctx.strokeStyle = "rgba(174, 239, 255, 0.5)";
       ctx.lineWidth = 1;
       ctx.stroke();
@@ -1293,6 +1498,11 @@ async function renderTerrain({
     window.innerWidth,
     window.innerHeight
   );
+  const seedResourceZones = newSeed || (!state.currentOutput && state.resourceZones.length === 0);
+  if (seedResourceZones) {
+    state.resourceZones = generateSeededResourceZones(rasterWidth, rasterHeight, state.seed);
+    state.resourceDraftVertices = [];
+  }
 
   const smoothness = Number(smoothnessSlider.value);
   const continentScale = Number(continentScaleSlider.value);
@@ -1415,19 +1625,14 @@ function addResourceZoneFromClick(clientX, clientY) {
   const rasterPos = screenToRasterPosition(clientX, clientY, output);
   if (!rasterPos) return;
 
-  if (output.heights[rasterPos.idx] <= output.seaLevel) {
-    return;
-  }
-
   const normalized = rasterIndexToNormalized(rasterPos.idx, output.width, output.height);
-  const snapPx = Number(resourceSnapSlider.value);
   const closeVertexIdx = findNearestVertexIndex(
     state.resourceDraftVertices,
     normalized.nx,
     normalized.ny,
     output.width,
     output.height,
-    snapPx
+    RESOURCE_VERTEX_SNAP_PX
   );
 
   if (closeVertexIdx >= 0) {
@@ -1531,26 +1736,6 @@ function removeResourceZoneNearClick(clientX, clientY) {
 function clearAllResourceZones() {
   if (state.resourceZones.length === 0) return;
   state.resourceZones = [];
-  updateLabels();
-  updateResourceStats();
-  if (state.lastRaster) {
-    drawRasterToViewport(state.lastRaster);
-  }
-}
-
-function clearResourceDraft() {
-  if (state.resourceDraftVertices.length === 0) return;
-  state.resourceDraftVertices = [];
-  updateLabels();
-  updateResourceStats();
-  if (state.lastRaster) {
-    drawRasterToViewport(state.lastRaster);
-  }
-}
-
-function undoLastDraftVertex() {
-  if (state.resourceDraftVertices.length === 0) return;
-  state.resourceDraftVertices.pop();
   updateLabels();
   updateResourceStats();
   if (state.lastRaster) {
@@ -1958,30 +2143,11 @@ resourceTypeSelect.addEventListener("input", () => {
   updateLabels();
 });
 
-resourceSnapSlider.addEventListener("input", () => {
-  updateLabels();
-  if (state.lastRaster && state.editorMode === "resources") {
-    drawRasterToViewport(state.lastRaster);
-  }
-});
-
 resourceStrengthSlider.addEventListener("input", () => {
   updateLabels();
   if (state.lastRaster && state.editorMode === "resources") {
     drawRasterToViewport(state.lastRaster);
   }
-});
-
-closeDraftBtn.addEventListener("click", () => {
-  commitResourceDraftPolygon(0);
-});
-
-undoDraftVertexBtn.addEventListener("click", () => {
-  undoLastDraftVertex();
-});
-
-clearDraftBtn.addEventListener("click", () => {
-  clearResourceDraft();
 });
 
 undoZoneBtn.addEventListener("click", () => {

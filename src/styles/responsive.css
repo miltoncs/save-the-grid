@@ -14,6 +14,7 @@
 
   .floating-bottom-left {
     max-width: min(640px, 58vw);
+    width: min(640px, 58vw);
   }
 
   .floating-bottom-center {
@@ -67,11 +68,23 @@
     right: 10px;
     bottom: 138px;
     max-width: none;
+    width: auto;
   }
 
-  .floating-chip {
+  .hud-summary-panel {
+    gap: 6px;
+  }
+
+  .hud-summary-row {
+    gap: 5px 10px;
+  }
+
+  .hud-metric-item {
     font-size: 0.76rem;
-    padding: 7px 9px;
+  }
+
+  .hud-metric-item strong {
+    font-size: 0.82rem;
   }
 
   .floating-bottom-center {
@@ -90,6 +103,13 @@
   .floating-dock-btn {
     flex: 1 1 92px;
     min-width: 92px;
+  }
+
+  .floating-dock-hint {
+    width: 100%;
+    text-align: center;
+    white-space: normal;
+    line-height: 1.3;
   }
 
   .dock-separator {

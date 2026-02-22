@@ -7,7 +7,7 @@ Reference: See `INSPIRATION.md` for the map-first UI inspiration baseline.
 
 ## 1. UX Direction
 
-The interface should feel like a national grid command center: operational, urgent, and readable at a glance. The game should feel browser-native and instantly playable (quick-start style similar to popular web games), while preserving long-term mastery.
+The interface should feel like a national powergrid command center: operational, urgent, and readable at a glance. The game should feel browser-native and instantly playable (quick-start style similar to popular web games), while preserving long-term mastery.
 
 Design goals:
 
@@ -40,10 +40,10 @@ Primary user-facing surfaces:
 
 ### Behavior
 
-1. 1-3 second animated grid pulse and country silhouette.
+1. 1-3 second animated powergrid pulse and country silhouette.
 2. Studio and game title lockup appears.
 3. `Press any key` skips remaining animation instantly.
-4. If loading exceeds a threshold, show a small status line (`Initializing grid simulation...`).
+4. If loading exceeds a threshold, show a small status line (`Initializing powergrid simulation...`).
 
 ### Constraints
 
@@ -147,7 +147,7 @@ No region-unlock or corridor-purchase action should exist in this flow.
 
 ### Layer Visibility Controls
 
-1. Base board, civilization points, and power-grid points are visible by default.
+1. Base board, town points, and infrastructure icons (plants, substations, storage) are visible by default.
 2. Natural resource zones are hidden by default to reduce map noise.
 3. Hold `R` to reveal resource zones while planning builds.
 4. Releasing `R` hides resource zones immediately.
@@ -232,4 +232,4 @@ Onboarding rule:
 
 ### Narrative Closure
 
-One short headline summarizes the country outcome for the run (for example: `Grid Stabilized Through Harsh Winter`).
+One short headline summarizes the country outcome for the run (for example: `powergrid Stabilized Through Harsh Winter`).

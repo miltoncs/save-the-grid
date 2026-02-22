@@ -1054,3 +1054,171 @@ Original prompt: Develop the game MVP based on all provided documentation
   - `bot-player` smoke run (`smoke-menu-to-run`) passed after refactor.
   - Terrain interactive page smoke check passed with no console/page errors; screenshot emitted to `output/terrain-interactive-smoke.png`.
   - `develop-web-game` Playwright client run passed after reinstalling Chromium (`npx playwright install chromium`).
+
+## 2026-02-21 (Architecture docs sync after repo re-org)
+- Updated `docs/implementation/ARCHITECTURE.md` to reflect current runtime stack and module layout:
+  - `src/main.js` bootstrap + map preload
+  - `src/data.js` map adapter + constants
+  - `src/game/core.js` shared constants/helpers/config builders
+  - `src/game.js` (`GameRuntime` + `SaveTheGridApp`)
+  - split CSS modules under `src/styles/`
+  - moved terrain tooling under `tools/terrain/*`
+- Removed stale architecture assumptions (React, PixiJS, Vite/Vitest/IndexedDB/zod, `data/missions`, `data/presets`).
+- Updated `docs/implementation/MAP_STORAGE_AND_RESOURCE_ZONES.md` to match actual map contracts and loading behavior:
+  - `data/maps/index.json` + `*.map.json`
+  - map-level `towns/links/resourceZones`
+  - metadata-first `resource_zones` with map fallback
+  - normalization-driven validation in current runtime.
+
+## 2026-02-21 (Crisp zoomed pixels)
+- Fixed blurry zoomed map rendering by switching terrain raster scaling to nearest-neighbor:
+  - `drawRasterToViewport()` now sets `ctx.imageSmoothingEnabled = false`.
+- Added CSS pixel-rendering hints on the terrain canvas:
+  - `image-rendering: pixelated;`
+  - `image-rendering: crisp-edges;`
+- Validation:
+  - `node --check tools/terrain/interactive/app.js` passes.
+  - Playwright zoom screenshot confirms hard pixel edges when zoomed (`/output/pixel-crisp-check-zoom/zoomed.png`).
+
+## 2026-02-21 (Coastline palette)
+- Added coastline-specific coloring in terrain composition:
+  - Land pixels adjacent to sea are recolored to `coastLand` (brownish green).
+  - Sea pixels adjacent to land are recolored to `coastWater` (light blue).
+- Coastline pass excludes river pixels so rivers keep river color.
+- Added new palette entries in `COLORS`:
+  - `coastLand: [156, 170, 112]`
+  - `coastWater: [108, 173, 224]`
+- Validation:
+  - `node --check tools/terrain/interactive/app.js` passes.
+  - Playwright skill screenshot with no console errors: `/output/coastline-color-check/shot-0.png`.
+
+## 2026-02-21 (Resources mode control simplification)
+- Resources mode UI updated to lock vertex snap at a fixed `10px` and remove the snap slider control.
+- Removed draft-management buttons from resources panel:
+  - `Close Draft Polygon`
+  - `Undo Draft Vertex`
+  - `Clear Draft`
+- Kept polygon close behavior via click-near-existing-vertex only (snap-close path).
+- Kept/verified right-click zone deletion in resources mode (`Map Right Click` removes containing zone or nearest-zone fallback).
+- Updated terrain interactive docs to reflect fixed snap and removed draft buttons.
+
+### Validation
+- Syntax:
+  - `node --check tools/terrain/interactive/app.js`
+  - `node --check tools/terrain/interactive/lib/dom.js`
+- Skill client run:
+  - `output/resources-controls-lock-check/shot-0.png`
+  - `output/resources-controls-lock-check/shot-1.png`
+- Targeted Playwright behavior check:
+  - `output/resources-mode-controls-check/result.json`
+  - `output/resources-mode-controls-check/resources-ui.png`
+  - Result confirms:
+    - removed controls are absent,
+    - snap label is `10 px`,
+    - zone creation still works,
+    - right-click deletes created zone.
+
+## 2026-02-21 (Resources zones on water)
+- Updated Resources-mode polygon drafting to allow vertices and zones on water as well as land.
+- Removed the water/sea-level placement guard in `addResourceZoneFromClick()`.
+- Updated docs text to match new behavior (`Map Click` in resources mode now allows land or water).
+
+### Validation
+- Syntax checks passed:
+  - `node --check tools/terrain/interactive/app.js`
+  - `node --check tools/terrain/interactive/lib/dom.js`
+- Targeted Playwright validation passed:
+  - `output/resources-water-zones-check/result.json`
+  - confirms water click adds draft vertex and water-only polygon commits to zone.
+- Skill client run completed:
+  - `output/resources-water-zones-skill-run/shot-0.png`
+  - `output/resources-water-zones-skill-run/shot-1.png`
+
+## 2026-02-21 (Terminology cleanup: grid -> powergrid)
+- Per user direction, removed markdown terminology using `grid` outside `powergrid` across `docs/`.
+- Replaced `grid`, `power grid`, and `power-grid` wording with `powergrid` or concrete entity language (towns, plants, substations, lines).
+- Explicitly removed abstract `powergrid points` phrasing and replaced with `infrastructure icons (plants, substations, storage)`.
+- Verification: no remaining markdown matches for `grid`, `power grid`, `power-grid`, or `grid points` under `docs/`.
+
+## 2026-02-21 (Auto-seeded resource zones on new maps)
+- Added seeded default resource-zone generation for new maps in terrain interactive app.
+- New-map behavior now auto-creates exactly one polygon zone for each resource type:
+  - `wind`
+  - `sun`
+  - `gas`
+- Each generated zone targets roughly `5%` of total map area.
+- Zone polygons are randomized per map seed and spaced to reduce heavy overlap.
+- Zones are seeded on:
+  - explicit new-map generation (`Re-generate`), and
+  - first app render when no zones exist yet.
+
+### Implementation details
+- Added constants:
+  - `NEW_MAP_RESOURCE_ZONE_FRACTION = 0.05`
+  - `NEW_MAP_RESOURCE_ZONE_STRENGTH = 70`
+  - `NEW_MAP_RESOURCE_ZONE_TYPES = ["wind", "sun", "gas"]`
+- Added seeded polygon utilities:
+  - `computePolygonAreaPx(...)`
+  - `buildSeededResourcePolygonVertices(...)`
+  - `generateSeededResourceZones(...)`
+- Wired seeding into `renderTerrain(...)` before terrain image build when map is new.
+
+### Validation
+- Syntax checks passed:
+  - `node --check tools/terrain/interactive/app.js`
+  - `node --check tools/terrain/interactive/lib/dom.js`
+- Targeted Playwright check:
+  - `output/new-map-seeded-resource-zones-check/result.json`
+  - confirms initial and regenerated maps both report: `Zones 3 | Wind 1 | Sun 1 | Gas 1`.
+- Screenshot artifacts:
+  - `output/new-map-seeded-resource-zones-check/resources-initial.png`
+  - `output/new-map-seeded-resource-zones-check/resources-regenerate-2.png`
+- Skill client run completed:
+  - `output/new-map-resource-seeding-skill-run/shot-0.png`
+  - `output/new-map-resource-seeding-skill-run/shot-1.png`
+
+## 2026-02-21 (In-run HUD simplification + right-click demolish confirmation)
+- Updated in-round HUD controls:
+  - Removed in-HUD tool buttons (`Build`, `Demolish`, `Reroute`, `Line`) from the bottom dock.
+  - Kept asset buttons (`Plant`, `Sub`, `Storage`) and added a compact controls hint (`Line: 4 | Reroute: E | Right click: Demolish`).
+- Implemented right-click demolition confirmation flow:
+  - Right-click on an infrastructure/town point now opens a small confirmation popover at click location.
+  - Popover shows target name, inferred asset type to remove, and refund amount.
+  - `Cancel` closes with no changes.
+  - `Demolish` applies demolition and closes popover.
+- Added robust demolition candidate resolution:
+  - Uses selected asset type when available.
+  - Falls back to first available asset type on target (`plant`, `substation`, `storage`) so right-click works even when selected type is absent.
+- Added dismissal behavior:
+  - Popover closes on outside click.
+  - Popover is cleared when leaving run / ending run / runtime cleanup.
+
+### Validation
+- Syntax checks:
+  - `node --check src/game.js`
+  - `node --check src/main.js`
+  - `node --check src/data.js`
+- Develop-web-game client loop:
+  - `node "$WEB_GAME_CLIENT" --url http://127.0.0.1:5173 --actions-file "$WEB_GAME_ACTIONS" --click-selector "#start-btn" --iterations 3 --pause-ms 250 --screenshot-dir output/run-ui-rightclick-confirm`
+- Targeted right-click confirm behavior check (Playwright inline script):
+  - Asserted no `[data-tool]` buttons in-run.
+  - Built plant, right-clicked target, verified confirmation popover appears.
+  - Verified cancel keeps asset count unchanged.
+  - Verified confirm decreases asset count.
+  - Artifact: `output/run-ui-rightclick-confirm/demolish-popover.png`.
+- Tutorial regression check (Playwright inline script):
+  - Completed tutorial flow using keyboard (`4`, `E`) + right-click confirmation for demolish.
+  - Verified tutorial still reaches end screen.
+
+## 2026-02-21 (Removed in-run selection context panel)
+- Removed the bottom-right Selection/Region Context panel from in-round HUD.
+- Kept only the ticker in the bottom-right floating area.
+- Removed region-context render/update logic from `updateRunHud(...)` so no hidden panel state is maintained.
+
+### Validation
+- `node --check src/game.js`
+- `node --check src/main.js`
+- `node --check src/data.js`
+- Playwright assertion:
+  - Started a run and confirmed `#region-context` no longer exists.
+  - Artifact: `output/remove-selection-panel/run-no-selection-panel.png`

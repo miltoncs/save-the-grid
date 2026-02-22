@@ -1,27 +1,19 @@
 # Map Storage and Resource Zone Spec
 
-Status: Draft v0.1  
-Last updated: 2026-02-19
+Status: Draft v0.2
+Last updated: 2026-02-21
 
 ## 1. Decision Summary
 
-This project will store maps as authored JSON content packs, with one primary file per map.
+Current map/content storage model:
 
-Decision:
-
-1. Store each map in `data/maps/<mapId>.map.json`.
-2. Keep gameplay-critical map data in that single JSON file for deterministic loading.
-3. Store resource zones inside the map file under `resourceZones[]`.
-4. Treat resource zones as static authored map features (not procedurally generated in MVP).
-5. Keep resource effects shallow and explicit (multipliers + optional reserve), avoiding deep extraction simulation.
-6. Represent demand directly through town seeds/spawn anchors (no region service-hub layer).
-7. Do not encode pre-authored major transmission corridors; long-distance `Line` topology is player-built at runtime.
-
-This matches design constraints in:
-
-- `../design/MAP_DESIGN_2D.md` (handcrafted maps, layered 2D model).
-- `../design/GAME_DESIGN.md` (shallow simulation boundaries).
-- `../design/MULTIPLAYER_NOTES.md` (explicit, auditable rules and scenario packets).
+1. Map catalog is stored in `data/maps/index.json`.
+2. Each map is stored in a single file: `data/maps/<mapId>.map.json`.
+3. Runtime gameplay map data is loaded from map JSON into `BASE_MAP` during app boot.
+4. Resource zones may come from either:
+   - terrain metadata (`data/maps/terrain/*.metadata.json`), or
+   - map document `resourceZones[]` fallback.
+5. Resource simulation remains shallow and placement-oriented.
 
 ## 2. File Layout
 
@@ -30,232 +22,212 @@ data/
   maps/
     index.json
     national_core.map.json
-    expansion_north.map.json
-    resilience_peak.map.json
+    terrain/
+      mockup-terrain-map.metadata.json
 ```
 
-### 2.1 `index.json`
+## 3. Catalog Contract (`index.json`)
 
-`index.json` provides fast map discovery in menus and validation checks.
+`index.json` provides map discovery and default map selection.
 
-Example:
+Current shape:
 
 ```json
 {
   "contentVersion": 1,
+  "defaultMapId": "national-core",
   "maps": [
     {
-      "id": "national_core",
+      "id": "national-core",
       "file": "national_core.map.json",
-      "displayName": "National Core",
-      "sizeClass": "small",
-      "routingComplexity": "simple"
+      "displayName": "National powergrid Core",
+      "sizeClass": "large",
+      "routingComplexity": "moderate"
     }
   ]
 }
 ```
 
-## 3. Map Document Contract
+## 4. Map Document Contract (`*.map.json`)
 
-Each `*.map.json` file contains geometry, gameplay metadata, authored entities, and resource zones.
+Current runtime-required fields:
 
 ```ts
 type MapDocument = {
   contentVersion: number;
   mapId: string;
   displayName: string;
-  biomePalette: "temperate" | "arid" | "mixed";
   world: {
     width: number;
     height: number;
     coordinateSystem: "origin_top_left_y_down";
   };
-  camera: {
-    zoomLevels: number[];
-    boundsPadding: number;
+  terrainMap?: {
+    imageUrl?: string;
+    metadataUrl?: string | null;
   };
-  townSeeds: TownSeedRecord[];
-  townSpawnAnchors: TownSpawnAnchorRecord[];
-  nodeSlots: NodeSlotRecord[];
-  starterInfrastructure: StarterInfrastructureRecord[];
-  terrainZones: TerrainZoneRecord[];
-  climateZones: ClimateZoneRecord[];
-  resourceZones: ResourceZoneRecord[];
-  authoredEvents?: AuthoredEventRecord[];
+  towns: TownRecord[];
+  links?: LinkRecord[];
+  resourceZones?: ResourceZoneRecord[];
 };
 ```
 
-## 4. Geometry Model
-
-MVP map geometry supports two shapes:
-
-1. Polygon
-2. Circle
+### 4.1 Town record
 
 ```ts
-type GeometryShape =
-  | { kind: "polygon"; points: [number, number][] }
-  | { kind: "circle"; center: [number, number]; radius: number };
+type TownRecord = {
+  id: string;
+  name: string;
+  x: number;
+  y: number;
+  radius: number;
+  districtType: string;
+  terrain: string;
+  climate: string;
+  baseDemand: number;
+  population: number;
+  growthRate: number;
+  starterAssets: {
+    plant: number;
+    substation: number;
+    storage: number;
+  };
+  strategicValue?: string;
+};
 ```
 
-Rules:
+### 4.2 Link record (optional)
 
-1. All coordinates are in world units.
-2. Origin is top-left, x grows right, y grows down.
-3. Polygon points must be clockwise and non-self-intersecting.
-4. Shapes must stay within `world.width` and `world.height`.
+```ts
+type LinkRecord = {
+  id?: string;
+  a: string;
+  b: string;
+  tier?: string;
+  capacity?: number;
+  buildCost?: number;
+};
+```
 
-## 5. Resource Zone Storage Model
-
-`resourceZones[]` is the authoritative source for map-based resource effects.
+### 4.3 Resource zone record (map fallback)
 
 ```ts
 type ResourceZoneRecord = {
   id: string;
-  resourceType:
-    | "coal"
-    | "gas"
-    | "hydro"
-    | "solar"
-    | "wind"
-    | "geothermal"
-    | "uranium"
-    | "biomass";
-  geometry: GeometryShape;
-  compatibility: {
-    allowedPlantTags: string[];
-    minCoverageRatio: number;
-  };
-  modifiers: {
-    buildCostMultiplier: number;
-    outputMultiplier: number;
-    operatingCostMultiplier: number;
-    reliabilityDelta: number;
-    incidentRiskDelta?: Partial<Record<string, number>>;
-  };
-  supplyModel: {
-    kind: "renewable" | "depletable";
-    maxOutputBonusMW: number;
-    reserveMWh?: number;
-    regenerationPerTickMWh?: number;
-  };
-  ui: {
-    label: string;
-    colorHex: string;
-    priority: "low" | "normal" | "high";
-  };
+  resource: "wind" | "sun" | "natural_gas";
+  polygon: Array<{ x: number; y: number }>;
 };
 ```
 
-### 5.1 Gameplay Semantics
+## 5. Terrain Metadata Resource Zones
 
-1. A build slot gets zone effects when placement overlap is `>= minCoverageRatio`.
-2. Multiple overlapping zones stack additively per modifier type, then clamp using game-level limits.
-3. `supplyModel.kind = renewable` means no depletion pressure in MVP.
-4. `supplyModel.kind = depletable` reduces `reserveMWh` when linked plant output draws zone bonus.
-5. If `reserveMWh` reaches zero, zone bonus output becomes zero until regenerated (if configured) or mission end.
+When terrain metadata is present and includes `resource_zones`, runtime prefers metadata zones over map-file zones.
 
-### 5.2 Scope Boundary
+Expected metadata zone shape:
 
-To preserve shallow simulation:
+```ts
+type TerrainMetadataResourceZone = {
+  id?: string;
+  resource: "wind" | "sun" | "natural_gas";
+  polygon: Array<{ x: number; y: number }>;
+};
+```
 
-1. No extraction logistics network.
-2. No transport chain between resource site and plant.
-3. No per-worker or per-fuel market micro-simulation.
-4. Resource zones only influence placement economics, output profile, and reliability/incident modifiers.
+Runtime behavior:
 
-## 6. Runtime Loading and Querying
+1. Metadata polygon coordinates are scaled to map world dimensions.
+2. Invalid polygons (`< 3` points) are ignored.
+3. Unsupported resource types are ignored.
+4. If no valid metadata zones exist, map-file `resourceZones[]` is used.
 
-At map load time:
+## 6. Runtime Loading Pipeline
 
-1. Validate map JSON with `MapSchema` and `ResourceZoneSchema`.
-2. Build a spatial index for `terrainZones`, `townSeeds`, and `resourceZones`.
-3. Precompute slot-to-zone influence map for all `nodeSlots`.
-4. Store resolved results in immutable runtime map state.
+### 6.1 Boot preload (`src/data.js`)
 
-At command execution (`build`):
+1. Fetch `data/maps/index.json`.
+2. Resolve selected map file from `defaultMapId` (or requested map ID).
+3. Fetch selected `*.map.json`.
+4. Normalize fields and hydrate `BASE_MAP`.
+5. Fallback safely to built-in defaults on fetch/parse failure.
 
-1. Resolve selected `nodeSlot`.
-2. Check compatible overlapping `resourceZones`.
-3. Apply zone multipliers to placement preview and committed asset stats.
-4. Persist zone-linked state in run snapshot for deterministic save/load.
+### 6.2 In-run map init (`src/game.js`)
 
-Current MVP implementation status:
+1. Load terrain image URL from run config / map profile.
+2. Load terrain metadata JSON when `metadataUrl` is set.
+3. Build `resourceZones` from metadata or map fallback.
+4. Compute region resource coverage weights via polygon overlap sampling.
 
-1. Runtime preloads `data/maps/index.json` to resolve the default map file.
-2. Runtime hydrates `BASE_MAP` from the resolved `*.map.json` document before app boot.
-3. Resource zones are loaded from terrain metadata when available, and fall back to `resourceZones[]` in the map document.
+## 7. Resource Zone Gameplay Semantics
 
-## 7. Validation Rules
+Current semantics are intentionally shallow:
 
-`ResourceZoneSchema` should enforce:
+1. Zones do not require extraction or transport networks.
+2. Zone influence is sampled by overlap around towns/infrastructure points.
+3. Influences feed runtime `resourceProfile` weights (`wind`, `sun`, `natural_gas`).
+4. Profiles modify generation, operating economics, and reliability behaviors.
 
-1. `id` uniqueness within map.
-2. `minCoverageRatio` in range `[0, 1]`.
-3. Multipliers greater than `0`.
-4. `reliabilityDelta` in bounded range (recommended `[-1, 1]`).
-5. `reserveMWh` required only for `depletable` zones.
-6. No invalid geometry (self-intersection, zero-area polygons, out-of-bounds points).
+## 8. Validation Rules (Current)
 
-## 8. Example Map Snippet
+Validation is code-based normalization (no external schema library currently):
+
+1. Map must include at least one town.
+2. Numeric world/town fields are coerced and clamped to safe defaults.
+3. Resource zones require valid resource type + polygon with at least 3 points.
+4. Invalid link/zone records are dropped.
+
+## 9. Example Minimal Map Snippet
 
 ```json
 {
   "contentVersion": 1,
-  "mapId": "national_core",
-  "displayName": "National Core",
-  "world": { "width": 2400, "height": 1400, "coordinateSystem": "origin_top_left_y_down" },
-  "townSeeds": [
+  "mapId": "national-core",
+  "displayName": "National powergrid Core",
+  "world": {
+    "width": 2200,
+    "height": 1400,
+    "coordinateSystem": "origin_top_left_y_down"
+  },
+  "terrainMap": {
+    "imageUrl": "/assets/maps/terrain/mockup-terrain-map.png",
+    "metadataUrl": "/data/maps/terrain/mockup-terrain-map.metadata.json"
+  },
+  "towns": [
     {
-      "id": "town_alpha",
-      "name": "Alpha",
-      "position": [460, 520],
-      "baseDemandMW": 18,
-      "population": 12000,
-      "climateTag": "temperate"
+      "id": "capital",
+      "name": "Capital Metro",
+      "x": 1040,
+      "y": 640,
+      "radius": 64,
+      "districtType": "Urban Core",
+      "terrain": "plains",
+      "climate": "temperate",
+      "baseDemand": 95,
+      "population": 120,
+      "growthRate": 0.6,
+      "starterAssets": { "plant": 2, "substation": 2, "storage": 1 }
     }
   ],
   "resourceZones": [
     {
-      "id": "rz_west_hydro_basin",
-      "resourceType": "hydro",
-      "geometry": {
-        "kind": "polygon",
-        "points": [[280, 420], [520, 390], [580, 620], [300, 650]]
-      },
-      "compatibility": {
-        "allowedPlantTags": ["hydro", "storage_pumped"],
-        "minCoverageRatio": 0.35
-      },
-      "modifiers": {
-        "buildCostMultiplier": 0.9,
-        "outputMultiplier": 1.25,
-        "operatingCostMultiplier": 0.95,
-        "reliabilityDelta": 0.08,
-        "incidentRiskDelta": { "drought": 0.15 }
-      },
-      "supplyModel": {
-        "kind": "renewable",
-        "maxOutputBonusMW": 120
-      },
-      "ui": {
-        "label": "West Basin",
-        "colorHex": "#4CA7D9",
-        "priority": "normal"
-      }
+      "id": "rz-wind-northwest",
+      "resource": "wind",
+      "polygon": [
+        { "x": 170, "y": 220 },
+        { "x": 520, "y": 170 },
+        { "x": 760, "y": 280 }
+      ]
     }
   ]
 }
 ```
 
-## 9. Versioning and Migration
+## 10. Versioning and Migration
 
-1. Increment `contentVersion` for map schema changes.
-2. Add deterministic migration scripts for version bumps that affect gameplay values.
-3. Never silently reinterpret existing resource zone fields.
-4. Keep old map fixtures in tests to verify migration behavior.
+1. Increment `contentVersion` for breaking map format changes.
+2. Keep normalization backward-compatible where possible.
+3. Add explicit migration scripts when field meaning changes.
 
-## 10. Related Implementation Docs
+## 11. Related Docs
 
-- `ARCHITECTURE.md` for runtime and module boundaries.
-- `README.md` for implementation doc index.
+- `ARCHITECTURE.md` for module boundaries and runtime flow.
+- `../../data/maps/README.md` for concise map-pack authoring guidance.

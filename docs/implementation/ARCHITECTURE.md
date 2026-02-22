@@ -1,11 +1,11 @@
-# Save the Grid Architecture
+# Save the powergrid Architecture
 
-Status: Draft v0.2
+Status: Draft v0.3
 Last updated: 2026-02-21
 
 ## 1. Purpose and Scope
 
-This document defines the technical architecture for implementing Save the Grid as a browser-native, singleplayer-first web game.
+This document describes the current implementation architecture for Save the powergrid after the repository re-organization.
 
 It translates design intent from:
 
@@ -13,76 +13,108 @@ It translates design intent from:
 - `../design/FRONTEND_AND_UX.md`
 - `../design/MAP_DESIGN_2D.md`
 - `../design/MISSION_AND_MODE_DESIGN.md`
+- `../design/TUTORIAL_MODE_DESIGN.md`
 - `../design/MULTIPLAYER_NOTES.md`
 
-This document covers MVP implementation structure and near-term extension points. It does not define final balance values.
+Scope:
+
+1. Current browser runtime module boundaries.
+2. Current content loading and storage contracts.
+3. Current testing and delivery workflow.
+4. Near-term extension points.
 
 ## 2. Architecture Goals
 
 1. Fast browser startup and low-friction onboarding.
-2. Deterministic, fixed-step simulation for reliable behavior and future multiplayer readiness.
-3. Clear separation between simulation state, rendering, and UI workflow.
-4. Data-driven authored maps/missions for rapid content iteration.
-5. Local-only persistence for saves, settings, and records in MVP.
-6. Testability through headless simulation and browser integration automation.
+2. Fixed-step simulation behavior for predictable updates.
+3. Clear separation between app shell flow, simulation, and rendering.
+4. Data-driven map loading for authored map iteration.
+5. Local-only persistence for MVP state.
+6. Practical testability via Playwright and deterministic debug hooks.
 
-## 3. Technology Stack (Current MVP)
+## 3. Technology Stack (Current)
 
 ### Runtime and language
 
-- JavaScript ES modules (browser-native, no bundler requirement).
-- Browser-only runtime for MVP.
+- JavaScript ES modules.
+- Browser-native execution (no runtime framework dependency).
 
 ### Rendering and UI
 
-- HTML/CSS + Canvas 2D rendering for map and overlays.
-- Vanilla JS app-shell surface rendering (menu/setup/run/end).
-- Split stylesheet modules imported through `src/styles.css`.
+- Canvas 2D for map and in-run visuals.
+- Vanilla JS DOM rendering for splash/menu/setup/run/end screens.
+- Split CSS modules imported through `src/styles.css`.
 
-### State and validation
+### Content and persistence
 
-- In-memory simulation/runtime state managed by `GameRuntime`.
-- Run/surface orchestration managed by `SaveTheGridApp`.
-- JSON-based content contracts for authored maps and terrain metadata.
+- JSON map packs under `data/maps/`.
+- In-memory runtime state for active simulation.
+- `localStorage` for records, settings, suspended runs, campaign progression, dev mode, and tutorial completion.
 
-### Persistence and tooling
+### Tooling and validation
 
-- localStorage for saves, records, progression, settings, and dev flags.
-- Python static server (`python3 -m http.server`) for local runtime.
-- Playwright validation via:
-  - `bot-player/` smoke scenarios
-  - `develop-web-game` client script.
+- Local static server: `python3 -m http.server 5173`.
+- Playwright smoke automation via:
+  - `bot-player/`
+  - `develop-web-game` client workflow.
 
-## 4. Runtime Architecture
+## 4. Runtime Module Architecture
 
-The application is split into four runtime layers:
+### 4.1 Boot sequence
 
-- App Shell Layer:
-  Owns route/surface transitions: splash, menu, setup, in-run, end-of-run.
-  Handles localization, settings, and top-level async initialization.
-- Domain Simulation Layer:
-  Owns authoritative run state and rules.
-  Executes deterministic fixed-step updates.
-  Emits derived metrics/events for HUD and alerts.
-- Presentation Layer:
-  Canvas renderer draws map, infrastructure, demand overlays, flow pulses, and alerts.
-  React HUD renders controls, panels, and story/event rails.
-- Persistence Layer:
-  Saves/restores run snapshots and campaign progression.
-  Stores records with run-class partitioning (`standard`, `campaign`, `custom`).
+1. `src/main.js` resolves `#app`.
+2. `src/main.js` calls `preloadRuntimeMapContent()` from `src/data.js`.
+3. `SaveTheGridApp` is created from `src/game.js`.
 
-## 5. Repository Structure (Current + Near-Term)
+### 4.2 Source modules
+
+- `src/main.js`
+  - bootstrap entrypoint.
+  - preloads runtime map JSON before app start.
+
+- `src/data.js`
+  - authored constants and presets (standard/custom/campaign, alerts, storage keys).
+  - runtime map preload adapter (`/data/maps/index.json` + selected `*.map.json`).
+  - map-document normalization into `BASE_MAP`.
+
+- `src/game/core.js`
+  - shared constants and utility helpers.
+  - run-config builders for standard/campaign/custom/tutorial.
+  - normalization helpers and storage helpers.
+
+- `src/game.js`
+  - `GameRuntime`: authoritative in-run simulation + canvas rendering + input handling.
+  - `SaveTheGridApp`: app-shell screens, flow transitions, HUD binding, run lifecycle.
+
+- `src/styles.css` + `src/styles/*.css`
+  - segmented presentation layers (`base`, `setup`, `run`, `end`, `responsive`).
+
+### 4.3 Runtime layers
+
+- App shell layer (`SaveTheGridApp`):
+  - splash/menu/setup/campaign/custom/run/end surfaces.
+  - persistence reads/writes and run start/end orchestration.
+
+- Simulation layer (`GameRuntime`):
+  - fixed-tick rules, economy, demand, routing, incidents, objectives.
+  - tutorial-step progression and dev-mode behavior.
+
+- Presentation layer:
+  - canvas map rendering (terrain, towns, infrastructure points, lines, overlays).
+  - DOM HUD/panels updated via runtime callback payloads.
+
+- Persistence layer:
+  - localStorage-backed records/settings/progression/suspension flags.
+
+## 5. Repository Structure (Current)
 
 ```txt
-docs/
-  design/
-  implementation/
 src/
   main.js
+  data.js
   game.js
   game/
     core.js
-  data.js
   styles.css
   styles/
     base.css
@@ -90,220 +122,174 @@ src/
     run.css
     end.css
     responsive.css
+
+assets/
+  icons/
+  maps/
+
 data/
   maps/
     index.json
     *.map.json
     terrain/
-assets/
-  maps/
-  icons/
+
 tools/
   terrain/
     generate_terrain_map_png.py
     generate_mission_terrain_maps.py
     compat/
+      generate_terrain_map_png.py
+      generate_mission_terrain_maps.py
     interactive/
+      index.html
       app.js
       lib/
+
+docs/
+  design/
+  implementation/
+  mockups-ui-design/
+
 bot-player/
   run-bot.mjs
   scenarios/
 ```
 
-## 6. Simulation Model
+## 6. Simulation Architecture
 
-### 6.1 Update Loop
+### 6.1 Timing model
 
-- Fixed simulation tick: `10 Hz` (`100ms`) for game rules.
-- Render interpolation/frame draw: browser animation frame (`~60 Hz` target).
-- Pause halts simulation ticks and score timers, but keeps UI responsive.
+- Fixed simulation tick: `TICK_SECONDS = 0.1` (10 Hz).
+- Render/update loop: `requestAnimationFrame`.
+- Pause halts simulation updates while keeping UI interactive.
 
-### 6.2 Determinism Rules
+### 6.2 Tick pipeline (current)
 
-1. Rule updates must use tick delta from fixed clock, never frame delta.
-2. Random events use seeded RNG captured in save snapshots.
-3. All player actions are normalized into intent commands (`build`, `demolish`, `reroute`, `line_build`, `line_remove`, `pause_toggle`).
-4. Simulation outputs are pure functions of prior state + command queue + seed.
+Per simulation tick:
 
-### 6.3 System Order per Tick
+1. Season update.
+2. Incident expiry/spawn.
+3. Demand update.
+4. Substation coverage resolution.
+5. powergrid flow resolution across player-built lines.
+6. Service stability and town emergence updates.
+7. Economy/reliability updates.
+8. Score and objective/end-condition evaluation.
+9. HUD payload emission.
 
-1. Apply queued player commands.
-2. Recompute manual `Line` connectivity/capacity, substation coverage radius, and auto-generated orthogonal town service links.
-3. Update demand (base + growth + season/climate + event modifiers).
-4. Resolve supply allocation and unmet demand.
-5. Apply economy deltas (costs, penalties, operating burden, lawsuits).
-6. Evaluate incidents and alert state transitions.
-7. Update mission objective trackers and failure/victory checks.
-8. Emit immutable frame snapshot for renderer/HUD consumers.
+### 6.3 Mode rules
 
-## 7. Core Domain Boundaries
+- `tutorial`
+  - guided step progression.
+  - no-loss flow; win on completed tutorial steps.
 
-### Grid and routing domain
+- `standard`
+  - score-focused run with collapse conditions.
 
-- Models town and infrastructure nodes, player-built manual `Line` links, capacities, stress tiers, and town service coverage.
-- Explicitly excludes region-level service hubs and pre-authored major transmission corridors from runtime gameplay topology.
-- Exposes read models for rendering line thickness, pulse intensity, and overload color state.
+- `campaign`
+  - mission objective pass/fail and unlock progression.
 
-### Demand domain
+- `custom`
+  - parameterized run class stored separately from standard/campaign.
 
-- Computes town demand from baseline, population pressure, seasonal profile, climate tags, and event modifiers.
-- Supports onboarding toggles for disabling growth and seasonal pressure.
+### 6.4 Determinism note
 
-### Economy domain
+- Update cadence is fixed-step.
+- Randomness currently uses `Math.random()` (not seeded per run yet).
+- Save snapshots preserve runtime state for resume, but strict replay determinism is not yet implemented.
 
-- Tracks budget, build/demolish costs, operating burden, penalties, and line construction/maintenance expenses.
-- Enforces level-local economy reset rules across runs/missions.
+## 7. Data and Content Architecture
 
-### Incident/story domain
-
-- Produces mechanical incidents and short narrative payloads.
-- Delivers non-blocking UI events compatible with real-time flow.
-
-### Objective/scoring domain
-
-- Tracks mission objectives, run collapse triggers, and scoring drivers.
-- Supports separated score classes for standard vs custom configurations.
-
-## 8. Data and Content Contracts
-
-### 8.1 Content Sources
-
-All authored gameplay content is data-driven:
+### 7.1 Runtime content sources
 
 - `data/maps/index.json`
+  - map catalog + `defaultMapId`.
+
 - `data/maps/*.map.json`
-- `data/missions/*.json`
-- `data/presets/*.json`
+  - authored map documents (`world`, `terrainMap`, `towns`, optional `links`, optional `resourceZones`).
 
-Map storage details (including resource zones) are specified in `MAP_STORAGE_AND_RESOURCE_ZONES.md`.
+- `data/maps/terrain/*.metadata.json`
+  - terrain metadata with optional `resource_zones` polygons.
 
-### 8.2 Schema Validation
+### 7.2 Loading path
 
-Each content type is validated at load time with zod schemas:
+1. `preloadRuntimeMapContent()` loads `index.json`.
+2. Selected map file is fetched and normalized.
+3. `BASE_MAP` is hydrated before app boot.
+4. Runtime then loads terrain image and metadata.
+5. Resource zones are resolved from metadata when available, else map document fallback.
 
-- `MapSchema`
-- `ResourceZoneSchema`
-- `MissionSchema`
-- `ScenarioPresetSchema`
+### 7.3 Validation status
 
-Load failures are surfaced with actionable diagnostics and blocked before play starts.
+- Validation currently relies on explicit normalization/sanity checks in `src/data.js`.
+- No schema library is currently wired in runtime.
 
-### 8.3 Versioning
+## 8. Persistence Architecture
 
-Content and saves include explicit versions:
+### 8.1 Stored entities (localStorage)
 
-- `contentVersion`
-- `saveVersion`
+- Records (`standard`, `campaign`, `custom`).
+- User settings.
+- Suspended run snapshot.
+- Campaign progression and mission best medals.
+- Dev mode flag.
+- Tutorial completion flag.
 
-Migration handlers are required for any breaking schema change.
+### 8.2 Snapshot contents
 
-## 9. UI Architecture
+Suspended run snapshots include:
 
-### 9.1 Surface Ownership
+1. Run config.
+2. Runtime game state.
+3. Camera/tool/selection state.
+4. Pause and line-selection context.
 
-- React controls all non-canvas surfaces and overlay chrome.
-- PixiJS owns the interactive map viewport and simulation visuals.
+### 8.3 Integrity behavior
 
-### 9.2 HUD Data Access
+- Storage reads are defensive and fall back to defaults when parsing fails.
+- Invalid suspended snapshots return users to menu with a toast.
 
-- HUD reads only derived selectors from snapshot state.
-- UI must not mutate simulation state directly.
-- UI actions dispatch command intents to `GameSession`.
+## 9. Testing Strategy (Current)
 
-### 9.3 Input Pipeline
+### 9.1 Browser smoke tests
 
-1. Input adapters normalize mouse/touch/keyboard gestures.
-2. Context-aware command builder maps gestures to domain commands.
-3. Command queue is consumed at next simulation tick.
+Primary automation is Playwright-based:
 
-## 10. Persistence Architecture (Local MVP)
+- `bot-player` scripted scenarios.
+- `develop-web-game` client loop for step/choreography-based validation.
 
-### 10.1 Stored Entities
+### 9.2 Runtime debug hooks
 
-- Save slots: suspended run state snapshots.
-- Records: completed run summaries by run class.
-- Campaign progression: mission unlocks and medal grades.
-- Settings: controls, accessibility, graphics quality, reduced motion, UI scale.
-
-### 10.2 Storage Split
-
-- IndexedDB: structured state (saves/records/progression).
-- localStorage: small key-value settings and last-selected setup options.
-
-### 10.3 Integrity
-
-- Save snapshots include checksum/hash for corruption detection.
-- Writes use transactional boundaries where possible.
-- Failed load falls back gracefully to menu with user-facing message.
-
-## 11. Testing Strategy
-
-### 11.1 Unit and simulation tests (Vitest)
-
-- Deterministic tick behavior.
-- Routing/capacity resolution.
-- Demand multiplier correctness.
-- Economy penalties and failure triggers.
-- Objective and scoring calculations.
-
-### 11.2 Integration tests
-
-- Content pack load and schema validation.
-- Save/load round-trip for active runs.
-- Command pipeline from UI intent to state mutation.
-
-### 11.3 End-to-end tests (Playwright)
-
-- Surface flow: splash -> menu -> setup -> run -> end summary.
-- Core controls: build, demolish, reroute, pause/resume.
-- Records/progression updates after run completion.
-- Console error budget: zero unhandled runtime errors.
-
-### 11.4 Debug/Test Hooks
-
-Expose deterministic debug helpers in non-production builds:
+The runtime exposes:
 
 - `window.render_game_to_text()`
 - `window.advanceTime(ms)`
 
-These are used for automated state assertions and visual parity checks.
+These are used by automation for state assertions and deterministic stepping.
 
-## 12. Build and Release
+### 9.3 Current gap
 
-### 12.1 Environments
+- No committed unit-test harness is currently wired in package scripts.
+- Regression confidence currently depends on browser automation plus manual checks.
 
-- `dev`: Vite hot reload + source maps.
-- `test`: deterministic seeds and fixture packs.
-- `prod`: optimized static bundle.
+## 10. Build and Release (Current)
 
-### 12.2 CI gates
+1. Serve statically with `npm run serve`.
+2. Browser loads ESM modules directly.
+3. No bundler/compile step required for MVP runtime.
 
-1. `lint`
-2. `typecheck`
-3. `unit` (Vitest)
-4. `e2e` (Playwright smoke set)
-5. Build artifact generation
+## 11. Multiplayer Readiness Constraints (Singleplayer-first)
 
-### 12.3 Distribution
+Preserved constraints for future expansion:
 
-- Static web deployment target (for example Cloudflare Pages or Netlify).
-- No server dependency required for MVP gameplay.
+1. Keep command intent boundaries explicit in runtime handlers.
+2. Keep state snapshot serialization stable.
+3. Keep mode config packetized and explicit.
+4. Avoid frame-rate-coupled simulation behavior.
 
-## 13. Multiplayer Readiness Constraints (Preserved in MVP)
+## 12. Open Implementation Decisions
 
-In support of `../design/MULTIPLAYER_NOTES.md`:
-
-1. Keep command-based intent stream as the only mutation entrypoint.
-2. Keep RNG seedable and serializable.
-3. Keep scoring formulas explicit and data-driven.
-4. Avoid frame-rate-dependent simulation outcomes.
-5. Keep scenario packets fully declared (map ID + modifiers + line/coverage parameters + objective set).
-
-## 14. Open Implementation Decisions
-
-1. Confirm fixed tick rate (`10 Hz` vs `20 Hz`) after first playability pass.
-2. Define maximum practical node/link counts for low-end browser targets.
-3. Choose save snapshot cadence and compaction policy.
-4. Choose map content authoring format (`json` only vs `json` + editor-export pipeline).
-5. Define minimal telemetry/event logging strategy for balancing.
+1. Introduce seeded RNG for reproducible run replay.
+2. Decide whether to add schema validation library for map/content contracts.
+3. Define lightweight CI gates for Playwright smoke scenarios.
+4. Decide whether to split `src/game.js` further as runtime complexity grows.

@@ -33,7 +33,7 @@ Layers:
 
 1. Game board layer (always visible): land/water plus land type (mountain, desert, plains).
 2. Civilization layer: towns shown as point icons.
-3. Grid asset layer: power plants and substations shown as point icons.
+3. powergrid asset layer: power plants and substations shown as point icons.
 4. Player-built `Line` layer: manual long-distance power lines between valid plant/substation endpoint pairs.
 5. Resource layer: natural resource zones, hidden by default and revealed while holding `R`.
 6. Alerts/objective layer: incidents, demand deficits, and mission markers.
@@ -45,7 +45,7 @@ Map content strategy:
 1. V1 uses handcrafted maps only.
 2. Procedural map generation is a post-v1 initiative after balance criteria are defined.
 3. Map progression scales from small fully visible layouts to larger layouts with longer routing distances.
-4. Basic levels start mostly empty: mostly terrain, a few seeded towns, and little to no prebuilt power-grid infrastructure.
+4. Basic levels start mostly empty: mostly terrain, a few seeded towns, and little to no prebuilt powergrid infrastructure.
 5. No region-level service hubs are represented in-map; towns are the direct authored demand entities.
 6. No pre-authored major transmission corridors are part of gameplay; long-distance backbone routes are built by the player with the `Line` tool.
 
@@ -165,7 +165,7 @@ Point icon scale target:
    - Show manual `Line` stress states, major incidents, population pressure hotspots, and climate-pressure hotspots.
 3. Near zoom (local view):
    - Show placement points, placement previews, local capacity stats, fine routing details, substation radius rings, and town growth trend markers.
-   - Show richer labels/tooltips for nearby towns and grid assets.
+   - Show richer labels/tooltips for nearby towns and powergrid assets.
    - Show auto-generated orthogonal town service links clearly.
 
 Resource layer visibility:

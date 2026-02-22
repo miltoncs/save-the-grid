@@ -1,4 +1,4 @@
-# Save the Grid Documentation
+# Save the powergrid Documentation
 
 This directory is documentation-only and is organized into three tracks:
 
@@ -38,7 +38,7 @@ Current gameplay direction highlights:
 
 - Tutorial mode is a guided no-fail onboarding run accessed from Main Menu.
 - Early levels use small maps that keep needs and infrastructure easy to observe.
-- Basic level starts are intentionally sparse: mostly terrain, few towns, little/no prebuilt grid.
+- Basic level starts are intentionally sparse: mostly terrain, few towns, little/no prebuilt powergrid.
 - Later maps are larger and focus on longer routing distances and denser town networks.
 - There are no region-level service hubs; towns are direct map entities.
 - There are no pre-authored major transmission corridors in play.

@@ -1484,23 +1484,50 @@ class GameRuntime {
     return target;
   }
 
-  handleDemolish(region) {
-    const assetType = this.buildAssetType;
-    const rule = ASSET_RULES[assetType];
-    if (!rule) return;
-
-    if (region.assets[assetType] <= 0) {
-      this.pushAlert(`No ${rule.label.toLowerCase()} available to demolish.`, "advisory", 4);
-      return;
+  handleDemolish(region, preferredAssetType = this.buildAssetType) {
+    const candidate = this.getDemolishCandidate(region, preferredAssetType);
+    if (!candidate) {
+      this.pushAlert(`No removable assets available at ${region.name}.`, "advisory", 4);
+      return false;
     }
 
-    region.assets[assetType] -= 1;
-    const refund = Math.floor(rule.cost * rule.refundRatio);
+    const { assetType, rule, refund } = candidate;
+    region.assets[assetType] = Math.max(0, Number(region.assets[assetType] || 0) - 1);
     this.state.budget += refund;
     region.cooldownUntil = this.state.runtimeSeconds + 4.5;
     this.logTimeline(`Demolished ${rule.label} in ${region.name} (+${refund} budget refund).`);
     this.pushAlert(`${rule.label} demolished in ${region.name}.`, "warning", 4);
     this.recordTutorialAction("demolish");
+    return true;
+  }
+
+  getDemolishCandidate(region, preferredAssetType = this.buildAssetType) {
+    if (!region || !region.assets) return null;
+    const preferred = ASSET_RULES[preferredAssetType] ? preferredAssetType : null;
+    const order = preferred
+      ? [preferred, ...ASSET_ORDER.filter((assetType) => assetType !== preferred)]
+      : [...ASSET_ORDER];
+    for (const assetType of order) {
+      const count = Number(region.assets[assetType] || 0);
+      const rule = ASSET_RULES[assetType];
+      if (rule && count > 0) {
+        return {
+          assetType,
+          rule,
+          refund: Math.floor(rule.cost * rule.refundRatio),
+        };
+      }
+    }
+    return null;
+  }
+
+  confirmDemolish(regionId, assetType = null) {
+    const region = this.findRegion(regionId);
+    if (!region) return false;
+    this.selectedRegionId = region.id;
+    const demolished = this.handleDemolish(region, assetType || this.buildAssetType);
+    this.pushHudUpdate();
+    return demolished;
   }
 
   handleReroute(region) {
@@ -1512,6 +1539,7 @@ class GameRuntime {
   }
 
   handlePrimaryClick() {
+    this.callbacks.onDismissDemolishConfirm?.();
     const worldPoint = this.screenToWorld(this.mouse.x, this.mouse.y);
     const region = this.findRegionAt(worldPoint.x, worldPoint.y);
 
@@ -1540,6 +1568,7 @@ class GameRuntime {
   }
 
   handleSecondaryClick() {
+    this.callbacks.onDismissDemolishConfirm?.();
     const worldPoint = this.screenToWorld(this.mouse.x, this.mouse.y);
     const region = this.findRegionAt(worldPoint.x, worldPoint.y);
     if (!region) {
@@ -1547,8 +1576,25 @@ class GameRuntime {
       this.pushHudUpdate();
       return;
     }
+
+    const demolishCandidate = this.getDemolishCandidate(region, this.buildAssetType);
+    if (!demolishCandidate) {
+      this.pushAlert(`No removable assets available at ${region.name}.`, "advisory", 4);
+      this.selectedRegionId = region.id;
+      this.pushHudUpdate();
+      return;
+    }
+
     this.selectedRegionId = region.id;
-    this.handleDemolish(region);
+    this.callbacks.onRequestDemolishConfirm?.({
+      regionId: region.id,
+      regionName: region.name,
+      assetType: demolishCandidate.assetType,
+      assetLabel: demolishCandidate.rule.label,
+      refund: demolishCandidate.refund,
+      x: this.mouse.x,
+      y: this.mouse.y,
+    });
     this.pushHudUpdate();
   }
 
@@ -3440,6 +3486,7 @@ export class SaveTheGridApp {
     this.splashTimeout = 0;
     this.boundSkipSplash = () => this.renderMainMenu();
     this.splashListenersActive = false;
+    this.demolishConfirmDismissHandler = null;
 
     window.render_game_to_text = () => this.renderGameToTextBridge();
     window.advanceTime = (ms) => this.advanceTimeBridge(ms);
@@ -3470,9 +3517,70 @@ export class SaveTheGridApp {
   }
 
   cleanupRuntime() {
+    this.clearDemolishConfirm();
     if (!this.runtime) return;
     this.runtime.stop();
     this.runtime = null;
+  }
+
+  clearDemolishConfirm() {
+    if (this.demolishConfirmDismissHandler) {
+      window.removeEventListener("pointerdown", this.demolishConfirmDismissHandler, true);
+      this.demolishConfirmDismissHandler = null;
+    }
+    this.root.querySelector("#demolish-confirm-popover")?.remove();
+  }
+
+  showDemolishConfirm(payload) {
+    this.clearDemolishConfirm();
+    if (!payload || !this.runtime) return;
+    const layer = this.root.querySelector(".floating-ui-layer");
+    if (!layer) return;
+
+    const layerRect = layer.getBoundingClientRect();
+    const x = clamp(Number(payload.x || 0), 20, Math.max(20, layerRect.width - 20));
+    const y = clamp(Number(payload.y || 0), 20, Math.max(20, layerRect.height - 20));
+    const placeBelow = y < 100;
+
+    const popover = document.createElement("div");
+    popover.id = "demolish-confirm-popover";
+    popover.className = `floating-group demolish-confirm${placeBelow ? " demolish-confirm-below" : ""}`;
+    popover.style.left = `${x}px`;
+    popover.style.top = `${y}px`;
+    popover.innerHTML = `
+      <p>Demolish ${payload.assetLabel} at ${payload.regionName}?</p>
+      <p class="demolish-confirm-refund">Refund +${Math.round(payload.refund || 0)} budget</p>
+      <div class="demolish-confirm-actions">
+        <button class="demolish-confirm-btn demolish-confirm-cancel" type="button">Cancel</button>
+        <button class="demolish-confirm-btn demolish-confirm-accept" type="button">Demolish</button>
+      </div>
+    `;
+    layer.appendChild(popover);
+
+    popover.querySelector(".demolish-confirm-cancel")?.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      this.clearDemolishConfirm();
+    });
+
+    popover.querySelector(".demolish-confirm-accept")?.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const demolished = this.runtime?.confirmDemolish(payload.regionId, payload.assetType);
+      if (!demolished) {
+        this.pushToast("Demolition request expired for that location.");
+      }
+      this.clearDemolishConfirm();
+    });
+
+    this.demolishConfirmDismissHandler = (event) => {
+      const targetNode = event.target;
+      if (targetNode instanceof Node && popover.contains(targetNode)) {
+        return;
+      }
+      this.clearDemolishConfirm();
+    };
+    window.addEventListener("pointerdown", this.demolishConfirmDismissHandler, true);
   }
 
   renderSplash() {
@@ -4003,31 +4111,35 @@ export class SaveTheGridApp {
             <ul id="incident-list" class="incident-list"></ul>
           </section>
 
-          <div class="floating-group floating-bottom-left" id="hud-metrics">
-            <span class="floating-chip">Budget <strong id="hud-budget">0</strong></span>
-            <span class="floating-chip">Supply <strong id="hud-served">0</strong></span>
-            <span class="floating-chip">Unmet <strong id="hud-unmet">0</strong></span>
-            <span class="floating-chip">Reliability <strong id="hud-reliability">0%</strong></span>
-            <span class="floating-chip">Score <strong id="hud-score">0</strong></span>
-            <span class="floating-chip">Season <strong id="hud-season">neutral</strong></span>
-            <span class="floating-chip">Lawsuits <strong id="hud-lawsuits">0</strong></span>
-            <span class="floating-chip">Zoom <strong id="hud-zoom">1.00x</strong></span>
-            <span class="floating-chip">Pan <strong>Drag / WASD</strong></span>
-            <span class="floating-chip">Resources <strong id="hud-resource-visibility">Hidden (hold R)</strong></span>
-            <span class="floating-chip">Towns <strong id="hud-town-emergence">0 emerged</strong></span>
-            <span class="floating-chip">Substation Radius <strong id="hud-substation-radius">0</strong></span>
+          <div class="floating-group floating-bottom-left">
+            <section class="floating-card hud-summary-panel" id="hud-metrics">
+              <div class="hud-summary-row">
+                <span class="hud-metric-item">Budget <strong id="hud-budget">0</strong></span>
+                <span class="hud-metric-item">Supply <strong id="hud-served">0</strong></span>
+                <span class="hud-metric-item">Unmet <strong id="hud-unmet">0</strong></span>
+                <span class="hud-metric-item">Reliability <strong id="hud-reliability">0%</strong></span>
+                <span class="hud-metric-item">Score <strong id="hud-score">0</strong></span>
+                <span class="hud-metric-item">Season <strong id="hud-season">neutral</strong></span>
+                <span class="hud-metric-item">Lawsuits <strong id="hud-lawsuits">0</strong></span>
+              </div>
+              <div class="hud-summary-row">
+                <span class="hud-metric-item">Zoom <strong id="hud-zoom">1.00x</strong></span>
+                <span class="hud-metric-item">Pan <strong>Drag / WASD</strong></span>
+                <span class="hud-metric-item">Resources <strong id="hud-resource-visibility">Hidden (hold R)</strong></span>
+                <span class="hud-metric-item">Towns <strong id="hud-town-emergence">0 emerged</strong></span>
+              </div>
+              <div class="hud-summary-row">
+                <span class="hud-metric-item">Substation Radius <strong id="hud-substation-radius">0</strong></span>
+              </div>
+            </section>
           </div>
 
           <div class="floating-group floating-bottom-center">
             <div class="floating-dock">
-              <button class="tool-btn floating-dock-btn" data-tool="build" data-testid="tool-build">Build</button>
-              <button class="tool-btn floating-dock-btn" data-tool="demolish" data-testid="tool-demolish">Demolish</button>
-              <button class="tool-btn floating-dock-btn" data-tool="reroute" data-testid="tool-reroute">Reroute</button>
-              <button class="tool-btn floating-dock-btn" data-tool="line" data-testid="tool-line">Line (4)</button>
-              <span class="dock-separator" aria-hidden="true"></span>
               <button class="asset-btn floating-dock-btn" data-asset="plant" data-testid="asset-plant">Plant (1)</button>
               <button class="asset-btn floating-dock-btn" data-asset="substation" data-testid="asset-substation">Sub (2)</button>
               <button class="asset-btn floating-dock-btn" data-asset="storage" data-testid="asset-storage">Storage (3)</button>
+              <span class="floating-dock-hint">Line: 4 | Reroute: E | Right click: Demolish</span>
             </div>
           </div>
 
@@ -4039,10 +4151,6 @@ export class SaveTheGridApp {
           </div>
 
           <div class="floating-group floating-bottom-right">
-            <div id="region-context" class="floating-card floating-region-context">
-              <h3>Selection Context</h3>
-              <p>Select a town or infrastructure point on the map.</p>
-            </div>
             <div class="ticker floating-ticker" id="news-ticker">${newsTickerText}</div>
           </div>
         </div>
@@ -4051,14 +4159,6 @@ export class SaveTheGridApp {
   }
 
   attachRunUiListeners() {
-    this.root.querySelectorAll("[data-tool]").forEach((button) => {
-      button.addEventListener("click", () => {
-        if (!this.runtime) return;
-        this.runtime.tool = button.getAttribute("data-tool");
-        this.runtime.pushHudUpdate();
-      });
-    });
-
     this.root.querySelectorAll("[data-asset]").forEach((button) => {
       button.addEventListener("click", () => {
         if (!this.runtime) return;
@@ -4138,6 +4238,8 @@ export class SaveTheGridApp {
         onHud: (payload) => this.updateRunHud(payload),
         onRunEnd: (summary) => this.handleRunEnd(summary),
         onHighlightAlert: (alertId) => this.highlightAlert(alertId),
+        onRequestDemolishConfirm: (payload) => this.showDemolishConfirm(payload),
+        onDismissDemolishConfirm: () => this.clearDemolishConfirm(),
         onNews: (text) => {
           const ticker = this.root.querySelector("#news-ticker");
           if (ticker) ticker.textContent = text;
@@ -4179,6 +4281,8 @@ export class SaveTheGridApp {
         onHud: (payload) => this.updateRunHud(payload),
         onRunEnd: (summary) => this.handleRunEnd(summary),
         onHighlightAlert: (alertId) => this.highlightAlert(alertId),
+        onRequestDemolishConfirm: (payload) => this.showDemolishConfirm(payload),
+        onDismissDemolishConfirm: () => this.clearDemolishConfirm(),
         onNews: (text) => {
           const ticker = this.root.querySelector("#news-ticker");
           if (ticker) ticker.textContent = text;
@@ -4247,12 +4351,6 @@ export class SaveTheGridApp {
     }
     if (pauseNode) pauseNode.textContent = payload.paused ? "Resume" : "Pause";
 
-    const toolButtons = this.root.querySelectorAll(".tool-btn");
-    toolButtons.forEach((button) => {
-      const isActive = button.getAttribute("data-tool") === payload.tool;
-      button.classList.toggle("active", isActive);
-    });
-
     const assetButtons = this.root.querySelectorAll(".asset-btn");
     assetButtons.forEach((button) => {
       const isActive = button.getAttribute("data-asset") === payload.buildAssetType;
@@ -4294,82 +4392,6 @@ export class SaveTheGridApp {
             .join("")
         : "<li><span>No active alerts.</span></li>";
     }
-
-    const regionContext = $("#region-context");
-    const selected = payload.selectedEntity || payload.selectedTown || payload.selectedRegion;
-    if (!regionContext) return;
-
-    if (!selected) {
-      regionContext.innerHTML =
-        "<h3>Selection Context</h3><p>Select a town or infrastructure point on the map.</p>";
-      return;
-    }
-
-    const isTown = selected.entityType !== "node";
-
-    const resourceProfile = selected.resourceProfile || {
-      wind: 0,
-      sun: 0,
-      natural_gas: 0,
-    };
-    const serviceLine = `Stability ${(
-      selected.stableServiceSeconds || 0
-    ).toFixed(1)}s | Outage ${(
-      selected.outageSeconds || 0
-    ).toFixed(1)}s`;
-    const coverageLine = isTown
-      ? selected.coveredBySubstation
-        ? `Coverage active via ${this.runtime.findRegion(selected.coverageSourceId)?.name || "substation"} (${Math.round(selected.coverageDistance || 0)}u)`
-        : "Coverage gap: outside powered substation radius."
-      : "Infrastructure point for player-built plants/substations and manual Lines.";
-    const resourceLine = `Resources W${Math.round(resourceProfile.wind * 100)}% S${Math.round(resourceProfile.sun * 100)}% G${Math.round(resourceProfile.natural_gas * 100)}%`;
-    const linePreview =
-      payload.lineSelectionStartRegionId && payload.lineSelectionStartRegionId !== selected.id
-        ? (() => {
-            const start = this.runtime.findRegion(payload.lineSelectionStartRegionId);
-            if (!start) return "";
-            if (isTown || this.runtime.isTownEntity(start)) {
-              return "<p>Line endpoints must be infrastructure points.</p>";
-            }
-            if (
-              !this.runtime.canEndpointHostLine(start) ||
-              !this.runtime.canEndpointHostLine(selected)
-            ) {
-              return "<p>Line endpoint requires a plant or substation.</p>";
-            }
-            const previewCost = this.runtime.estimateLineBuildCost(start, selected);
-            const previewCapacity = this.runtime.estimateLineCapacity(
-              this.runtime.calculateLineLength(start, selected)
-            );
-            return `<p>Line preview ${start.name} -> ${selected.name}: ${previewCost} budget, cap ${previewCapacity}</p>`;
-          })()
-        : payload.lineSelectionStartRegionId === selected.id
-          ? `<p>Line start selected: ${selected.name}. Pick endpoint point.</p>`
-          : "";
-    const selectedHtml = `
-      <h3>${selected.name}</h3>
-      <p>${
-        isTown
-          ? `${pickTownArchetype(selected.districtType)} town point | ${selected.climate} climate | ${selected.terrain} terrain`
-          : `infrastructure point | ${selected.climate} climate | ${selected.terrain} terrain`
-      }</p>
-      <p>${
-        isTown
-          ? `Priority ${selected.priority.toUpperCase()} | Population ${selected.population.toFixed(1)}`
-          : "Build target: place assets directly on map points"
-      }</p>
-      <p>${
-        isTown
-          ? `Demand ${selected.demand.toFixed(1)} | Served ${selected.served.toFixed(1)} | Unmet ${selected.unmet.toFixed(1)}`
-          : `Demand N/A | Served N/A | Unmet N/A`
-      }</p>
-      <p>${isTown ? serviceLine : "Point stability tracks connected grid performance."}</p>
-      <p>${coverageLine}</p>
-      <p>Assets P${selected.assets.plant} S${selected.assets.substation} B${selected.assets.storage}</p>
-      <p>${resourceLine}</p>
-      ${linePreview}
-    `;
-    regionContext.innerHTML = selectedHtml;
   }
 
   highlightAlert(alertId) {
@@ -4380,6 +4402,7 @@ export class SaveTheGridApp {
   }
 
   handleRunEnd(summary) {
+    this.clearDemolishConfirm();
     this.runtime = null;
 
     this.suspendedRun = null;

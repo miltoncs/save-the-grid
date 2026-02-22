@@ -5,23 +5,21 @@ Fullscreen browser app for tuning topology-based map generation.
 ## Controls
 
 - `Re-generate`: creates a new random-seed terrain map.
+- `New-map Zone Seeding`: each new map auto-places one random polygon zone of each resource type (`Wind`, `Sun`, `Natural Gas`), targeting roughly `5%` coverage per zone.
 - `Mode Toggle` (bottom): switches between `Terrain` and `Resources`.
 - `Terrain` mode: full topology + river tuning controls (existing workflow).
 - `Resources` mode: barebones zone authoring controls for setup iteration.
 - `Algorithm`: switch between `Topology` and `Midpoint`.
 - `Smoothness`: controls how rough vs smooth the terrain appears.
-- `Continent Scale`: controls only low-frequency topology layers (continent mask + macro noise). Higher values create more fragmented large-scale landmasses.
+- `Continent Scale`: controls low-frequency continent shaping (continent mask + macro noise) for both `Topology` and `Midpoint`. Higher values create more fragmented large-scale landmasses.
 - `Sea Level`: controls waterline percentile (higher = more water).
 - `Mountaintops Level`: controls the height percentile where white mountaintops begin.
 - `Rivers`: shows the current number of active river sources (map starts with 6 random sources).
 - `Reset Rivers`: restores default river settings and redraws a new river pass on the same terrain.
 - `Remove All Rivers`: clears all river sources from the current map.
 - `Resource Type`: selects the zone class (`Wind`, `Sun`, `Natural Gas`) in resources mode.
-- `Vertex Snap`: controls how close a click must be to reuse an existing draft vertex and close a polygon.
+- `Vertex Snap`: fixed at `10px`; clicking near an existing draft vertex reuses it and closes the polygon.
 - `Zone Strength`: controls resource-zone overlay intensity in resources mode.
-- `Close Draft Polygon`: commits the draft polygon as a resource zone.
-- `Undo Draft Vertex`: removes the most recent draft vertex.
-- `Clear Draft`: clears all uncommitted draft vertices.
 - `Undo Last Zone`: removes the most recently placed resource zone.
 - `Clear Zones`: removes all placed resource zones.
 - `Minimize / Maximize`: collapses or re-expands the floating control panel.
@@ -31,8 +29,8 @@ Fullscreen browser app for tuning topology-based map generation.
 - `Map Click`: left click any land area to add a new river source at that point; only the new river is animated. Water clicks are ignored.
 - `Map Right Hold`: hold right click to preview deletion radius with a transparent red circle.
 - `Map Right Click`: right click near any river start/source to remove that river from the network (without replaying river animation).
-- `Map Click` in resources mode: left click land to place draft polygon vertices.
-- `Map Vertex Snap` in resources mode: clicking near an existing draft vertex reuses it and closes the polygon.
+- `Map Click` in resources mode: left click anywhere on the map (land or water) to place draft polygon vertices.
+- `Map Vertex Snap` in resources mode: click near an existing draft vertex (within 10px) to reuse it and close the polygon.
 - `Map Right Click` in resources mode: remove the zone under cursor (fallback: nearest zone vertex in range).
 
 ## Run

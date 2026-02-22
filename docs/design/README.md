@@ -15,12 +15,12 @@ This folder contains product intent, gameplay design, UX direction, and forward-
 Current emphasis:
 
 - Early levels use small, highly readable maps.
-- Basic scenarios start mostly terrain-first with few towns and minimal prebuilt grid.
+- Basic scenarios start mostly terrain-first with few towns and minimal prebuilt powergrid.
 - Later levels scale to larger maps with longer routing distances and denser town networks.
 - There are no region-level service hubs; towns are authored directly on the map.
 - There are no pre-authored major transmission corridors; long-distance backbone is player-built.
-- There are no map-area unlock mechanics; challenge comes from terrain, distance, and grid stability.
-- New towns can emerge during runs when livable terrain has stable nearby grid service.
+- There are no map-area unlock mechanics; challenge comes from terrain, distance, and powergrid stability.
+- New towns can emerge during runs when livable terrain has stable nearby powergrid service.
 - Substations power nearby towns by radius and auto-generate short orthogonal town links.
 - Players build manual long-distance powerlines using the `Line` tool.
 - Visual direction blends map readability (Google Maps-like) with pixelated RTS map character (OpenFront-inspired).

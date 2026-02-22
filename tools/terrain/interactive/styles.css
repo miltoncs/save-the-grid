@@ -31,6 +31,8 @@ body {
   width: 100vw;
   height: 100vh;
   display: block;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
 }
 
 .floating-controls {
@@ -285,10 +287,6 @@ input[type="range"] {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 8px;
-}
-
-.resource-actions #close-draft-btn {
-  grid-column: 1 / -1;
 }
 
 .resource-actions #clear-zones-btn {

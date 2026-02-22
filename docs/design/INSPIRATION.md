@@ -77,7 +77,7 @@ References are for interaction and visual direction only, not brand imitation.
 ## 6. Translation to This Game
 
 1. Keep the map as the dominant surface in all gameplay states.
-2. Use restrained map colors so power-grid alerts read instantly.
+2. Use restrained map colors so powergrid alerts read instantly.
 3. Keep onboarding maps visually simple with minimal overlays.
 4. Use pixel-stepped coastlines/terrain transitions as a stylistic layer on top of the map readability system.
 5. Preserve fast, scan-friendly real-time decision flow in all HUD layouts.
@@ -107,4 +107,4 @@ These are approximate starting points for implementation experimentation:
 Optional pixel-edge accents:
 
 - `--map-coast-pixel-edge: #6f8ff0`
-- `--map-grid-pixel-edge: #7fa2ff`
+- `--map-powergrid-pixel-edge: #7fa2ff`

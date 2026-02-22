@@ -169,10 +169,34 @@
 .floating-bottom-left {
   left: 16px;
   bottom: 92px;
+  width: min(920px, 68vw);
+}
+
+.hud-summary-panel {
+  display: grid;
+  gap: 7px;
+  padding: 9px 11px;
+}
+
+.hud-summary-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  max-width: min(860px, 64vw);
+  gap: 6px 14px;
+}
+
+.hud-metric-item {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 7px;
+  color: #dbe8f4;
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+.hud-metric-item strong {
+  color: #f5f9df;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.92rem;
 }
 
 .floating-bottom-center {
@@ -187,6 +211,7 @@
   align-items: center;
   justify-content: center;
   gap: 8px;
+  flex-wrap: wrap;
   padding: 8px;
 }
 
@@ -197,10 +222,72 @@
   padding: 8px 11px;
 }
 
+.floating-dock-hint {
+  color: var(--text-soft);
+  font-size: 0.78rem;
+  font-family: "IBM Plex Mono", monospace;
+  white-space: nowrap;
+  padding: 6px 8px;
+}
+
 .dock-separator {
   width: 1px;
   align-self: stretch;
   background: rgba(185, 225, 238, 0.26);
+}
+
+.demolish-confirm {
+  width: min(260px, calc(100vw - 40px));
+  transform: translate(-50%, calc(-100% - 10px));
+  border: 1px solid rgba(203, 236, 222, 0.48);
+  border-radius: 12px;
+  background: linear-gradient(140deg, rgba(14, 35, 47, 0.97), rgba(8, 18, 26, 0.96));
+  box-shadow: 0 16px 34px rgba(0, 0, 0, 0.5);
+  padding: 10px;
+  z-index: 9;
+}
+
+.demolish-confirm-below {
+  transform: translate(-50%, 10px);
+}
+
+.demolish-confirm p {
+  margin: 0;
+  color: #eaf6ff;
+  font-size: 0.86rem;
+}
+
+.demolish-confirm-refund {
+  margin-top: 4px !important;
+  color: var(--text-soft) !important;
+  font-size: 0.76rem !important;
+}
+
+.demolish-confirm-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.demolish-confirm-btn {
+  flex: 1;
+  border: 1px solid rgba(202, 237, 219, 0.32);
+  border-radius: 9px;
+  background: linear-gradient(160deg, rgba(18, 49, 61, 0.8), rgba(8, 24, 34, 0.95));
+  color: #ebf6f2;
+  padding: 7px 8px;
+  cursor: pointer;
+}
+
+.demolish-confirm-btn:hover {
+  border-color: rgba(242, 245, 212, 0.66);
+}
+
+.demolish-confirm-accept {
+  background: linear-gradient(145deg, rgba(245, 185, 96, 0.9), rgba(238, 144, 74, 0.92));
+  color: #131011;
+  border-color: rgba(255, 217, 169, 0.85);
+  font-weight: 700;
 }
 
 .floating-map-controls {
@@ -317,4 +404,3 @@ th {
   font-weight: 500;
   font-size: 0.76rem;
 }
-

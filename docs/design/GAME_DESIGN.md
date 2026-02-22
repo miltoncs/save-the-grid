@@ -1,11 +1,11 @@
-# Energy Directory: Grid of Nations
+# Energy Directory: powergrid of Nations
 
 Status: Draft v0.1  
 Last updated: 2026-02-20
 
 ## 1. High Concept
 
-The player is the Energy Directory for a fictional country. In real time, they build, demolish, and reroute grid infrastructure to power a rapidly growing civilization. The game is designed as a browser-native web game: quick to pick up in seconds, but difficult to master over many runs.
+The player is the Energy Directory for a fictional country. In real time, they build, demolish, and reroute powergrid infrastructure to power a rapidly growing civilization. The game is designed as a browser-native web game: quick to pick up in seconds, but difficult to master over many runs.
 
 ## 2. Design Pillars
 
@@ -34,7 +34,7 @@ The player is the Energy Directory for a fictional country. In real time, they b
 14. Early levels use small, easy-to-read maps; later levels use larger maps with longer routing distances and denser town networks.
 15. There are no map-area unlock systems; the full map is available from run start.
 16. There are no region-level service hubs, district ownership layers, or corridor-purchase mechanics.
-17. Basic levels start mostly empty: mostly terrain, a few towns, and little to no prebuilt power-grid infrastructure.
+17. Basic levels start mostly empty: mostly terrain, a few towns, and little to no prebuilt powergrid infrastructure.
 18. As conditions improve, new towns can emerge on livable powered terrain during a run.
 19. Large player-built power routing is handled by a single tool named `Line`.
 20. Substations power all towns within radius and automatically generate short orthogonal town-connection lines.
@@ -51,18 +51,18 @@ You are not an engineer placing wires in a sandbox. You are a national decision-
 4. Stabilize service quality so additional towns can emerge.
 5. Demolish or replace aging or inefficient assets.
 6. Absorb random pressures (weather, fuel shocks, policy changes).
-7. Stabilize the grid and push score before collapse conditions are reached.
+7. Stabilize the powergrid and push score before collapse conditions are reached.
 
 ### 5.1 Strategic Core
 
-The primary strategic question is always the same: what to build, when to build it, and where to place it given current map constraints and emergent grid conditions. The design should avoid layered subsystems that distract from this core decision loop.
+The primary strategic question is always the same: what to build, when to build it, and where to place it given current map constraints and emergent powergrid conditions. The design should avoid layered subsystems that distract from this core decision loop.
 
 ## 6. Run Structure (Roguelike)
 
 ### Run Start
 
 - Player begins with level-local budget, mostly visible terrain, and a few seeded towns.
-- Basic levels include little to no prebuilt power-grid infrastructure.
+- Basic levels include little to no prebuilt powergrid infrastructure.
 - Initial objectives are simple to teach controls and priorities.
 - Level budget is self-contained for that level and does not carry over on completion.
 - Early onboarding runs/missions can disable population growth to avoid overload.
@@ -75,7 +75,7 @@ The primary strategic question is always the same: what to build, when to build 
 - Population growth pressure comes online (outside onboarding missions).
 - Seasonal and local-climate demand pressure comes online (outside onboarding missions).
 - Event frequency increases.
-- Grid complexity rises with longer `Line` routes, overloaded links, and substation coverage constraints.
+- powergrid complexity rises with longer `Line` routes, overloaded links, and substation coverage constraints.
 - New towns emerge in livable, stably powered areas and add fresh demand pressure.
 - Later content introduces larger maps that force longer-distance routing and tighter reliability planning.
 
@@ -98,7 +98,7 @@ The primary strategic question is always the same: what to build, when to build 
 ### 8.1 Map and Spatial Layout
 
 - Country map represented as a 2D overhead layered board/network view.
-- Layer model includes: base game board (land/water/land type), civilization town points, power-grid points, player-built `Line` network, and resource-zone overlays.
+- Layer model includes: base game board (land/water/land type), civilization town points, infrastructure icons (plants, substations, storage), player-built `Line` network, and resource-zone overlays.
 - There are no authored region service hubs; towns are placed directly on the board as first-class entities.
 - There are no pre-authored major transmission corridors in gameplay.
 - Maps are handcrafted in v1 to ensure balanced and readable scenarios.
@@ -115,7 +115,7 @@ The primary strategic question is always the same: what to build, when to build 
 ### 8.2 Infrastructure
 
 - Generation assets: a small starter set of plant types.
-- Grid assets: substations, `Lines`, storage.
+- powergrid assets: substations, `Lines`, storage.
 - `Line` connections can be built between:
   - power plant to power plant,
   - power plant to substation,
@@ -175,7 +175,7 @@ The primary strategic question is always the same: what to build, when to build 
 ## 9. Storytelling Approach (Unobtrusive)
 
 - Short cabinet briefings and news-ticker style updates.
-- Flavor text tied to mechanical events, town growth, and grid incidents.
+- Flavor text tied to mechanical events, town growth, and powergrid incidents.
 - No long cutscenes, dialogue trees, or heavy narrative branching in v1.
 - Story delivery should enhance context without interrupting control flow.
 
@@ -203,7 +203,7 @@ To keep the game shallow and fast:
 ### Primary Failure Conditions
 
 - Reliability collapse (sustained unmet demand).
-- Bankruptcy (the grid is in deficit and available cash has reached zero).
+- Bankruptcy (the powergrid is in deficit and available cash has reached zero).
 
 ### Primary Victory Conditions
 

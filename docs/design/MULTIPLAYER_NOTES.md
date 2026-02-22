@@ -34,7 +34,7 @@ These guardrails reduce rewrite risk when multiplayer design is prioritized.
 2. Weekly competitive scenario:
    - Shared constraints, leaderboard-driven competition.
 3. Live contract bidding (full multiplayer):
-   - Real-time auctions plus grid performance competition.
+   - Real-time auctions plus powergrid performance competition.
 
 ## 6. Risks to Watch Now
 
