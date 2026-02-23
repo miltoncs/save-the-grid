@@ -112,13 +112,15 @@ Terrain effects should be visible and explainable in tooltips.
 ## 5. Infrastructure Placement and Line Rules
 
 1. Power plants and substations place directly on valid map points.
-2. In-game `Line` tool creates manual long-distance links between allowed endpoint pairs:
+2. Plant build options are fixed to `Wind`, `Solar`, and `Natural Gas`.
+3. In-game `Line` tool creates manual long-distance links between allowed endpoint pairs:
    - plant to plant,
    - plant to substation,
    - substation to substation,
    - substation to plant.
-3. Storage assets attach to plant/substation clusters.
-4. Demolition has a short cooldown on rebuild at the same point to prevent spam loops.
+4. Power plants cannot be built within one plant diameter of another power plant.
+5. Storage assets attach to plant/substation clusters.
+6. Demolishing a power plant takes 20 seconds and then removes it completely with no visual artifact left on the map.
 
 Placement preview should always show:
 
@@ -126,6 +128,7 @@ Placement preview should always show:
 2. Capacity change.
 3. Local reliability impact.
 4. For substations: service radius and expected town coverage count.
+5. For power plants: exclusion-zone warning when the one-diameter spacing rule blocks placement.
 
 ## 6. Routing and Flow Visualization
 
@@ -188,7 +191,7 @@ All modes should share the same base map interaction vocabulary.
 
 1. Central plains with initial starter town cluster.
 2. North industrial belt with volatile demand.
-3. West hydro valley with low-cost clean generation and drought risk events.
+3. West wind corridor with strong generation potential and calm-period risk events.
 4. East coast settlement chain with storm vulnerability.
 5. South agricultural towns with broad coverage needs.
 6. Interior frontier tiles with late-run town emergence potential.

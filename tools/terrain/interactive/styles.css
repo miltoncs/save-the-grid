@@ -315,6 +315,15 @@ input[type="range"] {
   accent-color: #83d1ff;
 }
 
+.shadow-strength-row.is-disabled,
+.shadow-strength-slider:disabled {
+  opacity: 0.5;
+}
+
+.shadow-strength-slider:disabled {
+  cursor: not-allowed;
+}
+
 .resource-select {
   width: 100%;
   margin-top: 6px;

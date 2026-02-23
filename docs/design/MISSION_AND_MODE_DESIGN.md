@@ -103,7 +103,7 @@ Each mission defines:
 
 ### Constraint Examples
 
-1. Limited generation type availability.
+1. Limited plant type availability (`Wind`, `Solar`, `Natural Gas` subsets only).
 2. Higher `Line` construction costs.
 3. Increased weather event frequency.
 4. Restricted demolition refunds.
@@ -149,7 +149,7 @@ No branching dialogue trees are required for v1.
 6. Local-climate intensity.
 7. Infrastructure price multiplier.
 8. Reliability failure tolerance.
-9. Underserved-town lawsuit sensitivity.
+9. Underserved-town penalty sensitivity.
 10. Run duration target band.
 11. Population growth strength (`off`, `normal`, `high`).
 12. Town emergence intensity (`off`, `limited`, `normal`, `high`).
@@ -184,9 +184,9 @@ Avoid hidden multipliers that reduce player confidence in outcomes.
 3. `Fuel Shock`: maintain service with cost surge penalties.
 4. `Coastal Storm`: recover from repeated line disruptions.
 5. `Industrial Push`: support heavy growth in a factory-dense town belt.
-6. `Dry Season`: low hydro availability constraint.
+6. `Still Air`: low wind availability constraint.
 7. `Night Surge`: manage steep evening demand profile.
-8. `Election Quarter`: keep underserved-town lawsuit exposure low under mixed events.
+8. `Election Quarter`: keep underserved-town penalty exposure low under mixed events.
 9. `powergrid Retrofit`: replace inefficient plants with strict budget cap on a medium map.
 10. `Cross-Country Link`: establish stable long-haul `Line` paths between distant supply and demand clusters.
 11. `Green Mandate`: meet demand with limited fossil capacity across a large map.

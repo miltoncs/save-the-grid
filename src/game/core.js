@@ -55,6 +55,10 @@ export const ICON_SET_URLS = {
   infrastructure: {
     substation: "/assets/icons/circular/substation.svg",
   },
+  powerline: {
+    horizontal: "/assets/patterns/powerlines/local-powerline-tile.svg",
+    vertical: "/assets/patterns/powerlines/local-powerline-tile-vertical.svg",
+  },
 };
 export const LIVABLE_TERRAINS = new Set(["plains", "river", "coast"]);
 export const SPARSE_START_TOWN_IDS = new Set(["capital"]);

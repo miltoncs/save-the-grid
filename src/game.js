@@ -161,6 +161,10 @@ class GameRuntime {
       infrastructure: {
         substation: null,
       },
+      powerline: {
+        horizontal: null,
+        vertical: null,
+      },
     };
 
     this.state = this.snapshot ? this.rehydrateSnapshot(this.snapshot) : this.createFreshState();
@@ -2893,11 +2897,6 @@ class GameRuntime {
     const zoom = this.zoomLevels[this.camera.zoomIndex];
     if (zoom <= 0.62) return;
 
-    ctx.save();
-    ctx.strokeStyle = "rgba(170, 238, 206, 0.55)";
-    ctx.lineWidth = clamp(1.1 * zoom, 0.8, 2);
-    ctx.setLineDash([4, 3]);
-
     for (const town of this.state.regions) {
       if (!this.isTownEntity(town)) continue;
       if (!town.coveredBySubstation || !town.coverageSourceId) continue;
@@ -2909,16 +2908,121 @@ class GameRuntime {
       const to = this.worldToScreen(town.x, town.y);
       const elbowX = to.x;
       const elbowY = from.y;
+      const elbow = { x: elbowX, y: elbowY };
 
-      ctx.beginPath();
-      ctx.moveTo(from.x, from.y);
-      ctx.lineTo(elbowX, elbowY);
-      ctx.lineTo(to.x, to.y);
-      ctx.stroke();
+      this.drawLocalPowerlineSegment(ctx, from, elbow, zoom);
+      this.drawLocalPowerlineSegment(ctx, elbow, to, zoom);
+    }
+  }
+
+  getLocalPowerlineRenderMetrics(zoom) {
+    const tileScale = clamp(zoom * 0.24, 0.18, 0.44);
+    const corridorThickness = clamp(48 * tileScale, 8, 24);
+    return {
+      corridorThickness,
+      horizontalTileWidth: 96 * tileScale,
+      horizontalTileHeight: 48 * tileScale,
+      verticalTileWidth: 48 * tileScale,
+      verticalTileHeight: 96 * tileScale,
+    };
+  }
+
+  drawLocalPowerlineFallbackSegment(ctx, start, end, zoom) {
+    ctx.save();
+    ctx.strokeStyle = "rgba(123, 173, 198, 0.7)";
+    ctx.lineWidth = clamp(1.2 * zoom, 0.8, 2.3);
+    ctx.beginPath();
+    ctx.moveTo(start.x, start.y);
+    ctx.lineTo(end.x, end.y);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  drawHorizontalLocalPowerlineSegment(ctx, startX, endX, y, zoom) {
+    const length = endX - startX;
+    if (length <= 0.6) return;
+
+    const metrics = this.getLocalPowerlineRenderMetrics(zoom);
+    const tile = this.iconSet.powerline.horizontal;
+    if (!tile) {
+      this.drawLocalPowerlineFallbackSegment(
+        ctx,
+        { x: startX, y },
+        { x: endX, y },
+        zoom
+      );
+      return;
     }
 
-    ctx.setLineDash([]);
+    const halfThickness = metrics.corridorThickness / 2;
+    ctx.save();
+    ctx.globalAlpha = 0.95;
+    ctx.beginPath();
+    ctx.rect(startX, y - halfThickness, length, metrics.corridorThickness);
+    ctx.clip();
+    for (let x = startX; x < endX + metrics.horizontalTileWidth; x += metrics.horizontalTileWidth) {
+      ctx.drawImage(
+        tile,
+        x,
+        y - metrics.horizontalTileHeight / 2,
+        metrics.horizontalTileWidth,
+        metrics.horizontalTileHeight
+      );
+    }
     ctx.restore();
+  }
+
+  drawVerticalLocalPowerlineSegment(ctx, x, startY, endY, zoom) {
+    const length = endY - startY;
+    if (length <= 0.6) return;
+
+    const metrics = this.getLocalPowerlineRenderMetrics(zoom);
+    const tile = this.iconSet.powerline.vertical;
+    if (!tile) {
+      this.drawLocalPowerlineFallbackSegment(
+        ctx,
+        { x, y: startY },
+        { x, y: endY },
+        zoom
+      );
+      return;
+    }
+
+    const halfThickness = metrics.corridorThickness / 2;
+    ctx.save();
+    ctx.globalAlpha = 0.95;
+    ctx.beginPath();
+    ctx.rect(x - halfThickness, startY, metrics.corridorThickness, length);
+    ctx.clip();
+    for (let y = startY; y < endY + metrics.verticalTileHeight; y += metrics.verticalTileHeight) {
+      ctx.drawImage(
+        tile,
+        x - metrics.verticalTileWidth / 2,
+        y,
+        metrics.verticalTileWidth,
+        metrics.verticalTileHeight
+      );
+    }
+    ctx.restore();
+  }
+
+  drawLocalPowerlineSegment(ctx, from, to, zoom) {
+    const dx = to.x - from.x;
+    const dy = to.y - from.y;
+    if (Math.abs(dx) <= 0.6 && Math.abs(dy) <= 0.6) return;
+
+    if (Math.abs(dx) >= Math.abs(dy)) {
+      const y = (from.y + to.y) * 0.5;
+      const startX = Math.min(from.x, to.x);
+      const endX = Math.max(from.x, to.x);
+      this.drawHorizontalLocalPowerlineSegment(ctx, startX, endX, y, zoom);
+      return;
+    }
+
+    const x = (from.x + to.x) * 0.5;
+    const startY = Math.min(from.y, to.y);
+    const endY = Math.max(from.y, to.y);
+    this.drawVerticalLocalPowerlineSegment(ctx, x, startY, endY, zoom);
   }
 
   getMapObjectIconScreenSize() {
@@ -2966,14 +3070,30 @@ class GameRuntime {
     ctx.restore();
   }
 
-  drawTownCircleIcon(ctx, x, y, iconSize, region) {
-    const serviceRatio = region.demand > 0 ? region.served / region.demand : 1;
-    let fill = "rgba(170, 212, 188, 0.95)";
-    if (serviceRatio < 0.72) fill = "rgba(230, 135, 135, 0.95)";
-    else if (serviceRatio < 0.9) fill = "rgba(233, 198, 126, 0.95)";
+  getTownIconForRegion(region) {
+    if (!this.isTownEntity(region)) return null;
+    if (region.id === "capital") return this.iconSet.town.capital || null;
+    if ((region.population || 0) >= 52) return this.iconSet.town.city || null;
+    return this.iconSet.town.hamlet || null;
+  }
 
+  drawTownCircleIcon(ctx, x, y, iconSize, region) {
+    const townIcon =
+      this.getTownIconForRegion(region) ||
+      this.iconSet.town.capital ||
+      this.iconSet.town.city ||
+      this.iconSet.town.hamlet;
+    if (townIcon) {
+      ctx.save();
+      ctx.globalAlpha = 0.98;
+      ctx.drawImage(townIcon, x - iconSize / 2, y - iconSize / 2, iconSize, iconSize);
+      ctx.restore();
+      return;
+    }
+
+    // Fallback if icon assets are unavailable: neutral marker only.
     ctx.save();
-    ctx.fillStyle = fill;
+    ctx.fillStyle = "rgba(170, 212, 188, 0.95)";
     ctx.beginPath();
     ctx.arc(x, y, iconSize / 2, 0, Math.PI * 2);
     ctx.fill();
@@ -3442,6 +3562,10 @@ class GameRuntime {
           },
           infrastructure: {
             substation: !!this.iconSet.infrastructure.substation,
+          },
+          powerline: {
+            horizontal: !!this.iconSet.powerline.horizontal,
+            vertical: !!this.iconSet.powerline.vertical,
           },
         },
         resourceZoneCounts: { ...this.resourceZoneSummary },

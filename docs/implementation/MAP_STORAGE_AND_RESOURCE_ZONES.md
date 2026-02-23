@@ -119,6 +119,10 @@ type ResourceZoneRecord = {
 };
 ```
 
+Player-facing naming note:
+
+- Runtime key `sun` maps to the `Solar` power plant type label in design/UI copy.
+
 ## 5. Terrain Metadata Resource Zones
 
 When terrain metadata is present and includes `resource_zones`, runtime prefers metadata zones over map-file zones.
@@ -163,7 +167,7 @@ Current semantics are intentionally shallow:
 
 1. Zones do not require extraction or transport networks.
 2. Zone influence is sampled by overlap around towns/infrastructure points.
-3. Influences feed runtime `resourceProfile` weights (`wind`, `sun`, `natural_gas`).
+3. Influences feed runtime `resourceProfile` weights (`wind`, `sun` for Solar, `natural_gas`).
 4. Profiles modify generation, operating economics, and reliability behaviors.
 
 ## 8. Validation Rules (Current)

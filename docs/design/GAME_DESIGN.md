@@ -38,6 +38,9 @@ The player is the Energy Directory for a fictional country. In real time, they b
 18. As conditions improve, new towns can emerge on livable powered terrain during a run.
 19. Large player-built power routing is handled by a single tool named `Line`.
 20. Substations power all towns within radius and automatically generate short orthogonal town-connection lines.
+21. v1 power plant types are fixed: `Wind`, `Solar`, and `Natural Gas`.
+22. A power plant cannot be built within one plant diameter of another power plant.
+23. Demolishing a power plant takes 20 seconds and removes it fully with no persistent visual artifact.
 
 ## 4. Player Fantasy and Role
 
@@ -114,8 +117,9 @@ The primary strategic question is always the same: what to build, when to build 
 
 ### 8.2 Infrastructure
 
-- Generation assets: a small starter set of plant types.
+- Generation assets are fixed to three power plant types: `Wind`, `Solar`, and `Natural Gas`.
 - powergrid assets: substations, `Lines`, storage.
+- Power plants cannot be placed within one plant diameter of another power plant.
 - `Line` connections can be built between:
   - power plant to power plant,
   - power plant to substation,
@@ -123,6 +127,8 @@ The primary strategic question is always the same: what to build, when to build 
   - substation to power plant.
 - Substations provide circular service radius for nearby towns.
 - When a town is in range of a powered substation, a short orthogonal service line is auto-generated between them.
+- Demolishing a power plant starts a 20-second decommission timer and then removes the plant completely with no residue.
+- Exact build costs and generation values are intentionally TBD for tuning.
 - Actions: build, demolish, reroute priorities, and `Line` routing.
 
 ### 8.3 Demand and Supply
@@ -168,8 +174,8 @@ The primary strategic question is always the same: what to build, when to build 
 - Budget changes from infrastructure costs, operating burden, and penalties.
 - Level completion does not carry money into the next level.
 - Trust is a hidden system attribute, not a visible resource the player directly manages.
-- If towns remain underserved, hidden trust pressure accumulates and can trigger lawsuits against the Power Department.
-- Lawsuits apply monetary penalties and increase bankruptcy risk.
+- If towns remain underserved, hidden trust pressure accumulates and can trigger underserved-town penalties.
+- Underserved-town penalties apply monetary penalties and increase bankruptcy risk.
 - These values are intentionally high-level, not a deep market simulation.
 
 ## 9. Storytelling Approach (Unobtrusive)
@@ -251,7 +257,7 @@ See `MULTIPLAYER_NOTES.md` for forward-looking design constraints.
 ## 16. Open Design Questions
 
 1. Target run length (for example 15, 20, or 30 minutes).
-2. Exact initial asset roster for launch.
+2. Exact build cost and generation-value tuning per asset for launch.
 3. Launch campaign size (8, 10, or 12 missions).
 4. Number of handcrafted maps at launch (1, 2, or 3).
 5. Event interaction model (passive events only vs fast binary choices in real time).

@@ -139,9 +139,12 @@ Let players tune scenario pressure for practice or challenge runs while preservi
 
 1. Select tool.
 2. Hover map to preview impact (cost, capacity, risk).
-3. Place plants/substations or draw manual `Line` paths (`plant<->plant`, `plant<->substation`, `substation<->substation`) based on current demand and terrain.
-4. Commit action with one click/tap.
-5. Receive immediate visual and metric feedback.
+3. If `Plant` is selected, choose one type: `Wind`, `Solar`, or `Natural Gas`.
+4. Place plants/substations or draw manual `Line` paths (`plant<->plant`, `plant<->substation`, `substation<->substation`) based on current demand and terrain.
+5. Plant placement previews must show spacing violations when within one plant diameter of another power plant.
+6. Plant demolish actions must show a 20-second decommission timer before full removal.
+7. Commit action with one click/tap.
+8. Receive immediate visual and metric feedback.
 
 No region-unlock or corridor-purchase action should exist in this flow.
 
@@ -162,7 +165,7 @@ Alerts must be non-blocking and expire cleanly.
 
 Population-related warnings should use the same alert system once the mechanic is enabled.
 Seasonal/local-climate demand warnings should use the same alert system once the mechanic is enabled.
-Underserved-town lawsuit warnings should use the same alert system without exposing hidden trust as a direct meter.
+Underserved-town penalty warnings should use the same alert system without exposing hidden trust as a direct meter.
 Line-overload and substation-coverage-gap warnings should use the same alert system in all map sizes.
 
 ### Pause Behavior (Singleplayer)

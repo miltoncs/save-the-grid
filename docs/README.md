@@ -42,6 +42,8 @@ Current gameplay direction highlights:
 - Later maps are larger and focus on longer routing distances and denser town networks.
 - There are no region-level service hubs; towns are direct map entities.
 - There are no pre-authored major transmission corridors in play.
+- Power plant types are fixed to `Wind`, `Solar`, and `Natural Gas`.
+- Power plants require one full plant-diameter spacing from each other.
 - Substations power towns by radius with auto-generated orthogonal town service links.
 - Players build manual long-distance powerlines with the in-game `Line` tool.
 - Campaign victory emphasizes full-map management on advanced maps through reliable town service.

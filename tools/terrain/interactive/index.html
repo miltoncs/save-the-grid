@@ -132,6 +132,29 @@
             <input id="river-relief-toggle" type="checkbox" checked />
             <span>Tint rivers and riverbanks</span>
           </label>
+
+          <label class="control-row" for="shadow-effect-toggle">
+            <span>Shadow Effect</span>
+            <strong id="shadow-effect-value">Off</strong>
+          </label>
+          <label class="toggle-row" for="shadow-effect-toggle">
+            <input id="shadow-effect-toggle" type="checkbox" />
+            <span>Enable directional shading</span>
+          </label>
+
+          <label id="shadow-strength-row" class="control-row shadow-strength-row" for="shadow-strength-slider">
+            <span>Shadow Amount</span>
+            <strong id="shadow-strength-value">22%</strong>
+          </label>
+          <input
+            id="shadow-strength-slider"
+            class="shadow-strength-slider"
+            type="range"
+            min="0"
+            max="100"
+            step="1"
+            value="22"
+          />
         </div>
 
         <footer class="control-footer">
@@ -172,14 +195,8 @@
         />
 
         <div class="export-actions">
-          <button id="export-map-json-btn" class="secondary-btn export-btn" type="button">
-            Export .map.json
-          </button>
-          <button id="export-metadata-json-btn" class="secondary-btn export-btn" type="button">
-            Export .metadata.json
-          </button>
-          <button id="export-png-btn" class="secondary-btn export-btn" type="button">
-            Export .png
+          <button id="export-bundle-btn" class="secondary-btn export-btn" type="button">
+            Export
           </button>
         </div>
         <div id="export-status-value" class="export-status" role="status" aria-live="polite">

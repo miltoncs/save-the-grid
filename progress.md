@@ -1507,3 +1507,133 @@ Original prompt: Develop the game MVP based on all provided documentation
 - Verified tile dimensions in browser:
   - horizontal: `96x48`
   - vertical: `48x96`
+
+## 2026-02-23 (Plant variants in dock + icon-only dock)
+- Added explicit plant variant selection in runtime state:
+  - `buildPlantType` with values: `wind`, `sun`, `natural_gas`.
+- Bottom dock now includes separate icon selectors for each plant type:
+  - wind (`asset-plant`)
+  - solar (`asset-plant-solar`)
+  - natural gas (`asset-plant-gas`)
+- Kept substation + storage selectors in the dock.
+- Removed dock panel background/border so bottom bar is icon-only selection controls.
+- Updated active-state logic so only the selected plant variant icon is highlighted.
+- Plant builds now persist a per-point `plantType`, and rendered plant icon matches selected build type.
+- Added serialization/hydration and text-state support for `buildPlantType` and point `plantType` fields.
+
+### Validation
+- `node --check src/game.js`
+- `node --check src/game/core.js`
+- Screenshot verification:
+  - `output/web-game/plant-variants-bottom-dock/run-plant-variants-dock.png`
+  - confirms icon-only dock with 3 plant icons + substation + storage and no dock background.
+- State verification:
+  - `output/web-game/plant-variants-bottom-dock/state.json`
+  - confirms `selectedBuildPlantType` and per-node `plantType` values are set.
+
+## 2026-02-23 (Design docs: fixed plant roster + placement/demolish rules)
+- Updated documentation to lock power plant roster to three types:
+  - `Wind`, `Solar`, `Natural Gas`.
+- Added explicit placement rule:
+  - power plants cannot be built within one full plant diameter of each other.
+- Added explicit demolition rule:
+  - demolishing a power plant takes 20 seconds and removes it completely with no visual artifact.
+- Marked build-cost and generation values as tuning TBD (not fixed yet).
+- Replaced outdated hydro design references in mission/map examples with wind-based constraints.
+- Clarified implementation naming bridge:
+  - runtime resource key `sun` corresponds to player-facing `Solar`.
+
+### Files updated
+- `/docs/design/GAME_DESIGN.md`
+- `/docs/design/MAP_DESIGN_2D.md`
+- `/docs/design/MISSION_AND_MODE_DESIGN.md`
+- `/docs/design/TUTORIAL_MODE_DESIGN.md`
+- `/docs/design/FRONTEND_AND_UX.md`
+- `/docs/design/README.md`
+- `/docs/README.md`
+- `/docs/implementation/MAP_STORAGE_AND_RESOURCE_ZONES.md`
+
+## 2026-02-23 (Docs terminology: lawsuit -> penalty)
+- Removed lawsuit terminology from design docs and replaced it with penalty-only language.
+- Preserved the hidden trust-pressure mechanic while keeping it player-facing as penalties.
+- Updated mission and UX wording to match:
+  - `Underserved-town penalty sensitivity`
+  - `Underserved-town penalty exposure`
+  - `Underserved-town penalty warnings`
+
+### Files updated
+- `/docs/design/GAME_DESIGN.md`
+- `/docs/design/FRONTEND_AND_UX.md`
+- `/docs/design/MISSION_AND_MODE_DESIGN.md`
+
+## 2026-02-23 (Export Panel: Single-Click Bundle)
+- Changed terrain generator export panel to a single `Export` button.
+- Export behavior now downloads both files in one click:
+  - `<mapId>.metadata.json`
+  - `<mapId>.png`
+- Removed separate per-file export buttons and handlers for `.map.json`, `.metadata.json`, and `.png`.
+- Simplified export data payload generation to metadata + image filenames for this panel flow.
+- Updated docs to describe single-button export bundle behavior.
+
+### Validation
+- Syntax checks:
+  - `node --check tools/terrain/interactive/app.js`
+  - `node --check tools/terrain/interactive/lib/dom.js`
+- Skill loop run:
+  - `node $WEB_GAME_CLIENT --url http://127.0.0.1:5173/tools/terrain/interactive/ --actions-file $WEB_GAME_ACTIONS --iterations 3 --pause-ms 250 --screenshot-dir output/terrain-export-bundle-skill`
+- Targeted Playwright verification:
+  - single export button exists (`#export-bundle-btn`)
+  - old buttons absent (`#export-map-json-btn`, `#export-metadata-json-btn`, `#export-png-btn`)
+  - one click produced two downloads:
+    - `terrain-map-3903933837.metadata.json`
+    - `terrain-map-3903933837.png`
+  - status text confirmed both exports.
+  - screenshot: `/output/terrain-export-bundle-panel.png`
+
+## 2026-02-23 (Tutorial city red-dot bug fix)
+- Fixed town/city rendering regression where tutorial start showed a red circular fallback marker.
+- Town entities now resolve and render icon assets from `assets/icons/circular`:
+  - capital -> `town-capital.svg`
+  - city -> `town-city.svg`
+  - hamlet -> `town-hamlet.svg`
+- Kept a neutral fallback marker only for asset-load failure scenarios (no service-color tint fallback).
+
+### Validation
+- `node --check src/game.js`
+- Tutorial launch screenshot:
+  - `output/web-game/tutorial-town-icon-fix/tutorial-start-town-icon.png`
+  - confirms city appears as icon, not red dot.
+
+## 2026-02-23 (Tutorial Town Icon Bug)
+- Hardened tutorial/normal town icon rendering in `src/game.js` so town markers always use a circular town icon asset when available.
+  - Updated `drawTownCircleIcon()` to fall back through loaded town icons (`capital -> city -> hamlet`) before using a neutral circle fallback.
+- Revalidated tutorial start with Playwright:
+  - `node --check src/game.js`
+  - `node "$HOME/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js" --url http://127.0.0.1:5173 --actions-file "$HOME/.codex/skills/develop-web-game/references/action_payloads.json" --click-selector "#menu-tutorial" --iterations 3 --pause-ms 300 --screenshot-dir output/web-game/tutorial-town-icon-fix`
+- Result:
+  - `output/web-game/tutorial-town-icon-fix/shot-2.png` shows the tutorial town rendered with the circular icon pack (no red-dot marker).
+  - `output/web-game/tutorial-town-icon-fix/state-2.json` confirms `iconSetLoaded.town.{hamlet,city,capital} = true`.
+
+### Remaining follow-up
+- If any user still sees a red marker, hard-refresh browser cache to ensure latest `src/game.js` is loaded.
+
+## 2026-02-23 (Local Service Powerline Pattern Tiles)
+- Replaced dashed placeholder rendering for auto-generated local service lines (substation -> town) with tessellated SVG tile rendering.
+- Added local powerline assets to runtime image manifest:
+  - `/assets/patterns/powerlines/local-powerline-tile.svg` (horizontal)
+  - `/assets/patterns/powerlines/local-powerline-tile-vertical.svg` (vertical)
+- Implemented orthogonal segment renderer in `src/game.js`:
+  - horizontal and vertical segments use separate tile images so poles stay upright,
+  - per-segment clipping + repeat draw (`drawImage` tiling) to trace the route,
+  - fallback to a thin solid segment only if tile image fails to load.
+- Extended `render_game_to_text` icon load reporting with `terrainMap.iconSetLoaded.powerline.{horizontal,vertical}`.
+
+### Validation
+- Syntax:
+  - `node --check src/game/core.js`
+  - `node --check src/game.js`
+- Skill loop:
+  - `node "$HOME/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js" --url http://127.0.0.1:5173 --actions-file "$HOME/.codex/skills/develop-web-game/references/action_payloads.json" --click-selector "#start-btn" --iterations 3 --pause-ms 250 --screenshot-dir output/web-game/local-powerline-pattern`
+- Focused visual checks with bot scenarios:
+  - `/output/local-powerline-pattern-check/2026-02-23T23-17-53-521Z-local-powerline-pattern-powered-far.png` (horizontal tiled segment visible)
+  - `/output/local-powerline-pattern-check/2026-02-23T23-20-23-942Z-local-powerline-pattern-vertical.png` (vertical + horizontal tiled orthogonal route visible)

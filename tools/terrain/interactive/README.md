@@ -6,11 +6,9 @@ Fullscreen browser app for tuning topology-based map generation.
 
 - `Re-generate`: creates a new random-seed terrain map.
 - `New-map Zone Seeding`: each new map auto-places one random polygon zone of each resource type (`Wind`, `Sun`, `Natural Gas`), targeting roughly `5%` coverage per zone.
-- `Export Panel` (top-right): exports three files for the current map using the storage contracts in `docs/implementation/MAP_STORAGE_AND_RESOURCE_ZONES.md` (`Export .map.json`, `Export .metadata.json`, `Export .png`):
-  - `<mapId>.map.json`
+- `Export Panel` (top-right): one `Export` button downloads the terrain image and metadata together using the storage contracts in `docs/implementation/MAP_STORAGE_AND_RESOURCE_ZONES.md`:
   - `<mapId>.metadata.json`
   - `<mapId>.png`
-- `Exported map document`: includes terrain references, exported `resourceZones`, and one placeholder town so the document is runtime-loadable before manual town authoring.
 - `Mode Toggle` (bottom): switches between `Terrain`, `Resources`, and `Visual effects`.
 - `Terrain` mode: full topology + river tuning controls (existing workflow).
 - `Resources` mode: barebones zone authoring controls for setup iteration.

@@ -20,6 +20,8 @@ Current emphasis:
 - There are no region-level service hubs; towns are authored directly on the map.
 - There are no pre-authored major transmission corridors; long-distance backbone is player-built.
 - There are no map-area unlock mechanics; challenge comes from terrain, distance, and powergrid stability.
+- Power plant types are fixed to `Wind`, `Solar`, and `Natural Gas`.
+- Power plants require one full plant-diameter spacing from each other.
 - New towns can emerge during runs when livable terrain has stable nearby powergrid service.
 - Substations power nearby towns by radius and auto-generate short orthogonal town links.
 - Players build manual long-distance powerlines using the `Line` tool.
