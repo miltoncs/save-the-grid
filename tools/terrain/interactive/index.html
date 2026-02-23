@@ -61,10 +61,10 @@
           <input id="sea-level-slider" type="range" min="20" max="80" step="1" value="58" />
 
           <label class="control-row" for="mountaintop-slider">
-            <span>Mountaintops Level</span>
-            <strong id="mountaintop-value">95%</strong>
+            <span>Snowcaps</span>
+            <strong id="mountaintop-value">5%</strong>
           </label>
-          <input id="mountaintop-slider" type="range" min="85" max="99" step="1" value="95" />
+          <input id="mountaintop-slider" type="range" min="1" max="15" step="1" value="5" />
 
           <div class="control-row counter-row">
             <span>Rivers</span>
@@ -114,6 +114,26 @@
           </div>
         </div>
 
+        <div id="visual-effects-controls-group" class="mode-controls is-hidden">
+          <label class="control-row" for="shoreline-relief-toggle">
+            <span>Shoreline Relief Colors</span>
+            <strong id="shoreline-relief-value">On</strong>
+          </label>
+          <label class="toggle-row" for="shoreline-relief-toggle">
+            <input id="shoreline-relief-toggle" type="checkbox" checked />
+            <span>Enable coastal tinting</span>
+          </label>
+
+          <label class="control-row" for="river-relief-toggle">
+            <span>River Relief Colors</span>
+            <strong id="river-relief-value">On</strong>
+          </label>
+          <label class="toggle-row" for="river-relief-toggle">
+            <input id="river-relief-toggle" type="checkbox" checked />
+            <span>Tint rivers and riverbanks</span>
+          </label>
+        </div>
+
         <footer class="control-footer">
           <div id="seed-value">Seed 0</div>
           <div id="stats-value">Generating...</div>
@@ -121,9 +141,57 @@
       </div>
     </section>
 
+    <section id="export-panel" class="export-panel" aria-label="Map export panel">
+      <header class="export-header">
+        <h2>Export</h2>
+        <p>Save map + resource metadata</p>
+      </header>
+      <div class="export-body">
+        <label class="export-row" for="export-map-id-input">
+          <span>Map ID</span>
+        </label>
+        <input
+          id="export-map-id-input"
+          class="export-input"
+          type="text"
+          value=""
+          placeholder="terrain-lab-map"
+          spellcheck="false"
+        />
+
+        <label class="export-row" for="export-display-name-input">
+          <span>Display Name</span>
+        </label>
+        <input
+          id="export-display-name-input"
+          class="export-input"
+          type="text"
+          value=""
+          placeholder="Terrain Lab Map"
+          spellcheck="false"
+        />
+
+        <div class="export-actions">
+          <button id="export-map-json-btn" class="secondary-btn export-btn" type="button">
+            Export .map.json
+          </button>
+          <button id="export-metadata-json-btn" class="secondary-btn export-btn" type="button">
+            Export .metadata.json
+          </button>
+          <button id="export-png-btn" class="secondary-btn export-btn" type="button">
+            Export .png
+          </button>
+        </div>
+        <div id="export-status-value" class="export-status" role="status" aria-live="polite">
+          Ready
+        </div>
+      </div>
+    </section>
+
     <nav id="mode-toggle" class="mode-toggle" aria-label="Editor mode">
       <button class="mode-btn is-active" data-mode="terrain" type="button">Terrain</button>
       <button class="mode-btn" data-mode="resources" type="button">Resources</button>
+      <button class="mode-btn" data-mode="visual-effects" type="button">Visual effects</button>
     </nav>
 
     <script type="module" src="./app.js"></script>

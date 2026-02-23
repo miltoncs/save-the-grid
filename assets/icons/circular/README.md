@@ -27,3 +27,7 @@ All icons in `/assets/icons/circular/` follow one system:
 
 - All files are standalone and can be referenced directly by runtime URL paths under `/assets/icons/circular/`.
 - If you need sprite usage later, these can be converted into `<symbol>` entries without redrawing.
+
+## Grid Infrastructure
+
+- `substation.svg`

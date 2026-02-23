@@ -10,7 +10,7 @@ const MAP_FILES_BASE_URL = "/data/maps";
 const BASE_TOWNS = [
     {
       id: "capital",
-      name: "Capital Metro",
+      name: "Johnsonville",
       x: 1040,
       y: 640,
       radius: 64,
@@ -25,7 +25,7 @@ const BASE_TOWNS = [
     },
     {
       id: "north_industry",
-      name: "North Industrial Spine",
+      name: "Samuelton",
       x: 1060,
       y: 290,
       radius: 58,
@@ -40,7 +40,7 @@ const BASE_TOWNS = [
     },
     {
       id: "west_hydro",
-      name: "West Hydro Town",
+      name: "Greg Town",
       x: 620,
       y: 560,
       radius: 56,
@@ -55,7 +55,7 @@ const BASE_TOWNS = [
     },
     {
       id: "east_coast",
-      name: "East Coast Port",
+      name: "Amelia Borough",
       x: 1550,
       y: 610,
       radius: 58,
@@ -70,7 +70,7 @@ const BASE_TOWNS = [
     },
     {
       id: "south_farms",
-      name: "South Agricultural Town",
+      name: "Masonville",
       x: 980,
       y: 1030,
       radius: 56,
@@ -85,7 +85,7 @@ const BASE_TOWNS = [
     },
     {
       id: "delta_port",
-      name: "Delta Port",
+      name: "Olivia Town",
       x: 1340,
       y: 1090,
       radius: 54,
@@ -100,7 +100,7 @@ const BASE_TOWNS = [
     },
     {
       id: "central_highlands",
-      name: "Central Highlands",
+      name: "Danielsburg",
       x: 760,
       y: 820,
       radius: 56,
@@ -115,7 +115,7 @@ const BASE_TOWNS = [
     },
     {
       id: "frontier_belt",
-      name: "Frontier Town",
+      name: "Harperton",
       x: 1710,
       y: 310,
       radius: 60,

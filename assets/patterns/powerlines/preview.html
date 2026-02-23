@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Local Powerline Pattern Preview</title>
+    <style>
+      :root {
+        --bg: #0b141e;
+        --panel: #101d2c;
+        --line-bg: #d7e7f2;
+        --text: #dce9f4;
+        --muted: #9fb2c4;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+        color: var(--text);
+        background: radial-gradient(circle at 20% 10%, #1b2f44 0%, var(--bg) 58%);
+        padding: 24px;
+      }
+
+      h1 {
+        margin: 0 0 8px;
+        font-size: 1.35rem;
+        letter-spacing: 0.04em;
+      }
+
+      p {
+        margin: 0 0 18px;
+        color: var(--muted);
+      }
+
+      .panel {
+        width: min(980px, 100%);
+        border: 1px solid #2a3f56;
+        border-radius: 14px;
+        background: linear-gradient(180deg, rgba(17, 30, 44, 0.94), rgba(11, 20, 30, 0.94));
+        padding: 16px;
+      }
+
+      .scene {
+        position: relative;
+        border-radius: 12px;
+        border: 1px solid #39516a;
+        background: linear-gradient(180deg, #90bfe8 0%, #d9e8f4 74%);
+        overflow: hidden;
+        height: 360px;
+      }
+
+      .scene + .scene {
+        margin-top: 14px;
+      }
+
+      .corridor {
+        position: absolute;
+        height: 48px;
+        width: 120%;
+        left: -10%;
+        background-image: url("./local-powerline-tile.svg");
+        background-repeat: repeat-x;
+        background-size: 96px 48px;
+        transform-origin: left center;
+      }
+
+      .c1 {
+        top: 92px;
+        transform: rotate(-16deg);
+      }
+
+      .c2 {
+        top: 170px;
+        transform: rotate(-8deg);
+      }
+
+      .c3 {
+        top: 244px;
+        transform: rotate(6deg);
+      }
+
+      .v-corridor {
+        position: absolute;
+        width: 48px;
+        height: 120%;
+        top: -10%;
+        background-image: url("./local-powerline-tile-vertical.svg");
+        background-repeat: repeat-y;
+        background-size: 48px 96px;
+      }
+
+      .v1 {
+        left: 20%;
+      }
+
+      .v2 {
+        left: 50%;
+      }
+
+      .v3 {
+        left: 78%;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Local Powerline Pattern</h1>
+    <p>Flat tessellating tiles inspired by utility pole + 3-line distribution runs.</p>
+    <section class="panel">
+      <div class="scene">
+        <div class="corridor c1"></div>
+        <div class="corridor c2"></div>
+        <div class="corridor c3"></div>
+      </div>
+      <div class="scene">
+        <div class="v-corridor v1"></div>
+        <div class="v-corridor v2"></div>
+        <div class="v-corridor v3"></div>
+      </div>
+    </section>
+  </body>
+</html>

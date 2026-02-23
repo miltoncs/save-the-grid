@@ -194,7 +194,7 @@ Validation is code-based normalization (no external schema library currently):
   "towns": [
     {
       "id": "capital",
-      "name": "Capital Metro",
+      "name": "Johnsonville",
       "x": 1040,
       "y": 640,
       "radius": 64,

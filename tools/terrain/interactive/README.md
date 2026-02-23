@@ -6,14 +6,22 @@ Fullscreen browser app for tuning topology-based map generation.
 
 - `Re-generate`: creates a new random-seed terrain map.
 - `New-map Zone Seeding`: each new map auto-places one random polygon zone of each resource type (`Wind`, `Sun`, `Natural Gas`), targeting roughly `5%` coverage per zone.
-- `Mode Toggle` (bottom): switches between `Terrain` and `Resources`.
+- `Export Panel` (top-right): exports three files for the current map using the storage contracts in `docs/implementation/MAP_STORAGE_AND_RESOURCE_ZONES.md` (`Export .map.json`, `Export .metadata.json`, `Export .png`):
+  - `<mapId>.map.json`
+  - `<mapId>.metadata.json`
+  - `<mapId>.png`
+- `Exported map document`: includes terrain references, exported `resourceZones`, and one placeholder town so the document is runtime-loadable before manual town authoring.
+- `Mode Toggle` (bottom): switches between `Terrain`, `Resources`, and `Visual effects`.
 - `Terrain` mode: full topology + river tuning controls (existing workflow).
 - `Resources` mode: barebones zone authoring controls for setup iteration.
+- `Visual effects` mode: map styling controls.
+- `Shoreline Relief Colors` (visual effects mode): toggles shoreline relief tinting on/off (green-brown land coast and light-blue sea coast).
+- `River Relief Colors` (visual effects mode): toggles river and riverbank tinting using the same coastline tint colors/logic.
 - `Algorithm`: switch between `Topology` and `Midpoint`.
 - `Smoothness`: controls how rough vs smooth the terrain appears.
 - `Continent Scale`: controls low-frequency continent shaping (continent mask + macro noise) for both `Topology` and `Midpoint`. Higher values create more fragmented large-scale landmasses.
 - `Sea Level`: controls waterline percentile (higher = more water).
-- `Mountaintops Level`: controls the height percentile where white mountaintops begin.
+- `Snowcaps`: controls snow coverage target percent (higher = more white mountain tops). This is inverted from the old mountaintop-threshold behavior.
 - `Rivers`: shows the current number of active river sources (map starts with 6 random sources).
 - `Reset Rivers`: restores default river settings and redraws a new river pass on the same terrain.
 - `Remove All Rivers`: clears all river sources from the current map.

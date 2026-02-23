@@ -43,7 +43,6 @@
 .floating-chip,
 .floating-btn,
 .floating-card,
-.floating-dock,
 .floating-map-btn {
   border: 1px solid rgba(179, 221, 230, 0.34);
   border-radius: 14px;
@@ -212,22 +211,99 @@
   justify-content: center;
   gap: 8px;
   flex-wrap: wrap;
-  padding: 8px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
 }
 
 .floating-dock-btn {
   margin: 0;
   text-align: center;
-  min-height: 40px;
-  padding: 8px 11px;
+  min-height: 44px;
+  min-width: 44px;
+  padding: 4px;
 }
 
-.floating-dock-hint {
-  color: var(--text-soft);
-  font-size: 0.78rem;
-  font-family: "IBM Plex Mono", monospace;
-  white-space: nowrap;
-  padding: 6px 8px;
+.asset-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  border-radius: 999px;
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.asset-icon-btn:hover {
+  transform: none;
+  border-color: rgba(233, 246, 255, 0.62);
+}
+
+.asset-icon-btn.active {
+  border-color: rgba(244, 245, 210, 0.95);
+  box-shadow: 0 0 0 1px rgba(244, 245, 210, 0.35);
+}
+
+.asset-icon-image,
+.asset-icon-glyph {
+  width: 34px;
+  height: 34px;
+  display: block;
+}
+
+.asset-icon-glyph {
+  position: relative;
+  border-radius: 50%;
+  background: rgba(10, 22, 33, 0.94);
+  border: 1px solid rgba(183, 225, 238, 0.36);
+}
+
+.asset-icon-glyph-substation::before,
+.asset-icon-glyph-substation::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  background: #b2efd0;
+  transform: translate(-50%, -50%);
+}
+
+.asset-icon-glyph-substation::before {
+  width: 12px;
+  height: 2px;
+}
+
+.asset-icon-glyph-substation::after {
+  width: 2px;
+  height: 12px;
+}
+
+.asset-icon-glyph-storage::before,
+.asset-icon-glyph-storage::after {
+  content: "";
+  position: absolute;
+}
+
+.asset-icon-glyph-storage::before {
+  left: 6px;
+  right: 8px;
+  top: 9px;
+  bottom: 9px;
+  border-radius: 3px;
+  border: 2px solid #bfd0ff;
+}
+
+.asset-icon-glyph-storage::after {
+  right: 5px;
+  top: 12px;
+  bottom: 12px;
+  width: 2px;
+  border-radius: 1px;
+  background: #bfd0ff;
 }
 
 .dock-separator {

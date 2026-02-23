@@ -6,6 +6,7 @@ This directory contains static files served directly to the game at runtime.
 
 - `icons/`: SVG icon packs used in UI and map overlays.
 - `maps/terrain/`: terrain PNG backgrounds and generated mission terrain images.
+- `patterns/`: repeatable SVG pattern assets (for line/corridor visualization).
 
 ## Rule
 

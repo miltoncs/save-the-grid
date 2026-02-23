@@ -73,6 +73,11 @@ const {
   buildRunConfigForTutorial,
 } = GameCore;
 
+const MAP_OBJECT_ICON_WORLD_SIZE = 35;
+const MAP_OBJECT_INTERACTION_RADIUS_WORLD = 24;
+const PLANT_TYPE_VALUES = new Set(["wind", "sun", "natural_gas"]);
+const DEFAULT_PLANT_TYPE = "wind";
+
 class GameRuntime {
   constructor(options) {
     this.canvas = options.canvas;
@@ -128,6 +133,7 @@ class GameRuntime {
 
     this.tool = TOOL_BUILD;
     this.buildAssetType = "plant";
+    this.buildPlantType = DEFAULT_PLANT_TYPE;
     this.selectedRegionId = null;
     this.lineBuildStartRegionId = null;
     this.lineCostPreview = null;
@@ -151,6 +157,9 @@ class GameRuntime {
         wind: null,
         sun: null,
         natural_gas: null,
+      },
+      infrastructure: {
+        substation: null,
       },
     };
 
@@ -229,6 +238,26 @@ class GameRuntime {
       sun: 0,
       natural_gas: 0,
     };
+  }
+
+  normalizePlantType(value) {
+    return PLANT_TYPE_VALUES.has(value) ? value : DEFAULT_PLANT_TYPE;
+  }
+
+  inferPlantTypeFromRegionResource(region) {
+    const profile = region?.resourceProfile || {};
+    const candidates = ["wind", "sun", "natural_gas"];
+    let bestType = DEFAULT_PLANT_TYPE;
+    let bestValue = -Infinity;
+    for (const candidate of candidates) {
+      const raw = candidate === "natural_gas" ? profile.natural_gas ?? profile.naturalGas : profile[candidate];
+      const value = Number(raw ?? 0) || 0;
+      if (value > bestValue) {
+        bestValue = value;
+        bestType = candidate;
+      }
+    }
+    return bestType;
   }
 
   async loadIconSet() {
@@ -537,6 +566,7 @@ class GameRuntime {
         coverageSourceId: null,
         coverageDistance: 0,
         assets,
+        plantType: DEFAULT_PLANT_TYPE,
         resourceProfile: this.createEmptyResourceProfile(),
         demand: demandAnchor,
         targetDemand: demandAnchor,
@@ -637,6 +667,14 @@ class GameRuntime {
       region.assets.plant = Math.max(0, Number(region.assets.plant || 0));
       region.assets.substation = Math.max(0, Number(region.assets.substation || 0));
       region.assets.storage = Math.max(0, Number(region.assets.storage || 0));
+      const serializedPlantType = region.plantType;
+      if (PLANT_TYPE_VALUES.has(serializedPlantType)) {
+        region.plantType = this.normalizePlantType(serializedPlantType);
+      } else if (region.assets.plant > 0) {
+        region.plantType = this.inferPlantTypeFromRegionResource(region);
+      } else {
+        region.plantType = DEFAULT_PLANT_TYPE;
+      }
     }
     for (const link of safe.links) {
       link.built = !!link.built;
@@ -965,6 +1003,7 @@ class GameRuntime {
     if (event.code === "Digit1") {
       this.tool = TOOL_BUILD;
       this.buildAssetType = "plant";
+      this.buildPlantType = DEFAULT_PLANT_TYPE;
       this.pushHudUpdate();
       return;
     }
@@ -1211,6 +1250,7 @@ class GameRuntime {
       coverageSourceId: null,
       coverageDistance: 0,
       assets: { plant: 0, substation: 0, storage: 0 },
+      plantType: DEFAULT_PLANT_TYPE,
       resourceProfile: this.createEmptyResourceProfile(),
       demand: 0,
       targetDemand: 0,
@@ -1226,10 +1266,7 @@ class GameRuntime {
 
   getTownInteractionRadius(entity) {
     if (!entity) return 0;
-    if (!this.isTownEntity(entity)) {
-      return clamp(Number(entity.radius || 22) * 0.9, 14, 24);
-    }
-    return clamp(Number(entity.radius || 60) * 0.42, 24, 40);
+    return MAP_OBJECT_INTERACTION_RADIUS_WORLD;
   }
 
   findRegionAt(worldX, worldY) {
@@ -1471,6 +1508,9 @@ class GameRuntime {
     }
 
     target.assets[this.buildAssetType] += 1;
+    if (this.buildAssetType === "plant") {
+      target.plantType = this.normalizePlantType(this.buildPlantType);
+    }
     if (!this.isDevModeEnabled()) {
       this.state.budget -= cost;
     }
@@ -1493,6 +1533,9 @@ class GameRuntime {
 
     const { assetType, rule, refund } = candidate;
     region.assets[assetType] = Math.max(0, Number(region.assets[assetType] || 0) - 1);
+    if (assetType === "plant" && region.assets.plant <= 0) {
+      region.plantType = DEFAULT_PLANT_TYPE;
+    }
     this.state.budget += refund;
     region.cooldownUntil = this.state.runtimeSeconds + 4.5;
     this.logTimeline(`Demolished ${rule.label} in ${region.name} (+${refund} budget refund).`);
@@ -2145,6 +2188,7 @@ class GameRuntime {
       coverageSourceId: null,
       coverageDistance: 0,
       assets: { plant: 0, substation: 0, storage: 0 },
+      plantType: DEFAULT_PLANT_TYPE,
       resourceProfile: this.createEmptyResourceProfile(),
       demand: initialDemand,
       targetDemand: initialDemand,
@@ -2720,6 +2764,13 @@ class GameRuntime {
     const height = this.canvas.clientHeight;
     if (!width || !height) return;
 
+    const zoom = this.zoomLevels[this.camera.zoomIndex] || 1;
+    const pixelZoomedIn = zoom > 1;
+    ctx.imageSmoothingEnabled = !pixelZoomedIn;
+    if ("imageSmoothingQuality" in ctx) {
+      ctx.imageSmoothingQuality = pixelZoomedIn ? "low" : "high";
+    }
+
     this.clampCameraToMap(width, height);
     ctx.clearRect(0, 0, width, height);
     this.drawMapBackdrop(ctx, width, height);
@@ -2732,13 +2783,21 @@ class GameRuntime {
   drawMapBackdrop(ctx, width, height) {
     const topLeft = this.worldToScreen(0, 0);
     const bottomRight = this.worldToScreen(BASE_MAP.width, BASE_MAP.height);
-    const drawWidth = bottomRight.x - topLeft.x;
-    const drawHeight = bottomRight.y - topLeft.y;
+    const zoom = this.zoomLevels[this.camera.zoomIndex] || 1;
+    const drawPixelCrisp = zoom > 1;
+    const drawX = drawPixelCrisp ? Math.round(topLeft.x) : topLeft.x;
+    const drawY = drawPixelCrisp ? Math.round(topLeft.y) : topLeft.y;
+    const drawWidth = drawPixelCrisp
+      ? Math.round(bottomRight.x - topLeft.x)
+      : bottomRight.x - topLeft.x;
+    const drawHeight = drawPixelCrisp
+      ? Math.round(bottomRight.y - topLeft.y)
+      : bottomRight.y - topLeft.y;
 
     if (this.mapImageReady && this.mapImage) {
       ctx.fillStyle = "#0d1216";
       ctx.fillRect(0, 0, width, height);
-      ctx.drawImage(this.mapImage, topLeft.x, topLeft.y, drawWidth, drawHeight);
+      ctx.drawImage(this.mapImage, drawX, drawY, drawWidth, drawHeight);
     } else {
       const fallbackGradient = ctx.createLinearGradient(0, 0, width, height);
       fallbackGradient.addColorStop(0, "#131a20");
@@ -2765,61 +2824,30 @@ class GameRuntime {
         ctx.stroke();
       }
 
-      if (this.zoomLevels[this.camera.zoomIndex] >= 0.9) {
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.font = '600 12px "IBM Plex Mono", monospace';
-        const iconSize = clamp(58 * this.zoomLevels[this.camera.zoomIndex], 34, 70);
-        const iconHalf = iconSize / 2;
-        const fallbackLabelWidth = 88;
-        const fallbackLabelHalfWidth = fallbackLabelWidth / 2;
-        const fallbackLabelHeight = 18;
-        const fallbackLabelHalfHeight = fallbackLabelHeight / 2;
-        for (const zone of this.resourceZones) {
-          const c = this.worldToScreen(zone.centroid.x, zone.centroid.y);
-          const icon = this.iconSet.resource[zone.resource] || null;
-          const edgePadding = icon ? iconHalf : fallbackLabelWidth;
-          if (
-            c.x < -edgePadding ||
-            c.x > width + edgePadding ||
-            c.y < -edgePadding ||
-            c.y > height + edgePadding
-          ) {
-            continue;
-          }
-
-          if (icon) {
-            const iconX = clamp(c.x, iconHalf + 4, width - iconHalf - 4);
-            const iconY = clamp(c.y, iconHalf + 4, height - iconHalf - 4);
-            ctx.save();
-            ctx.globalAlpha = 0.96;
-            ctx.drawImage(icon, iconX - iconHalf, iconY - iconHalf, iconSize, iconSize);
-            ctx.restore();
-          } else {
-            const labelX = clamp(
-              c.x,
-              fallbackLabelHalfWidth + 4,
-              width - fallbackLabelHalfWidth - 4
-            );
-            const labelY = clamp(
-              c.y,
-              fallbackLabelHalfHeight + 4,
-              height - fallbackLabelHalfHeight - 4
-            );
-            ctx.fillStyle = "rgba(15, 29, 41, 0.85)";
-            ctx.fillRect(
-              labelX - fallbackLabelHalfWidth,
-              labelY - fallbackLabelHalfHeight,
-              fallbackLabelWidth,
-              fallbackLabelHeight
-            );
-            ctx.fillStyle = "#ecf8ff";
-            ctx.fillText(zone.resource.replace("_", " ").toUpperCase(), labelX, labelY + 0.5);
-          }
+      const zoom = this.zoomLevels[this.camera.zoomIndex] || 1;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.font = `600 ${clamp(13 * zoom, 10, 16)}px "IBM Plex Mono", monospace`;
+      for (const zone of this.resourceZones) {
+        const zoneCenter = zone.centroid || centroidFromPolygon(zone.polygon || []);
+        if (!zoneCenter) continue;
+        const c = this.worldToScreen(zoneCenter.x, zoneCenter.y);
+        if (c.x < -120 || c.x > width + 120 || c.y < -26 || c.y > height + 26) {
+          continue;
         }
-        ctx.textAlign = "left";
-        ctx.textBaseline = "alphabetic";
+
+        const label = zone.resource.replace(/_/g, " ").toUpperCase();
+        const measured = ctx.measureText(label);
+        const labelWidth = Math.ceil(measured.width + 18);
+        const labelHeight = Math.ceil(clamp(18 * zoom, 16, 24));
+
+        ctx.fillStyle = "rgba(15, 29, 41, 0.85)";
+        ctx.fillRect(c.x - labelWidth / 2, c.y - labelHeight / 2, labelWidth, labelHeight);
+        ctx.fillStyle = "#ecf8ff";
+        ctx.fillText(label, c.x, c.y + 0.5);
       }
+      ctx.textAlign = "left";
+      ctx.textBaseline = "alphabetic";
     }
 
     const vignette = ctx.createLinearGradient(0, 0, width, height);
@@ -2893,200 +2921,220 @@ class GameRuntime {
     ctx.restore();
   }
 
-  getTownIconForRegion(region) {
-    if (!this.isTownEntity(region)) return null;
-    if (region.id === "capital") return this.iconSet.town.capital;
-    if ((region.population || 0) >= 52) return this.iconSet.town.city;
-    return this.iconSet.town.hamlet;
+  getMapObjectIconScreenSize() {
+    return MAP_OBJECT_ICON_WORLD_SIZE * (this.zoomLevels[this.camera.zoomIndex] || 1);
   }
 
-  getTownRenderRadius(region) {
-    const zoom = this.zoomLevels[this.camera.zoomIndex];
-    if (!this.isTownEntity(region)) {
-      return clamp(Number(region.radius || 22) * zoom * 0.42, 7, 15);
-    }
-    return clamp(Number(region.radius || 60) * zoom * 0.34, 17, 34);
+  getTownRenderRadius() {
+    return this.getMapObjectIconScreenSize() / 2;
   }
 
-  drawTownMarkers(ctx, point, radius, region) {
-    const zoom = this.zoomLevels[this.camera.zoomIndex];
-    const iconSize = clamp(radius * 1.2, 18, 34);
-    const icon = this.getTownIconForRegion(region);
-    const tx = point.x;
-    const ty = point.y;
+  getRegionAssetTypes(region) {
+    const assets = [];
+    if ((region.assets?.plant || 0) > 0) assets.push("plant");
+    if ((region.assets?.substation || 0) > 0) assets.push("substation");
+    if ((region.assets?.storage || 0) > 0) assets.push("storage");
+    return assets;
+  }
 
-    if (icon) {
-      ctx.save();
-      ctx.globalAlpha = 0.96;
-      ctx.drawImage(icon, tx - iconSize / 2, ty - iconSize / 2, iconSize, iconSize);
-      ctx.restore();
-    } else {
-      const markerRadius = clamp(1.8 * zoom, 1.2, 3.3);
-      ctx.beginPath();
-      ctx.arc(tx, ty, markerRadius + 0.7, 0, Math.PI * 2);
-      ctx.fillStyle = "rgba(8, 24, 38, 0.8)";
-      ctx.fill();
-
-      ctx.beginPath();
-      ctx.arc(tx, ty, markerRadius, 0, Math.PI * 2);
-      ctx.fillStyle = "rgba(227, 245, 232, 0.9)";
-      ctx.fill();
+  getAssetIconOffsets(assetCount, iconSize, orbitAroundTown) {
+    if (assetCount <= 0) return [];
+    if (assetCount === 1 && !orbitAroundTown) {
+      return [{ x: 0, y: 0 }];
     }
 
-    const badges = [];
-    if ((region.assets.plant || 0) > 0) badges.push({ label: "P", count: region.assets.plant });
-    if ((region.assets.substation || 0) > 0)
-      badges.push({ label: "S", count: region.assets.substation });
-    if ((region.assets.storage || 0) > 0) badges.push({ label: "B", count: region.assets.storage });
+    const orbitRadius = iconSize * (orbitAroundTown ? 0.95 : 0.78);
+    const startAngle = assetCount === 1 ? 0 : -Math.PI / 2;
+    const offsets = [];
+    for (let i = 0; i < assetCount; i += 1) {
+      const angle = startAngle + (i / assetCount) * Math.PI * 2;
+      offsets.push({
+        x: Math.cos(angle) * orbitRadius,
+        y: Math.sin(angle) * orbitRadius,
+      });
+    }
+    return offsets;
+  }
 
-    if (!badges.length) return;
+  drawSelectionHalo(ctx, x, y, radius) {
     ctx.save();
-    ctx.font = `600 ${Math.max(9, iconSize * 0.3)}px "IBM Plex Mono", monospace`;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    const badgeRadius = clamp(iconSize * 0.18, 5, 8);
-    badges.forEach((badge, index) => {
-      const angle = -Math.PI / 2 + index * 1.35;
-      const bx = tx + Math.cos(angle) * (radius + badgeRadius + 3);
-      const by = ty + Math.sin(angle) * (radius + badgeRadius + 3);
-      ctx.fillStyle = "rgba(9, 21, 30, 0.86)";
-      ctx.beginPath();
-      ctx.arc(bx, by, badgeRadius, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = "rgba(189, 234, 206, 0.44)";
-      ctx.lineWidth = 1;
-      ctx.stroke();
-      ctx.fillStyle = "#d8efe0";
-      ctx.fillText(`${badge.label}${badge.count}`, bx, by + 0.2);
-    });
+    ctx.globalAlpha = 0.34;
+    ctx.fillStyle = "#f3fae9";
+    ctx.beginPath();
+    ctx.arc(x, y, radius + 6, 0, Math.PI * 2);
+    ctx.fill();
     ctx.restore();
   }
 
-  drawInfrastructureNode(ctx, point, radius, region, selectedId) {
-    const zoom = this.zoomLevels[this.camera.zoomIndex];
-    const isSelected = selectedId === region.id;
-    const hasPlant = (region.assets.plant || 0) > 0;
-    const hasSubstation = (region.assets.substation || 0) > 0;
-    const hasStorage = (region.assets.storage || 0) > 0;
+  drawTownCircleIcon(ctx, x, y, iconSize, region) {
+    const serviceRatio = region.demand > 0 ? region.served / region.demand : 1;
+    let fill = "rgba(170, 212, 188, 0.95)";
+    if (serviceRatio < 0.72) fill = "rgba(230, 135, 135, 0.95)";
+    else if (serviceRatio < 0.9) fill = "rgba(233, 198, 126, 0.95)";
 
-    ctx.fillStyle = "rgba(18, 30, 41, 0.78)";
+    ctx.save();
+    ctx.fillStyle = fill;
     ctx.beginPath();
-    ctx.arc(point.x, point.y, radius + 3, 0, Math.PI * 2);
+    ctx.arc(x, y, iconSize / 2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  drawInfrastructurePointIcon(ctx, x, y, iconSize) {
+    ctx.save();
+    ctx.fillStyle = "rgba(136, 153, 164, 0.88)";
+    ctx.beginPath();
+    ctx.arc(x, y, iconSize / 2, 0, Math.PI * 2);
     ctx.fill();
 
-    ctx.fillStyle = hasPlant ? "rgba(239, 191, 112, 0.82)" : "rgba(145, 176, 196, 0.72)";
+    ctx.fillStyle = "rgba(16, 26, 35, 0.92)";
     ctx.beginPath();
-    ctx.arc(point.x, point.y, radius, 0, Math.PI * 2);
+    ctx.arc(x, y, iconSize * 0.18, 0, Math.PI * 2);
     ctx.fill();
+    ctx.restore();
+  }
 
-    if (hasSubstation) {
-      ctx.strokeStyle = "rgba(177, 232, 212, 0.95)";
-      ctx.lineWidth = 1.6;
-      ctx.strokeRect(point.x - radius * 0.65, point.y - radius * 0.65, radius * 1.3, radius * 1.3);
+  getResourceWeightForRegion(region, resourceKey) {
+    const profile = region?.resourceProfile || {};
+    if (resourceKey === "natural_gas") {
+      return Number(profile.natural_gas ?? profile.naturalGas ?? 0) || 0;
+    }
+    return Number(profile[resourceKey] ?? 0) || 0;
+  }
+
+  getPlantIconForRegion(region) {
+    const explicitType = this.normalizePlantType(region?.plantType);
+    if ((region?.assets?.plant || 0) > 0 && this.iconSet.resource[explicitType]) {
+      return this.iconSet.resource[explicitType];
     }
 
-    if (hasStorage) {
-      ctx.strokeStyle = "rgba(206, 222, 255, 0.9)";
-      ctx.lineWidth = 1.3;
+    const candidates = ["wind", "sun", "natural_gas"];
+    let bestKey = "natural_gas";
+    let bestValue = -Infinity;
+    for (const key of candidates) {
+      const value = this.getResourceWeightForRegion(region, key);
+      if (value > bestValue) {
+        bestValue = value;
+        bestKey = key;
+      }
+    }
+    return this.iconSet.resource[bestKey] || this.iconSet.resource.natural_gas || null;
+  }
+
+  drawAssetIcon(ctx, assetType, x, y, iconSize, region) {
+    const half = iconSize / 2;
+    const glyphStroke = Math.max(1.2, iconSize * 0.08);
+
+    if (assetType === "plant") {
+      const plantIcon = this.getPlantIconForRegion(region);
+      if (plantIcon) {
+        ctx.save();
+        ctx.globalAlpha = 0.98;
+        ctx.drawImage(plantIcon, x - half, y - half, iconSize, iconSize);
+        ctx.restore();
+        return;
+      }
+    }
+
+    if (assetType === "substation") {
+      const substationIcon = this.iconSet.infrastructure?.substation || null;
+      if (substationIcon) {
+        ctx.save();
+        ctx.globalAlpha = 0.98;
+        ctx.drawImage(substationIcon, x - half, y - half, iconSize, iconSize);
+        ctx.restore();
+        return;
+      }
+    }
+
+    ctx.save();
+    ctx.translate(x, y);
+
+    ctx.fillStyle = "rgba(11, 24, 37, 0.94)";
+    ctx.beginPath();
+    ctx.arc(0, 0, half, 0, Math.PI * 2);
+    ctx.fill();
+
+    if (assetType === "plant") {
+      ctx.fillStyle = "#f4d58a";
       ctx.beginPath();
-      ctx.moveTo(point.x, point.y - radius * 0.75);
-      ctx.lineTo(point.x + radius * 0.7, point.y + radius * 0.72);
-      ctx.lineTo(point.x - radius * 0.7, point.y + radius * 0.72);
+      ctx.moveTo(-iconSize * 0.18, -iconSize * 0.34);
+      ctx.lineTo(iconSize * 0.06, -iconSize * 0.34);
+      ctx.lineTo(-iconSize * 0.02, -iconSize * 0.08);
+      ctx.lineTo(iconSize * 0.2, -iconSize * 0.08);
+      ctx.lineTo(-iconSize * 0.06, iconSize * 0.34);
+      ctx.lineTo(iconSize * 0, iconSize * 0.06);
+      ctx.lineTo(-iconSize * 0.2, iconSize * 0.06);
       ctx.closePath();
-      ctx.stroke();
-    }
+      ctx.fill();
+    } else if (assetType === "substation") {
+      ctx.strokeStyle = "#aaeccf";
+      ctx.lineWidth = glyphStroke;
+      const box = iconSize * 0.42;
+      ctx.strokeRect(-box / 2, -box / 2, box, box);
 
-    if (hasSubstation && zoom >= 0.9) {
-      const coverageRadius = (this.config.substationRadius || 300) * zoom;
-      ctx.strokeStyle = "rgba(173, 236, 200, 0.28)";
-      ctx.lineWidth = 1;
-      ctx.setLineDash([6, 6]);
       ctx.beginPath();
-      ctx.arc(point.x, point.y, coverageRadius, 0, Math.PI * 2);
+      ctx.moveTo(0, -box * 0.92);
+      ctx.lineTo(0, box * 0.92);
+      ctx.moveTo(-box * 0.92, 0);
+      ctx.lineTo(box * 0.92, 0);
       ctx.stroke();
-      ctx.setLineDash([]);
+    } else {
+      const bodyW = iconSize * 0.56;
+      const bodyH = iconSize * 0.34;
+      const capW = iconSize * 0.08;
+
+      ctx.fillStyle = "#bfd0ff";
+      ctx.fillRect(-bodyW / 2, -bodyH / 2, bodyW, bodyH);
+      ctx.fillRect(bodyW / 2, -bodyH * 0.22, capW, bodyH * 0.44);
+
+      ctx.fillStyle = "rgba(17, 28, 43, 0.94)";
+      ctx.fillRect(-bodyW * 0.42, -bodyH * 0.12, bodyW * 0.2, bodyH * 0.24);
+      ctx.fillRect(-bodyW * 0.15, -bodyH * 0.12, bodyW * 0.2, bodyH * 0.24);
+      ctx.fillRect(bodyW * 0.12, -bodyH * 0.12, bodyW * 0.2, bodyH * 0.24);
     }
 
-    ctx.lineWidth = isSelected ? 2.2 : 1.2;
-    ctx.strokeStyle = isSelected ? "#f4f7d5" : "rgba(231, 244, 250, 0.52)";
-    ctx.beginPath();
-    ctx.arc(point.x, point.y, radius + 3, 0, Math.PI * 2);
-    ctx.stroke();
+    ctx.restore();
+  }
 
-    if (zoom >= 0.95) {
-      ctx.fillStyle = "rgba(236, 246, 252, 0.9)";
-      ctx.textAlign = "center";
-      ctx.font = `500 ${Math.max(9, 9 * zoom)}px "IBM Plex Mono", monospace`;
-      ctx.fillText(region.name, point.x, point.y - radius - 10);
-      ctx.fillText(
-        `P${region.assets.plant || 0} S${region.assets.substation || 0} B${region.assets.storage || 0}`,
-        point.x,
-        point.y + radius + 13
-      );
-    }
+  drawRegionAssets(ctx, point, iconSize, region) {
+    const assetTypes = this.getRegionAssetTypes(region);
+    if (!assetTypes.length) return;
+
+    const offsets = this.getAssetIconOffsets(
+      assetTypes.length,
+      iconSize,
+      this.isTownEntity(region)
+    );
+    assetTypes.forEach((assetType, index) => {
+      const offset = offsets[index] || { x: 0, y: 0 };
+      this.drawAssetIcon(ctx, assetType, point.x + offset.x, point.y + offset.y, iconSize, region);
+    });
   }
 
   drawRegions(ctx) {
     const selectedId = this.selectedRegionId;
+    const iconSize = this.getMapObjectIconScreenSize();
+    const iconRadius = iconSize / 2;
+    const zoom = this.zoomLevels[this.camera.zoomIndex] || 1;
 
     for (const region of this.state.regions) {
       const point = this.worldToScreen(region.x, region.y);
-      const radius = this.getTownRenderRadius(region);
-
-      if (!this.isTownEntity(region)) {
-        this.drawInfrastructureNode(ctx, point, radius, region, selectedId);
-        continue;
+      const isSelected = selectedId === region.id;
+      if (isSelected) {
+        this.drawSelectionHalo(ctx, point.x, point.y, iconRadius);
       }
 
-      const climateColor =
-        region.climate === "cold"
-          ? "#86afde"
-          : region.climate === "warm"
-            ? "#d8a46e"
-            : "#7ab98a";
-
-      const serviceRatio = region.demand > 0 ? region.served / region.demand : 1;
-      const serviceTint =
-        serviceRatio > 0.9 ? "rgba(129, 225, 156, 0.45)" : serviceRatio > 0.72 ? "rgba(246, 194, 106, 0.44)" : "rgba(255, 99, 99, 0.52)";
-
-      ctx.fillStyle = "rgba(20, 33, 46, 0.52)";
-      ctx.beginPath();
-      ctx.arc(point.x, point.y, radius + 5, 0, Math.PI * 2);
-      ctx.fill();
-
-      ctx.fillStyle = climateColor;
-      ctx.globalAlpha = 0.2;
-      ctx.beginPath();
-      ctx.arc(point.x, point.y, radius + 2, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.globalAlpha = 1;
-
-      ctx.fillStyle = serviceTint;
-      ctx.beginPath();
-      ctx.arc(point.x, point.y, radius - 1, 0, Math.PI * 2);
-      ctx.fill();
-
-      if (!region.coveredBySubstation && region.demand > 0.2) {
-        ctx.save();
-        ctx.beginPath();
-        ctx.arc(point.x, point.y, radius - 1.8, 0, Math.PI * 2);
-        ctx.clip();
-        ctx.strokeStyle = "rgba(244, 214, 172, 0.42)";
-        ctx.lineWidth = 1;
-        const hatchGap = 5;
-        for (let x = point.x - radius * 2; x <= point.x + radius * 2; x += hatchGap) {
-          ctx.beginPath();
-          ctx.moveTo(x, point.y - radius * 2);
-          ctx.lineTo(x + radius * 2, point.y + radius * 2);
-          ctx.stroke();
-        }
-        ctx.restore();
+      if (this.isTownEntity(region)) {
+        this.drawTownCircleIcon(ctx, point.x, point.y, iconSize, region);
+      } else {
+        this.drawInfrastructurePointIcon(ctx, point.x, point.y, iconSize);
       }
 
-      this.drawTownMarkers(ctx, point, radius, region);
+      this.drawRegionAssets(ctx, point, iconSize, region);
 
-      if ((region.assets.substation || 0) > 0 && this.zoomLevels[this.camera.zoomIndex] >= 0.9) {
-        const coverageRadius = (this.config.substationRadius || 300) * this.zoomLevels[this.camera.zoomIndex];
+      if ((region.assets.substation || 0) > 0 && zoom >= 0.9) {
+        const coverageRadius = (this.config.substationRadius || 300) * zoom;
         ctx.strokeStyle = region.coveredBySubstation
           ? "rgba(173, 236, 200, 0.33)"
           : "rgba(241, 188, 128, 0.26)";
@@ -3096,31 +3144,6 @@ class GameRuntime {
         ctx.arc(point.x, point.y, coverageRadius, 0, Math.PI * 2);
         ctx.stroke();
         ctx.setLineDash([]);
-      }
-
-      ctx.lineWidth = selectedId === region.id ? 2.5 : 1.5;
-      ctx.strokeStyle = selectedId === region.id ? "#f4f7d5" : "rgba(235, 245, 237, 0.42)";
-      ctx.beginPath();
-      ctx.arc(point.x, point.y, radius + 5, 0, Math.PI * 2);
-      ctx.stroke();
-
-      const farZoom = this.zoomLevels[this.camera.zoomIndex] <= 0.72;
-      if (farZoom) continue;
-
-      ctx.fillStyle = "#f0f7ef";
-      ctx.textAlign = "center";
-      ctx.font = `600 ${Math.max(10, 10 * this.zoomLevels[this.camera.zoomIndex])}px "IBM Plex Sans", sans-serif`;
-      ctx.fillText(region.name, point.x, point.y - radius - 14);
-
-      const demandText = `${Math.round(region.served)}/${Math.round(region.demand)} MW`;
-
-      ctx.fillStyle = "rgba(246, 251, 250, 0.92)";
-      ctx.font = `500 ${Math.max(9, 9 * this.zoomLevels[this.camera.zoomIndex])}px "IBM Plex Mono", monospace`;
-      ctx.fillText(demandText, point.x, point.y + radius + 14);
-
-      if (this.zoomLevels[this.camera.zoomIndex] >= 0.9) {
-        ctx.fillStyle = "rgba(202, 233, 219, 0.86)";
-        ctx.fillText(`Pop ${Math.round(region.population)}`, point.x, point.y + radius + 27);
       }
     }
   }
@@ -3159,6 +3182,7 @@ class GameRuntime {
       paused: this.paused,
       tool: this.tool,
       buildAssetType: this.buildAssetType,
+      buildPlantType: this.buildPlantType,
       lineSelectionStartRegionId: this.lineBuildStartRegionId,
       lineCostPreview: this.lineCostPreview,
       resourceLayerVisible: this.resourceRevealHeld,
@@ -3248,6 +3272,7 @@ class GameRuntime {
       camera: deepClone(this.camera),
       tool: this.tool,
       buildAssetType: this.buildAssetType,
+      buildPlantType: this.buildPlantType,
       selectedRegionId: this.selectedRegionId,
       lineBuildStartRegionId: this.lineBuildStartRegionId,
       lineCostPreview: this.lineCostPreview,
@@ -3278,6 +3303,7 @@ class GameRuntime {
     this.clampCameraToMap();
     this.tool = snapshotPayload.tool || TOOL_BUILD;
     this.buildAssetType = snapshotPayload.buildAssetType || "plant";
+    this.buildPlantType = this.normalizePlantType(snapshotPayload.buildPlantType);
     this.selectedRegionId = snapshotPayload.selectedRegionId || null;
     this.lineBuildStartRegionId = snapshotPayload.lineBuildStartRegionId || null;
     this.lineCostPreview = snapshotPayload.lineCostPreview || null;
@@ -3316,6 +3342,7 @@ class GameRuntime {
         naturalGas: Number((town.resourceProfile?.natural_gas || 0).toFixed(3)),
       },
       assets: { ...town.assets },
+      plantType: town.plantType || DEFAULT_PLANT_TYPE,
       }));
 
     const nodeSnapshots = this.state.regions
@@ -3328,6 +3355,7 @@ class GameRuntime {
         terrain: node.terrain,
         climate: node.climate,
         assets: { ...node.assets },
+        plantType: node.plantType || DEFAULT_PLANT_TYPE,
       }));
 
     const payload = {
@@ -3356,6 +3384,7 @@ class GameRuntime {
       totalUnmet: Number(this.state.totalUnmet.toFixed(2)),
       selectedTool: this.tool,
       selectedBuildAsset: this.buildAssetType,
+      selectedBuildPlantType: this.buildPlantType,
       selectedEntityId: this.selectedRegionId,
       selectedTownId:
         this.selectedRegionId && this.isTownEntity(this.findRegion(this.selectedRegionId))
@@ -3410,6 +3439,9 @@ class GameRuntime {
             wind: !!this.iconSet.resource.wind,
             sun: !!this.iconSet.resource.sun,
             natural_gas: !!this.iconSet.resource.natural_gas,
+          },
+          infrastructure: {
+            substation: !!this.iconSet.infrastructure.substation,
           },
         },
         resourceZoneCounts: { ...this.resourceZoneSummary },
@@ -4136,10 +4168,74 @@ export class SaveTheGridApp {
 
           <div class="floating-group floating-bottom-center">
             <div class="floating-dock">
-              <button class="asset-btn floating-dock-btn" data-asset="plant" data-testid="asset-plant">Plant (1)</button>
-              <button class="asset-btn floating-dock-btn" data-asset="substation" data-testid="asset-substation">Sub (2)</button>
-              <button class="asset-btn floating-dock-btn" data-asset="storage" data-testid="asset-storage">Storage (3)</button>
-              <span class="floating-dock-hint">Line: 4 | Reroute: E | Right click: Demolish</span>
+              <button
+                class="asset-btn floating-dock-btn asset-icon-btn"
+                data-asset="plant"
+                data-plant-type="wind"
+                data-testid="asset-plant"
+                aria-label="Build wind plant (1)"
+                title="Build wind plant (1)"
+              >
+                <img
+                  class="asset-icon-image"
+                  src="/assets/icons/circular/plant-wind.svg"
+                  alt=""
+                  aria-hidden="true"
+                />
+              </button>
+              <button
+                class="asset-btn floating-dock-btn asset-icon-btn"
+                data-asset="plant"
+                data-plant-type="sun"
+                data-testid="asset-plant-solar"
+                aria-label="Build solar plant"
+                title="Build solar plant"
+              >
+                <img
+                  class="asset-icon-image"
+                  src="/assets/icons/circular/plant-solar.svg"
+                  alt=""
+                  aria-hidden="true"
+                />
+              </button>
+              <button
+                class="asset-btn floating-dock-btn asset-icon-btn"
+                data-asset="plant"
+                data-plant-type="natural_gas"
+                data-testid="asset-plant-gas"
+                aria-label="Build natural gas plant"
+                title="Build natural gas plant"
+              >
+                <img
+                  class="asset-icon-image"
+                  src="/assets/icons/circular/plant-gas.svg"
+                  alt=""
+                  aria-hidden="true"
+                />
+              </button>
+              <button
+                class="asset-btn floating-dock-btn asset-icon-btn"
+                data-asset="substation"
+                data-testid="asset-substation"
+                aria-label="Build substation (2)"
+                title="Build substation (2)"
+              >
+                <img
+                  class="asset-icon-image"
+                  src="/assets/icons/circular/substation.svg"
+                  alt=""
+                  aria-hidden="true"
+                />
+              </button>
+              <button
+                class="asset-btn floating-dock-btn asset-icon-btn"
+                data-asset="storage"
+                data-testid="asset-storage"
+                aria-label="Build storage (3)"
+                title="Build storage (3)"
+              >
+                <span class="asset-icon-glyph asset-icon-glyph-storage" aria-hidden="true"></span>
+              </button>
             </div>
           </div>
 
@@ -4163,7 +4259,14 @@ export class SaveTheGridApp {
       button.addEventListener("click", () => {
         if (!this.runtime) return;
         this.runtime.tool = TOOL_BUILD;
-        this.runtime.buildAssetType = button.getAttribute("data-asset");
+        const selectedAsset = button.getAttribute("data-asset");
+        this.runtime.buildAssetType = selectedAsset;
+        if (selectedAsset === "plant") {
+          const selectedPlantType = button.getAttribute("data-plant-type");
+          if (selectedPlantType) {
+            this.runtime.buildPlantType = this.runtime.normalizePlantType(selectedPlantType);
+          }
+        }
         this.runtime.pushHudUpdate();
       });
     });
@@ -4353,7 +4456,12 @@ export class SaveTheGridApp {
 
     const assetButtons = this.root.querySelectorAll(".asset-btn");
     assetButtons.forEach((button) => {
-      const isActive = button.getAttribute("data-asset") === payload.buildAssetType;
+      const assetType = button.getAttribute("data-asset");
+      const plantType = button.getAttribute("data-plant-type");
+      let isActive = assetType === payload.buildAssetType;
+      if (isActive && assetType === "plant" && plantType) {
+        isActive = plantType === payload.buildPlantType;
+      }
       button.classList.toggle("active", isActive);
     });
 

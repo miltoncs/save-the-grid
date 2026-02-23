@@ -1222,3 +1222,288 @@ Original prompt: Develop the game MVP based on all provided documentation
 - Playwright assertion:
   - Started a run and confirmed `#region-context` no longer exists.
   - Artifact: `output/remove-selection-panel/run-no-selection-panel.png`
+
+## 2026-02-21 (Merged bottom-left metrics into one panel)
+- Replaced the multiple bottom-left floating metric chips with a single consolidated metrics panel card.
+- Preserved all existing HUD value IDs (`hud-budget`, `hud-served`, `hud-unmet`, etc.) so runtime updates remain unchanged.
+- Added panel-specific styles (`hud-summary-panel`, row/item styling) and responsive adjustments.
+
+### Validation
+- `node --check src/game.js`
+- `node --check src/main.js`
+- `node --check src/data.js`
+- Visual check:
+  - `output/combined-bottom-left-panel/run-direct.png`
+  - Verified `#hud-metrics` exists exactly once and contains all metrics.
+
+## 2026-02-21 (Town naming refresh)
+- Updated seeded town names to people-name + town-suffix style in:
+  - `data/maps/national_core.map.json`
+  - `src/data.js` fallback map constants
+- Updated emergent town name pool in `src/game/core.js` to match the same naming style.
+- Updated supporting references:
+  - map-storage example in `docs/implementation/MAP_STORAGE_AND_RESOURCE_ZONES.md`
+  - Terrain Lab default export town name in `tools/terrain/interactive/app.js`
+  - UI mockup label in `docs/mockups-ui-design/mockup-gameplay-round-floating-ui.svg`
+- Validation: syntax checks passed for `src/data.js`, `src/game/core.js`, and `tools/terrain/interactive/app.js`.
+
+## 2026-02-23 (Disable smoothing when zoomed in)
+- Updated canvas render behavior in `src/game.js` to disable image smoothing when camera zoom exceeds `1.0x`.
+- Added zoom-aware backdrop draw snapping so map image destination coordinates/dimensions are rounded at high zoom, keeping terrain pixels crisp.
+- Kept normal smoothing at lower zoom levels (`<= 1.0x`) so zoomed-out readability remains unchanged.
+
+### Validation
+- `node --check src/game.js`
+- develop-web-game client run:
+  - `node "$WEB_GAME_CLIENT" --url http://127.0.0.1:5173 --click-selector "#start-btn" --actions-file /tmp/pixel-zoom-actions.json --iterations 1 --pause-ms 350 --screenshot-dir output/web-game/pixel-crisp --headless true`
+  - artifacts: `output/web-game/pixel-crisp/shot-0.png`, `output/web-game/pixel-crisp/state-0.json`
+- Targeted Playwright zoom-in verification:
+  - clicked `#run-zoom-in-btn` twice after run start, captured `output/web-game/pixel-crisp/manual-zoom.png`
+  - confirmed text state reports `camera.zoom: 1.32` in `output/web-game/pixel-crisp/manual-state.json`
+
+## 2026-02-21 (Top-right export panel + spec-aligned map export)
+- Added a new top-right `Export` panel to terrain interactive UI.
+- Added export form fields:
+  - `Map ID` (normalized to slug on blur)
+  - `Display Name`
+- Added explicit export actions (separate buttons for browser reliability):
+  - `Export .map.json`
+  - `Export .metadata.json`
+  - `Export .png`
+- Export payloads are generated from current rendered map + current resource zones and aligned to `docs/implementation/MAP_STORAGE_AND_RESOURCE_ZONES.md`:
+  - map document keys: `contentVersion`, `mapId`, `displayName`, `world`, `terrainMap`, `towns`, `links`, `resourceZones`
+  - metadata keys: `map_id`, `display_name`, `image`, `coordinate_system`, `resource_zones`
+  - resource type mapping for export: `gas -> natural_gas`
+  - polygon points converted from normalized coordinates to raster pixel coordinates.
+- Exported map document now includes one placeholder town (with `starterAssets`) so it is runtime-loadable before manual town authoring.
+
+### Validation
+- Syntax checks passed:
+  - `node --check tools/terrain/interactive/app.js`
+  - `node --check tools/terrain/interactive/lib/dom.js`
+- Playwright skill run:
+  - `output/export-panel-skill-run/shot-0.png`
+  - `output/export-panel-skill-run/shot-1.png`
+- Targeted export validation:
+  - `output/export-panel-check/result.json`
+  - confirms all three downloads succeed and JSON contracts/keys match spec expectations.
+  - files exported: `demo-export-map.map.json`, `demo-export-map.metadata.json`, `demo-export-map.png`.
+
+## 2026-02-23 (Icon-only map objects, fixed world-size)
+- Updated map object rendering in `src/game.js` to icon-only visuals with a fixed world-space size of `35x35` map pixels (`MAP_OBJECT_ICON_WORLD_SIZE = 35`).
+- Changed city/town rendering to a simple filled circle icon with no colored border.
+- Removed map text labels around objects (name, MW, population, asset counts) so powerplants/substations/storage render as icons only.
+- Added simple glyph-based icons for:
+  - `plant` (bolt glyph)
+  - `substation` (grid square/cross glyph)
+  - `storage`/battery (battery glyph)
+- Kept substation coverage radius rings; selection now uses a soft halo instead of bordered marker styling.
+- Updated click hit radius to a fixed world-space interaction radius (`24`) consistent with the icon-focused object model.
+
+### Validation
+- `node --check src/game.js`
+- develop-web-game client run:
+  - `node "$WEB_GAME_CLIENT" --url http://127.0.0.1:5173 --click-selector "#start-btn" --actions-file /tmp/icon-check-actions.json --iterations 1 --pause-ms 250 --screenshot-dir output/web-game/icon-size-check --headless true`
+  - artifacts: `output/web-game/icon-size-check/shot-0.png`, `output/web-game/icon-size-check/state-0.json`
+- Targeted screenshot run (asset icon layout + map labels removed):
+  - `output/web-game/icon-size-check/assets-icon-only.png`
+  - state capture: `output/web-game/icon-size-check/assets-icon-only-state.json`
+
+## 2026-02-23 (Ensure circular icon pack is used where relevant)
+- Wired `assets/icons/circular` into in-map infrastructure rendering for plants.
+- Plant icons now use the circular SVG set (`wind`, `sun`, `natural_gas`) selected by each point's dominant resource profile.
+- Resource reveal layer continues to use circular SVG icons from the same pack.
+- Kept town/city rendering as simple borderless circles to match the latest visual requirement.
+- Kept substation/storage as simple glyph icons because no dedicated circular substation/storage assets exist in `assets/icons/circular`.
+
+### Validation
+- `node --check src/game.js`
+- Targeted Playwright captures:
+  - `output/web-game/circular-icon-usage/plant-icon-open-point.png`
+  - `output/web-game/circular-icon-usage/plant-icon-open-point-state.json`
+  - `output/web-game/circular-icon-usage/resource-layer-icons.png`
+
+## 2026-02-21 (Snowcaps slider inversion)
+- Renamed terrain control label from `Mountaintops Level` to `Snowcaps`.
+- Inverted slider behavior so higher value means more white terrain coverage (more snow), instead of a higher elevation threshold.
+- Updated slider range/default to represent target snow coverage directly:
+  - min `1%`
+  - max `15%`
+  - default `5%`
+- Updated runtime mapping:
+  - `snowcapsPercent -> mountaintopQuantile = 1 - snowcapsFraction`
+  - ensures terrain whitening tracks requested snow percentage direction.
+- Updated terrain stats line to reflect new semantics:
+  - `Snow X% (target Y%)`
+
+### Validation
+- Syntax: `node --check tools/terrain/interactive/app.js`
+- Targeted Playwright check:
+  - `output/snowcaps-slider-check/result.json`
+  - confirms label is `Snowcaps` and inverted behavior works (`target 1% -> Snow 1%`, `target 15% -> Snow 15%`).
+- Skill client run:
+  - `output/snowcaps-slider-skill-run/shot-0.png`
+  - `output/snowcaps-slider-skill-run/shot-1.png`
+
+## 2026-02-23 (Bottom dock icon-only build selectors)
+- Removed the bottom dock controls hint text: `Line: 4 | Reroute: E | Right click: Demolish`.
+- Switched infrastructure build selectors in the bottom dock from words to icon-only buttons:
+  - Plant uses circular icon asset (`/assets/icons/circular/plant-wind.svg`).
+  - Substation uses a simple cross-in-circle glyph icon.
+  - Storage uses a simple battery-in-circle glyph icon.
+- Added icon button styling in run HUD CSS and updated mobile responsive sizing.
+- Kept accessibility via `aria-label`/`title` on each icon button.
+
+### Validation
+- `node --check src/game.js`
+- Screenshot checks:
+  - `output/web-game/dock-icons/shot-0.png` (canvas capture)
+  - `output/web-game/dock-icons/run-fullpage-dock-icons.png` (full HUD; confirms icon-only bottom dock and no old hint text)
+
+## 2026-02-23 (Visual Effects Mode)
+- Added a third editor mode in Terrain Lab: `Visual effects`.
+- Added a dedicated visual-effects controls group with one option:
+  - `Shoreline Relief Colors` (checkbox) to toggle coastal relief tinting on/off.
+- Wired new DOM bindings:
+  - `visualEffectsControlsGroup`
+  - `shorelineReliefToggle`
+  - `shorelineReliefValue`
+- Added app state for visual effects:
+  - `state.visualEffects.shorelineRelief` (default `true`).
+- Updated mode handling:
+  - mode toggle now supports `terrain`, `resources`, `visual-effects`.
+  - panel title/subtitle/ARIA labels now switch per mode.
+- Updated terrain raster generation:
+  - coastline recolor pass (coast land + coast water) now runs only when shoreline relief is enabled.
+- Updated interactions:
+  - visual-effects mode does not add rivers/resources on left click.
+  - right click in visual-effects mode does not trigger terrain/resource deletion behavior.
+- Updated UI styles:
+  - bottom mode switch expanded to 3 buttons.
+  - added toggle-row styling for visual-effects checkbox.
+- Updated docs:
+  - `tools/terrain/interactive/README.md` now documents the third mode and shoreline toggle.
+
+### Validation
+- `node --check tools/terrain/interactive/app.js`
+- `node --check tools/terrain/interactive/lib/dom.js`
+- `node --check tools/terrain/interactive/lib/resource-zones.js`
+- Develop-web-game Playwright client run:
+  - `node $WEB_GAME_CLIENT --url http://127.0.0.1:5173/tools/terrain/interactive/ --actions-file $WEB_GAME_ACTIONS --iterations 3 --pause-ms 250 --screenshot-dir output/terrain-visual-effects-check`
+- Targeted Playwright verification for mode/toggle behavior:
+  - panel title confirmed `Visual Effects`
+  - shoreline value changed `On -> Off`
+  - coastline-color pixel counts changed `18586 -> 0`
+  - screenshots: `output/terrain-visual-effects-verify/visual-effects-on.png`, `output/terrain-visual-effects-verify/visual-effects-off.png`
+
+## 2026-02-23 (Circular Substation Icon)
+- Added new icon: `/assets/icons/circular/substation.svg`.
+- Matched existing circular icon system:
+  - 96x96 canvas
+  - shared dark shell and radial core
+  - inner accent ring
+  - minimal 2px rounded-line center glyph.
+- Updated icon pack docs and preview:
+  - `/assets/icons/circular/README.md` now lists `substation.svg`.
+  - `/assets/icons/circular/preview.html` includes a `Substation` card.
+
+### Validation
+- Loaded preview and captured visual check:
+  - `/output/icons-circular-preview-substation.png`
+- Preview check confirms substation label present (`hasSubstation: true`).
+
+## 2026-02-23 (Visual Effects: River Relief Toggle)
+- Added a second toggle in `Visual effects` mode:
+  - `River Relief Colors` (`#river-relief-toggle`, `#river-relief-value`).
+- Added visual-effects state flag:
+  - `state.visualEffects.riverRelief` (default `true`).
+- Wired label and checkbox sync in `updateLabels()`.
+- Extended terrain rendering to support river relief tinting using coastline logic/colors:
+  - river and sea tinting are now independently toggled.
+  - when enabled, river pixels are treated as water-like in boundary tint pass.
+  - adjacent land receives `coastLand` tint.
+  - river boundary pixels receive `coastWater` tint.
+  - river animation/overlay now respects per-pixel river tint via `riverTintMask`.
+- Added event listener for river relief toggle to re-render without replaying river animation.
+- Updated visual-effects stats text to show both states:
+  - `Coast On/Off`
+  - `River Tint On/Off`
+- Updated docs in `tools/terrain/interactive/README.md` for the new control.
+
+### Validation
+- Syntax:
+  - `node --check tools/terrain/interactive/app.js`
+  - `node --check tools/terrain/interactive/lib/dom.js`
+  - `node --check tools/terrain/interactive/lib/resource-zones.js`
+- Skill-loop run:
+  - `node $WEB_GAME_CLIENT --url http://127.0.0.1:5173/tools/terrain/interactive/ --actions-file $WEB_GAME_ACTIONS --iterations 3 --pause-ms 250 --screenshot-dir output/terrain-visual-effects-river-tint-skill`
+- Targeted Playwright verification:
+  - shoreline set `Off`, river tint toggled `Off -> On`
+  - coastline-tint color pixels changed `0 -> 3319` when river tint enabled
+  - screenshots:
+    - `/output/terrain-river-relief-verify/river-relief-off.png`
+    - `/output/terrain-river-relief-verify/river-relief-on.png`
+
+## 2026-02-23 (Apply updated circular icon pack)
+- Detected new icon asset in `/assets/icons/circular`: `substation.svg`.
+- Updated icon registry (`src/game/core.js`) to include the new infrastructure icon group:
+  - `infrastructure.substation -> /assets/icons/circular/substation.svg`
+- Extended runtime icon state (`src/game.js`) to load and track `iconSet.infrastructure.substation`.
+- Updated map asset rendering (`drawAssetIcon`) so substation assets use the new circular `substation.svg` icon instead of the fallback glyph.
+- Updated the bottom build dock so the Substation selector uses `substation.svg`.
+- Extended `render_game_to_text` terrain icon load report to include:
+  - `iconSetLoaded.infrastructure.substation`
+
+### Validation
+- `node --check src/game.js`
+- `node --check src/game/core.js`
+- Playwright screenshot/state check:
+  - `output/web-game/updated-icons/run-substation-updated-icon.png`
+  - `output/web-game/updated-icons/state.json`
+  - confirmed `iconSetLoaded.infrastructure.substation: true`
+
+## 2026-02-23 (Resource zones: text labels only)
+- Removed resource-zone icon rendering from `drawMapBackdrop(...)` in `src/game.js`.
+- Resource zones now render text labels centered on each polygon centroid while resource reveal is active.
+- Labels are uppercase with underscore-to-space normalization (e.g., `natural_gas` -> `NATURAL GAS`).
+- Added zoom-aware label sizing and simple backdrop chips for readability.
+
+### Validation
+- `node --check src/game.js`
+- Playwright capture with resource reveal held:
+  - `output/web-game/resource-zone-text-only/resource-zones-text.png`
+  - confirms text labels only (no resource icons).
+
+## 2026-02-23 (Local Powerline Tessellating Pattern)
+- Added new non-game-code design assets for local distribution powerlines:
+  - `/assets/patterns/powerlines/local-powerline-tile.svg`
+  - `/assets/patterns/powerlines/README.md`
+  - `/assets/patterns/powerlines/preview.html`
+- Design intent: flat minimal pattern inspired by utility poles/crossarm + 3 conductors in the reference photo.
+- Tile is seamless for horizontal repetition:
+  - edge-to-edge aligned conductors
+  - center pole motif repeats at fixed interval.
+- Updated `/assets/README.md` to include the new `patterns/` directory category.
+
+### Validation
+- Preview rendered successfully at:
+  - `http://127.0.0.1:5173/assets/patterns/powerlines/preview.html`
+- Captured screenshot:
+  - `/output/powerline-pattern-preview.png`
+- Verified tile dimensions from browser load:
+  - `96x48` pixels.
+
+## 2026-02-23 (Local Powerline Vertical Variant)
+- Added upright-pole vertical tessellation asset:
+  - `/assets/patterns/powerlines/local-powerline-tile-vertical.svg` (`48x96`, repeat-y).
+- Updated pattern docs with vertical usage guidance:
+  - `/assets/patterns/powerlines/README.md`.
+- Updated preview page to show both horizontal and vertical variants:
+  - `/assets/patterns/powerlines/preview.html`.
+
+### Validation
+- Preview screenshot:
+  - `/output/powerline-pattern-preview-vertical.png`
+- Verified tile dimensions in browser:
+  - horizontal: `96x48`
+  - vertical: `48x96`

@@ -49,6 +49,86 @@ body {
   overflow: hidden;
 }
 
+.export-panel {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  width: min(320px, calc(100vw - 32px));
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid var(--panel-border);
+  background: linear-gradient(165deg, rgba(16, 28, 41, 0.82), var(--panel));
+  backdrop-filter: blur(8px);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+}
+
+.export-header h2 {
+  margin: 0;
+  font-size: 1rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.export-header p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.export-body {
+  margin-top: 10px;
+  display: block;
+}
+
+.export-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: var(--text);
+  font-size: 0.86rem;
+  margin-top: 8px;
+}
+
+.export-input {
+  width: 100%;
+  margin-top: 6px;
+  border: 1px solid rgba(126, 165, 198, 0.55);
+  border-radius: 9px;
+  padding: 8px 10px;
+  background: rgba(20, 34, 48, 0.72);
+  color: #e8f3ff;
+  font-size: 0.88rem;
+}
+
+.export-input:focus {
+  outline: none;
+  border-color: rgba(150, 218, 255, 0.95);
+  box-shadow: 0 0 0 2px rgba(131, 209, 255, 0.2);
+}
+
+.export-btn {
+  margin-top: 0;
+}
+
+.export-actions {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+
+.export-status {
+  margin-top: 8px;
+  font-family: "IBM Plex Mono", "Consolas", monospace;
+  font-size: 0.75rem;
+  color: #b8cde2;
+}
+
+.export-status.is-error {
+  color: #ffc5c5;
+}
+
 .controls-header {
   display: flex;
   align-items: flex-start;
@@ -297,6 +377,30 @@ input[type="range"] {
   margin-top: 0;
 }
 
+.toggle-row {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid rgba(126, 165, 198, 0.55);
+  border-radius: 10px;
+  padding: 8px 10px;
+  background: rgba(20, 34, 48, 0.62);
+  color: #d8ebff;
+  font-size: 0.84rem;
+}
+
+.toggle-row input[type="checkbox"] {
+  margin: 0;
+  width: 16px;
+  height: 16px;
+  accent-color: #83d1ff;
+}
+
+.toggle-row span {
+  flex: 1;
+}
+
 .control-footer {
   margin-top: 12px;
   padding-top: 10px;
@@ -314,9 +418,9 @@ input[type="range"] {
   bottom: 16px;
   transform: translateX(-50%);
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr 1fr 1fr;
   gap: 8px;
-  width: min(320px, calc(100vw - 32px));
+  width: min(460px, calc(100vw - 32px));
   padding: 8px;
   border-radius: 14px;
   border: 1px solid rgba(125, 160, 190, 0.36);
@@ -375,5 +479,12 @@ input[type="range"] {
   .mode-toggle {
     bottom: 10px;
     width: calc(100vw - 20px);
+  }
+
+  .export-panel {
+    top: auto;
+    right: 10px;
+    bottom: 86px;
+    width: min(320px, calc(100vw - 20px));
   }
 }

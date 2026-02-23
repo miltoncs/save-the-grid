@@ -101,15 +101,8 @@
   }
 
   .floating-dock-btn {
-    flex: 1 1 92px;
-    min-width: 92px;
-  }
-
-  .floating-dock-hint {
-    width: 100%;
-    text-align: center;
-    white-space: normal;
-    line-height: 1.3;
+    flex: 0 0 auto;
+    min-width: 44px;
   }
 
   .dock-separator {

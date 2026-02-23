@@ -52,24 +52,27 @@ export const ICON_SET_URLS = {
     sun: "/assets/icons/circular/plant-solar.svg",
     natural_gas: "/assets/icons/circular/plant-gas.svg",
   },
+  infrastructure: {
+    substation: "/assets/icons/circular/substation.svg",
+  },
 };
 export const LIVABLE_TERRAINS = new Set(["plains", "river", "coast"]);
 export const SPARSE_START_TOWN_IDS = new Set(["capital"]);
 export const EMERGENCE_TOWN_NAMES = [
-  "Pine Crossing",
-  "Rivergate",
-  "Sunfield",
-  "Ironpoint",
-  "Clearwater",
-  "Stonebridge",
-  "Redcliff",
-  "Lakeside",
-  "New Harbor",
-  "Juniper Flats",
-  "North Meadow",
-  "West Orchard",
-  "Cedar Junction",
-  "Brighton Vale",
+  "Andersville",
+  "Carsonton",
+  "Ella Town",
+  "Bennettburg",
+  "Marlowville",
+  "Parkerton",
+  "Riley Borough",
+  "Quinn Town",
+  "Sawyerville",
+  "Jordanston",
+  "Averyville",
+  "Logan Town",
+  "Finleyburg",
+  "Caseyton",
 ];
 export const LINE_BASE_BUILD_COST_PER_WORLD_UNIT = 0.34;
 export const LINE_BASE_MAINTENANCE_PER_WORLD_UNIT = 0.0036;
@@ -519,4 +522,3 @@ export function buildRunConfigForTutorial() {
     townEmergenceMode: "off",
   };
 }
-
