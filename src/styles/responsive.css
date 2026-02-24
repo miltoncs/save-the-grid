@@ -13,8 +13,8 @@
   }
 
   .floating-bottom-left {
-    max-width: min(640px, 58vw);
-    width: min(640px, 58vw);
+    max-width: min(320px, 34vw);
+    width: min(320px, 34vw);
   }
 
   .floating-bottom-center {
@@ -72,19 +72,15 @@
   }
 
   .hud-summary-panel {
-    gap: 6px;
+    gap: 5px;
   }
 
-  .hud-summary-row {
-    gap: 5px 10px;
+  .hud-metric-label {
+    font-size: 0.74rem;
   }
 
-  .hud-metric-item {
-    font-size: 0.76rem;
-  }
-
-  .hud-metric-item strong {
-    font-size: 0.82rem;
+  .hud-metric-card strong {
+    font-size: 0.8rem;
   }
 
   .floating-bottom-center {

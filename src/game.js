@@ -235,7 +235,7 @@ class GameRuntime {
       this.config.populationEnabled = false;
       this.config.populationStrength = 0;
       this.config.seasonalProfile = "neutral";
-      this.config.townEmergenceMode = "off";
+      this.config.townEmergenceMode = "low";
       this.config.eventIntensity = Math.min(0.35, Number(this.config.eventIntensity || 0.35));
       this.config.startingBudget = Math.max(5000, Number(this.config.startingBudget || 0));
       this.config.leaderboardEligible = false;
@@ -2017,6 +2017,13 @@ class GameRuntime {
     return LIVABLE_TERRAINS.has(region.terrain);
   }
 
+  getTownFertilityWeight(terrain) {
+    if (terrain === "plains") return 1.35;
+    if (terrain === "river") return 1.28;
+    if (terrain === "coast") return 1.04;
+    return 0.85;
+  }
+
   hasStableNeighborService(region) {
     if (region.id === "capital") {
       return this.state.reliability >= 58 || (region.coveredBySubstation && region.utilization >= 0.74);
@@ -2083,15 +2090,27 @@ class GameRuntime {
         intervalMax: 58,
         maxEmergences: 14,
         reliabilityFloor: 52,
+        minDemandMetRatio: 0.62,
       };
     }
     if (this.config.townEmergenceMode === "low") {
+      if (this.config.mode === "tutorial") {
+        return {
+          minStableSeconds: 34,
+          intervalMin: 130,
+          intervalMax: 190,
+          maxEmergences: 6,
+          reliabilityFloor: 58,
+          minDemandMetRatio: 0.9,
+        };
+      }
       return {
         minStableSeconds: 28,
         intervalMin: 85,
         intervalMax: 125,
         maxEmergences: 4,
         reliabilityFloor: 64,
+        minDemandMetRatio: 0.82,
       };
     }
     return {
@@ -2100,6 +2119,7 @@ class GameRuntime {
       intervalMax: 82,
       maxEmergences: 10,
       reliabilityFloor: 56,
+      minDemandMetRatio: 0.74,
     };
   }
 
@@ -2130,13 +2150,40 @@ class GameRuntime {
     return suffix > 0 ? `${base} ${suffix + 1}` : base;
   }
 
+  pickEmergenceSponsor(sponsoringTowns) {
+    if (!sponsoringTowns.length) return null;
+    if (sponsoringTowns.length === 1) return sponsoringTowns[0];
+
+    const weighted = sponsoringTowns.map((town) => {
+      const fertilityWeight = this.getTownFertilityWeight(town.terrain);
+      const serviceWeight = clamp((town.utilization || 0) * 0.8 + 0.35, 0.35, 1.15);
+      return {
+        town,
+        weight: fertilityWeight * serviceWeight,
+      };
+    });
+
+    const totalWeight = weighted.reduce((sum, entry) => sum + entry.weight, 0);
+    if (totalWeight <= 0.0001) return pickRandom(sponsoringTowns);
+
+    let roll = Math.random() * totalWeight;
+    for (const entry of weighted) {
+      roll -= entry.weight;
+      if (roll <= 0) {
+        return entry.town;
+      }
+    }
+    return weighted[weighted.length - 1].town;
+  }
+
   generateEmergentTownAnchor(sponsoringTowns) {
     if (!sponsoringTowns.length) return null;
 
     const mapPadding = 110;
     const minTownSpacing = 170;
     for (let attempt = 0; attempt < 36; attempt += 1) {
-      const sponsor = pickRandom(sponsoringTowns);
+      const sponsor = this.pickEmergenceSponsor(sponsoringTowns);
+      if (!sponsor) break;
       const angle = Math.random() * Math.PI * 2;
       const distance = randomRange(180, 420);
       const x = clamp(
@@ -2228,6 +2275,10 @@ class GameRuntime {
     if (this.state.reliability < profile.reliabilityFloor) return;
     const poweredSubstations = this.getPoweredSubstationIds();
     if (!poweredSubstations.size) return;
+    const totalDemand = Math.max(0, Number(this.state.totalDemand || 0));
+    const totalServed = Math.max(0, Number(this.state.totalServed || 0));
+    const demandMetRatio = totalDemand <= 0.01 ? 1 : totalServed / totalDemand;
+    if (demandMetRatio < Number(profile.minDemandMetRatio || 0)) return;
 
     const sponsoringTowns = this.state.regions.filter((town) => {
       if (!this.isTownEntity(town)) return false;
@@ -2247,11 +2298,13 @@ class GameRuntime {
           return Math.min(nearest, distance);
         }, Infinity);
         if (!Number.isFinite(nearestStableTownDistance)) return null;
+        const fertilityWeight = this.getTownFertilityWeight(anchor.terrain);
         return {
           anchor,
           score:
             clamp(2.4 - nearestStableTownDistance / 520, 0.2, 2.4) +
-            Math.random(),
+            fertilityWeight * 0.75 +
+            Math.random() * 0.6,
         };
       })
       .filter(Boolean)
@@ -2263,9 +2316,13 @@ class GameRuntime {
         const distance = Math.hypot(syntheticAnchor.x - sponsor.x, syntheticAnchor.y - sponsor.y);
         return Math.min(nearest, distance);
       }, Infinity);
+      const fertilityWeight = this.getTownFertilityWeight(syntheticAnchor.terrain);
       anchorCandidates.push({
         anchor: syntheticAnchor,
-        score: clamp(2.2 - nearestStableTownDistance / 560, 0.25, 2.2) + Math.random() * 0.7,
+        score:
+          clamp(2.2 - nearestStableTownDistance / 560, 0.25, 2.2) +
+          fertilityWeight * 0.62 +
+          Math.random() * 0.45,
       });
       anchorCandidates.sort((a, b) => b.score - a.score);
     }
@@ -3376,7 +3433,88 @@ class GameRuntime {
     }
   }
 
+  getBuildPreviewIcon() {
+    if (this.buildAssetType === "plant") {
+      const plantType = this.normalizePlantType(this.buildPlantType);
+      return (
+        this.iconSet.resource[plantType] ||
+        this.iconSet.resource.wind ||
+        this.iconSet.resource.sun ||
+        this.iconSet.resource.natural_gas ||
+        null
+      );
+    }
+    if (this.buildAssetType === "substation") {
+      return this.iconSet.infrastructure.substation || null;
+    }
+    return null;
+  }
+
+  drawBuildCursorPreview(ctx) {
+    if (this.tool !== TOOL_BUILD) return;
+    if (!this.mouse.inside) return;
+    if (this.camera.dragActive || this.pointerDown.dragging) return;
+
+    const zoom = this.zoomLevels[this.camera.zoomIndex] || 1;
+    const world = this.screenToWorld(this.mouse.x, this.mouse.y);
+    if (world.x < 0 || world.x > BASE_MAP.width || world.y < 0 || world.y > BASE_MAP.height) {
+      return;
+    }
+
+    if (this.buildAssetType === "substation") {
+      const radiusWorld = this.config.substationRadius || SUBSTATION_RADIUS_BY_PROFILE.standard;
+      ctx.save();
+      ctx.strokeStyle = "rgba(242, 246, 214, 0.72)";
+      ctx.lineWidth = 1.6;
+      ctx.setLineDash([3, 6]);
+      ctx.beginPath();
+      ctx.arc(this.mouse.x, this.mouse.y, radiusWorld * zoom, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.restore();
+    }
+
+    const iconSize = this.getMapObjectIconScreenSize();
+    const icon = this.getBuildPreviewIcon();
+    if (icon) {
+      ctx.save();
+      ctx.globalAlpha = 0.42;
+      ctx.drawImage(
+        icon,
+        this.mouse.x - iconSize / 2,
+        this.mouse.y - iconSize / 2,
+        iconSize,
+        iconSize
+      );
+      ctx.restore();
+      return;
+    }
+
+    const fallbackRegion = {
+      assets: {
+        plant: this.buildAssetType === "plant" ? 1 : 0,
+        substation: this.buildAssetType === "substation" ? 1 : 0,
+        storage: this.buildAssetType === "storage" ? 1 : 0,
+      },
+      plantType: this.normalizePlantType(this.buildPlantType),
+      resourceProfile: this.createEmptyResourceProfile(),
+    };
+    ctx.save();
+    ctx.globalAlpha = 0.42;
+    this.drawAssetIcon(
+      ctx,
+      this.buildAssetType,
+      this.mouse.x,
+      this.mouse.y,
+      iconSize,
+      fallbackRegion
+    );
+    ctx.restore();
+  }
+
   drawOverlay(ctx, width, height) {
+    this.drawBuildCursorPreview(ctx);
+
     if (this.paused) {
       ctx.fillStyle = "rgba(8, 18, 26, 0.74)";
       ctx.fillRect(width / 2 - 128, 66, 256, 56);
@@ -4379,24 +4517,18 @@ export class SaveTheGridApp {
 
           <div class="floating-group floating-bottom-left">
             <section class="floating-card hud-summary-panel" id="hud-metrics">
-              <div class="hud-summary-row">
-                <span class="hud-metric-item">Budget <strong id="hud-budget">0</strong></span>
-                <span class="hud-metric-item">Supply <strong id="hud-served">0</strong></span>
-                <span class="hud-metric-item">Unmet <strong id="hud-unmet">0</strong></span>
-                <span class="hud-metric-item">Reliability <strong id="hud-reliability">0%</strong></span>
-                <span class="hud-metric-item">Score <strong id="hud-score">0</strong></span>
-                <span class="hud-metric-item">Season <strong id="hud-season">neutral</strong></span>
-                <span class="hud-metric-item">Lawsuits <strong id="hud-lawsuits">0</strong></span>
-              </div>
-              <div class="hud-summary-row">
-                <span class="hud-metric-item">Zoom <strong id="hud-zoom">1.00x</strong></span>
-                <span class="hud-metric-item">Pan <strong>Drag / WASD</strong></span>
-                <span class="hud-metric-item">Resources <strong id="hud-resource-visibility">Hidden (hold R)</strong></span>
-                <span class="hud-metric-item">Towns <strong id="hud-town-emergence">0 emerged</strong></span>
-              </div>
-              <div class="hud-summary-row">
-                <span class="hud-metric-item">Substation Radius <strong id="hud-substation-radius">0</strong></span>
-              </div>
+              <div class="hud-metric-card"><span class="hud-metric-label">Budget</span><strong id="hud-budget">0</strong></div>
+              <div class="hud-metric-card"><span class="hud-metric-label">Supply</span><strong id="hud-served">0</strong></div>
+              <div class="hud-metric-card"><span class="hud-metric-label">Unmet</span><strong id="hud-unmet">0</strong></div>
+              <div class="hud-metric-card"><span class="hud-metric-label">Reliability</span><strong id="hud-reliability">0%</strong></div>
+              <div class="hud-metric-card"><span class="hud-metric-label">Score</span><strong id="hud-score">0</strong></div>
+              <div class="hud-metric-card"><span class="hud-metric-label">Season</span><strong id="hud-season">neutral</strong></div>
+              <div class="hud-metric-card"><span class="hud-metric-label">Lawsuits</span><strong id="hud-lawsuits">0</strong></div>
+              <div class="hud-metric-card"><span class="hud-metric-label">Zoom</span><strong id="hud-zoom">1.00x</strong></div>
+              <div class="hud-metric-card"><span class="hud-metric-label">Pan</span><strong>Drag / WASD</strong></div>
+              <div class="hud-metric-card"><span class="hud-metric-label">Resources</span><strong id="hud-resource-visibility">Hidden (hold R)</strong></div>
+              <div class="hud-metric-card"><span class="hud-metric-label">Towns</span><strong id="hud-town-emergence">0 emerged</strong></div>
+              <div class="hud-metric-card"><span class="hud-metric-label">Substation Radius</span><strong id="hud-substation-radius">0</strong></div>
             </section>
           </div>
 
@@ -4470,6 +4602,24 @@ export class SaveTheGridApp {
               >
                 <span class="asset-icon-glyph asset-icon-glyph-storage" aria-hidden="true"></span>
               </button>
+              <button
+                class="tool-btn floating-dock-btn asset-icon-btn"
+                data-tool="line"
+                data-testid="tool-powerlines"
+                aria-label="Powerlines tool (4)"
+                title="Powerlines tool (4)"
+              >
+                <span class="asset-icon-glyph asset-icon-glyph-powerline" aria-hidden="true"></span>
+              </button>
+              <button
+                class="tool-btn floating-dock-btn asset-icon-btn"
+                data-tool="reroute"
+                data-testid="tool-reroute"
+                aria-label="Reroute tool (E)"
+                title="Reroute tool (E)"
+              >
+                <span class="asset-icon-glyph asset-icon-glyph-reroute" aria-hidden="true"></span>
+              </button>
             </div>
           </div>
 
@@ -4500,6 +4650,21 @@ export class SaveTheGridApp {
           if (selectedPlantType) {
             this.runtime.buildPlantType = this.runtime.normalizePlantType(selectedPlantType);
           }
+        }
+        this.runtime.pushHudUpdate();
+      });
+    });
+
+    this.root.querySelectorAll("[data-tool]").forEach((button) => {
+      button.addEventListener("click", () => {
+        if (!this.runtime) return;
+        const selectedTool = button.getAttribute("data-tool");
+        if (selectedTool === "line") {
+          this.runtime.tool = TOOL_LINE;
+        } else if (selectedTool === "reroute") {
+          this.runtime.tool = TOOL_REROUTE;
+        } else {
+          return;
         }
         this.runtime.pushHudUpdate();
       });
@@ -4696,6 +4861,15 @@ export class SaveTheGridApp {
       if (isActive && assetType === "plant" && plantType) {
         isActive = plantType === payload.buildPlantType;
       }
+      button.classList.toggle("active", isActive);
+    });
+
+    const toolButtons = this.root.querySelectorAll(".tool-btn");
+    toolButtons.forEach((button) => {
+      const tool = button.getAttribute("data-tool");
+      const isActive =
+        (tool === "line" && payload.tool === TOOL_LINE) ||
+        (tool === "reroute" && payload.tool === TOOL_REROUTE);
       button.classList.toggle("active", isActive);
     });
 

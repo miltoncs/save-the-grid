@@ -372,6 +372,35 @@ function blurHeightField(source, width, height, passes) {
   return field;
 }
 
+function normalizeHeightField(source) {
+  if (!source || source.length === 0) {
+    return new Float32Array(0);
+  }
+
+  let minValue = Infinity;
+  let maxValue = -Infinity;
+  for (let i = 0; i < source.length; i += 1) {
+    const value = source[i];
+    if (value < minValue) minValue = value;
+    if (value > maxValue) maxValue = value;
+  }
+
+  const range = maxValue - minValue;
+  if (!Number.isFinite(range) || range < 1e-9) {
+    const flat = new Float32Array(source.length);
+    flat.fill(0.5);
+    return flat;
+  }
+
+  const invRange = 1 / range;
+  const normalized = new Float32Array(source.length);
+  for (let i = 0; i < source.length; i += 1) {
+    normalized[i] = (source[i] - minValue) * invRange;
+  }
+
+  return normalized;
+}
+
 function computePolygonAreaPx(points) {
   if (!points || points.length < 3) return 0;
   let twiceArea = 0;
@@ -550,16 +579,15 @@ function buildHeightFieldTopology(width, height, seed, smoothness, continentScal
       value += detail * detailWeight;
       value += (ridge - 0.5) * ridgeWeight;
 
-      heights[(y * width) + x] = clamp(value, 0, 1);
+      heights[(y * width) + x] = value;
     }
   }
 
   const blurPasses = Math.round(lerp(0, 4, smoothnessNorm));
-  if (blurPasses > 0) {
-    return blurHeightField(heights, width, height, blurPasses);
-  }
-
-  return heights;
+  const filteredHeights = blurPasses > 0
+    ? blurHeightField(heights, width, height, blurPasses)
+    : heights;
+  return normalizeHeightField(filteredHeights);
 }
 
 function buildHeightFieldMidpoint(width, height, seed, smoothness, continentScalePercent = 100) {
@@ -597,7 +625,7 @@ function buildHeightFieldMidpoint(width, height, seed, smoothness, continentScal
         const c = grid[index(x - half, y + half)];
         const d = grid[index(x + half, y + half)];
         const avg = (a + b + c + d) * 0.25;
-        grid[index(x, y)] = clamp(avg + (randomSigned() * amplitude), 0, 1);
+        grid[index(x, y)] = avg + (randomSigned() * amplitude);
       }
     }
 
@@ -625,7 +653,7 @@ function buildHeightFieldMidpoint(width, height, seed, smoothness, continentScal
         }
 
         const avg = count > 0 ? sum / count : 0.5;
-        grid[index(x, y)] = clamp(avg + (randomSigned() * amplitude), 0, 1);
+        grid[index(x, y)] = avg + (randomSigned() * amplitude);
       }
     }
 
@@ -684,12 +712,15 @@ function buildHeightFieldMidpoint(width, height, seed, smoothness, continentScal
       let value = heights[idx];
       value += continent * 0.22;
       value += macro * 0.14;
-      heights[idx] = clamp(value, 0, 1);
+      heights[idx] = value;
     }
   }
 
   const blurPasses = Math.round(lerp(0, 5, smoothnessNorm));
-  return blurPasses > 0 ? blurHeightField(heights, width, height, blurPasses) : heights;
+  const filteredHeights = blurPasses > 0
+    ? blurHeightField(heights, width, height, blurPasses)
+    : heights;
+  return normalizeHeightField(filteredHeights);
 }
 
 function buildHeightField(width, height, seed, smoothness, algorithm, continentScalePercent = 100) {

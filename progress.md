@@ -1816,3 +1816,109 @@ Original prompt: Develop the game MVP based on all provided documentation
   - vertical-biased link: `output/long-distance-powerline-pattern-check/2026-02-24T16-47-46-068Z-long-distance-pattern-link-vertical.png`
 - Skill loop run:
   - `node "$HOME/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js" --url http://127.0.0.1:5173 --actions-file "$HOME/.codex/skills/develop-web-game/references/action_payloads.json" --click-selector "#start-btn" --iterations 3 --pause-ms 250 --screenshot-dir output/web-game/long-distance-powerline-pattern`
+
+## 2026-02-24 (Tutorial emergence parity with main game)
+- Implemented tutorial town emergence behavior so it now follows the same emergence system as standard runs, but at infrequent cadence.
+
+### Changes
+- `src/game.js`
+  - `applyRunConfigDefaults()`:
+    - removed tutorial override that forced `townEmergenceMode = "off"`.
+    - tutorial now keeps `townEmergenceMode = "low"`.
+  - Added terrain fertility weighting helper:
+    - `getTownFertilityWeight(terrain)`
+    - weights favor `plains` and `river`, moderate `coast`.
+  - `getTownEmergenceProfile()`:
+    - added `minDemandMetRatio` gate for all emergence modes.
+    - added tutorial-specific low profile with slower intervals and stricter demand-met requirement:
+      - `intervalMin: 130`, `intervalMax: 190`, `minDemandMetRatio: 0.9`.
+  - Added weighted sponsor selection for synthetic emergent towns:
+    - `pickEmergenceSponsor(sponsoringTowns)`
+    - prioritizes fertile terrain and healthier utilization.
+  - `updateTownEmergence()`:
+    - now requires global served-demand ratio to meet profile threshold before any emergence attempt.
+    - anchor scoring now includes fertility weight, biasing emergence toward greener/fertile terrains.
+
+### Validation
+- Syntax:
+  - `node --check src/game.js`
+- Skill loop run:
+  - `node "$WEB_GAME_CLIENT" --url http://127.0.0.1:5173 --actions-file "$WEB_GAME_ACTIONS" --click-selector "#menu-tutorial" --iterations 3 --pause-ms 300 --screenshot-dir output/web-game/tutorial-emergence-fertility`
+- Runtime state check:
+  - `output/web-game/tutorial-emergence-fertility/state-2.json` confirms tutorial now runs with:
+    - `townEmergence.mode = "low"`
+    - `selectedTool = "pan"` (default passive click behavior preserved)
+
+### Follow-up note
+- Emergence in tutorial is intentionally infrequent and gated behind served-demand ratio, so verifying actual new-town spawn requires a longer powered run (meet demand, then advance beyond interval windows).
+
+## 2026-02-24 (HUD metrics panel: narrow single-column cards)
+- Updated in-round bottom-left metrics UI from a wide multi-row text strip to a narrow single-column stack.
+
+### Markup
+- `src/game.js`
+  - Replaced grouped `hud-summary-row` layout with 12 individual metric rows (`hud-metric-card`), one per value:
+    - Budget, Supply, Unmet, Reliability, Score, Season, Lawsuits, Zoom, Pan, Resources, Towns, Substation Radius.
+  - Preserved existing metric IDs (`hud-budget`, `hud-served`, etc.) so HUD updates remain unchanged.
+
+### Styling
+- `src/styles/run.css`
+  - Shrunk panel width: `floating-bottom-left` now `min(340px, 30vw)`.
+  - Added per-metric card styling (`.hud-metric-card`, `.hud-metric-label`) for single-column stacked values.
+  - Removed old row-based metric styling usage for this panel.
+- `src/styles/responsive.css`
+  - Updated medium breakpoint panel width to `min(320px, 34vw)`.
+  - Updated responsive metric text sizing for new card classes.
+
+### Validation
+- Syntax:
+  - `node --check src/game.js`
+- Playwright skill run:
+  - `node "$WEB_GAME_CLIENT" --url http://127.0.0.1:5173 --actions-file "$WEB_GAME_ACTIONS" --click-selector "#start-btn" --iterations 2 --pause-ms 300 --screenshot-dir output/web-game/hud-single-column-panel`
+- Full-page visual verification screenshot:
+  - `output/web-game/hud-single-column-panel/fullpage-shot.png`
+
+## 2026-02-24 (Topology normalization pass)
+- Replaced per-pixel hard clamp in `buildHeightFieldTopology` with a post-process normalization pass.
+  - Added `normalizeHeightField(source)` to min/max normalize a generated field into `[0,1]`.
+  - Topology now writes raw blended height values first, applies optional blur, then normalizes once.
+- Preserved existing downstream semantics for sea level/snowcaps/slope quantiles by keeping normalized output range.
+- Validation:
+  - `node --check tools/terrain/interactive/app.js` passed.
+  - Ran Playwright client against `/tools/terrain/interactive/`; captured `output/web-game/terrain-topology-check/shot-0.png` and visually confirmed terrain renders normally.
+
+### TODO
+- Consider applying the same single normalize pass strategy to midpoint generation if we want consistent peak/trough preservation across both algorithms.
+
+## 2026-02-24 (Build cursor preview + substation range ring)
+- Added in-run placement preview visuals while in build mode.
+
+### Behavior
+- When `tool === build` and the cursor is over the map:
+  - a translucent build icon now follows the cursor,
+  - if selected build asset is `substation`, a dotted coverage circle is rendered at cursor position using current substation radius.
+- Preview hides during active drag-pan to avoid visual noise.
+
+### Implementation
+- `src/game.js`
+  - Added `getBuildPreviewIcon()` for selected build asset icon resolution.
+  - Added `drawBuildCursorPreview(ctx)` to render:
+    - ghost icon for plant/substation/storage (with fallback glyph path),
+    - dotted substation range ring (`radius = substationRadius * zoom`).
+  - Integrated preview into render pass by calling `drawBuildCursorPreview(ctx)` at start of `drawOverlay()`.
+
+### Validation
+- Syntax:
+  - `node --check src/game.js`
+- Skill loop run:
+  - `node "$WEB_GAME_CLIENT" --url http://127.0.0.1:5173 --actions-file "$WEB_GAME_ACTIONS" --click-selector "#start-btn" --iterations 2 --pause-ms 250 --screenshot-dir output/web-game/cursor-build-preview`
+- Targeted visual checks:
+  - `/Users/mstafford/Projects/local/save-the-grid/output/web-game/cursor-build-preview/plant-preview.png`
+  - `/Users/mstafford/Projects/local/save-the-grid/output/web-game/cursor-build-preview/substation-preview-v2.png`
+- Applied single normalize-pass strategy to midpoint generation as well:
+  - Removed per-step clamping in midpoint diamond/square steps.
+  - Removed per-pixel clamp after midpoint continent/macro shaping.
+  - Midpoint now performs optional blur then one `normalizeHeightField(...)` pass.
+- Validation:
+  - `node --check tools/terrain/interactive/app.js` passed.
+  - Playwright smoke capture: `output/web-game/terrain-midpoint-normalize-check/shot-0.png` renders successfully.
