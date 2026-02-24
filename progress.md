@@ -1637,3 +1637,182 @@ Original prompt: Develop the game MVP based on all provided documentation
 - Focused visual checks with bot scenarios:
   - `/output/local-powerline-pattern-check/2026-02-23T23-17-53-521Z-local-powerline-pattern-powered-far.png` (horizontal tiled segment visible)
   - `/output/local-powerline-pattern-check/2026-02-23T23-20-23-942Z-local-powerline-pattern-vertical.png` (vertical + horizontal tiled orthogonal route visible)
+
+## 2026-02-23 (Map object scale + zoom ceiling)
+- Reduced map object visual scale by 50%:
+  - `MAP_OBJECT_ICON_WORLD_SIZE` changed from `35` to `17.5` in `src/game.js`.
+  - This affects towns/cities and infrastructure icons rendered on the map.
+- Increased max zoom to 2x prior ceiling:
+  - zoom levels updated from max `1.32` to max `2.64` in `src/game.js`.
+  - New zoom level list: `[0.55, 0.72, 0.9, 1.1, 1.32, 1.64, 1.98, 2.32, 2.64]`.
+
+### Validation
+- `node --check src/game.js`
+- Bot scenario verified HUD shows max zoom `2.64x`:
+  - `/output/zoom-and-size-check/2026-02-23T23-35-18-518Z-zoom-max-2-64x.png`
+- Skill loop run:
+  - `node "$HOME/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js" --url http://127.0.0.1:5173 --actions-file "$HOME/.codex/skills/develop-web-game/references/action_payloads.json" --click-selector "#start-btn" --iterations 3 --pause-ms 250 --screenshot-dir output/web-game/icon-scale-zoomx2`
+
+## 2026-02-23 (Visual Effects: Directional Shadow Effect)
+- Wired the existing `Shadow Effect` + `Shadow Amount` visual-effects controls into terrain regeneration.
+- Ensured the shadow control state is consumed by `buildTerrainImage(...)` and reflected in stats text.
+- Implemented per-pixel directional shadow nudging in `tools/terrain/interactive/app.js`:
+  - Computes per-pixel normals from the height map gradient.
+  - Models light as a 3D position (`SHADOW_LIGHT_MODEL`) and computes a normalized light vector per pixel.
+  - Computes local prominence using a blurred height baseline + slope contribution.
+  - Produces subtle dark/light nudges via signed `nudge` values, scaled by `Shadow Amount`.
+  - Applies nudges to base terrain pixels and to animated river pixels so colors remain consistent during river animation.
+- Updated visual-effects stats to include shadow state (`Shadow Off` or `Shadow <n>%`).
+- Updated `tools/terrain/interactive/README.md` controls documentation for shadow effect.
+
+### Verification
+- Syntax checks passed:
+  - `node --check tools/terrain/interactive/app.js`
+  - `node --check tools/terrain/interactive/lib/dom.js`
+- Ran develop-web-game Playwright loop against terrain tool URL; screenshots captured under:
+  - `output/terrain-shadow-effect-skill/`
+- Ran targeted Playwright validation:
+  - Confirmed `#shadow-strength-slider` starts disabled when shadow is off.
+  - Confirmed slider becomes enabled when `#shadow-effect-toggle` is enabled.
+  - Confirmed stats line updates to include selected shadow amount (`Shadow 60%`).
+  - Confirmed no console/page errors.
+  - Screenshot: `output/terrain-shadow-effect-panel.png`.
+
+## 2026-02-23 (Zoom default + max expansion)
+- Set default run zoom to prior max zoom level:
+  - default now starts at `2.64x` (instead of `0.90x`).
+- Expanded zoom-in ceiling to 2x that level:
+  - new max zoom is `5.28x`.
+- Updated `src/game.js`:
+  - `zoomLevels` now includes levels up to `5.28`.
+  - initial `camera.zoomIndex` now resolves to the `2.64` entry.
+
+### Validation
+- `node --check src/game.js`
+- Bot screenshots:
+  - `/output/zoom-default-and-max-check/2026-02-23T23-53-47-853Z-zoom-default-2-64x.png`
+  - `/output/zoom-default-and-max-check/2026-02-23T23-53-49-938Z-zoom-max-5-28x.png`
+
+## 2026-02-23 (Blank-map export: zero towns)
+- Updated terrain lab export metadata in `tools/terrain/interactive/app.js` so exported metadata always declares `towns: []` for blank/new maps.
+- Updated `tools/terrain/interactive/README.md` to document that exported metadata is a blank-town map.
+
+### Validation
+- `node --check tools/terrain/interactive/app.js`
+- Exported metadata verified includes an explicit empty towns list:
+  - `output/terrain-export-town-empty/terrain-map-2018719961.metadata.json`
+  - contains `"towns": []`
+- Playwright smoke loop (develop-web-game client) run on terrain tool:
+  - screenshots in `output/terrain-empty-towns-check/`
+
+## 2026-02-23 (Export metadata: generation algorithm + seed)
+- Updated terrain lab metadata export in `tools/terrain/interactive/app.js` to include:
+  - `terrain_generation.algorithm`
+  - `terrain_generation.seed`
+  - `terrain_generation.river_seed`
+- Updated `tools/terrain/interactive/README.md` export notes to document these fields.
+
+### Verification
+- `node --check tools/terrain/interactive/app.js`
+- Exported metadata inspected:
+  - `output/terrain-export-generation-meta/0-terrain-map-2774472246.metadata.json`
+  - includes:
+    - `"terrain_generation": { "algorithm": "topology", "seed": 2774472246, "river_seed": 370499007 }`
+- develop-web-game Playwright loop run:
+  - screenshots: `output/terrain-export-generation-check/`
+
+## 2026-02-23 (Camera over-pan beyond screen extent)
+- Updated terrain tool camera clamping in `tools/terrain/interactive/app.js` to allow panning past screen bounds.
+- Added `VIEW_OVERPAN_SCREENS = 2` and expanded clamp budget:
+  - previous: clamp only by zoom-difference envelope
+  - now: zoom envelope + extra 2 screen-widths/heights in each direction
+- Result: map can be dragged beyond viewport extent even at 1.0x zoom, exposing off-map background for free camera framing.
+
+### Verification
+- `node --check tools/terrain/interactive/app.js`
+- Manual Playwright drag check screenshot:
+  - `output/terrain-overpan-check.png` (shows exposed black off-map area after pan)
+- develop-web-game skill loop run:
+  - screenshots in `output/terrain-overpan-skill/`
+
+## 2026-02-23 (Shadow effect excludes water bodies)
+- Updated shadow application logic in `tools/terrain/interactive/app.js` so shadow nudges are never applied to:
+  - sea/lake pixels (`terrainMask === 0`)
+  - river pixels (`riverMask === 1`)
+- Removed river-stage shadow application in both:
+  - `composeTerrainFrame(...)` animated river pass
+  - newest-river-only prepaint branch in `buildTerrainImage(...)`
+
+### Verification
+- `node --check tools/terrain/interactive/app.js`
+- Pixel-diff validation (shadow off vs on at 90%) confirms no water-color pixel changes:
+  - `waterPixels: 542950`
+  - `waterChanged: 0`
+  - `nonWaterChanged: 332754`
+- Visual screenshot: `output/terrain-no-water-shadow-check.png`
+- develop-web-game skill loop run:
+  - screenshots in `output/terrain-no-water-shadow-skill/`
+
+## 2026-02-24 (Long-distance transmission pattern tiles)
+- Added new long-distance powerline pattern assets (same minimal flat style as local tiles):
+  - `assets/patterns/powerlines/long-distance-powerline-tile.svg` (128x64)
+  - `assets/patterns/powerlines/long-distance-powerline-tile-vertical.svg` (64x128)
+- Visual design intent:
+  - steel lattice tower silhouette (not wood pole),
+  - broader transmission crossarm,
+  - shield wire + 3 conductors,
+  - edge-to-edge conductor continuity for seamless tessellation.
+- Updated preview artifact to include both local and long-distance sections:
+  - `assets/patterns/powerlines/preview.html`
+- Updated pattern docs:
+  - `assets/patterns/powerlines/README.md` now describes local + long-distance files and usage.
+
+### Validation
+- SVG syntax:
+  - `xmllint --noout assets/patterns/powerlines/long-distance-powerline-tile.svg assets/patterns/powerlines/long-distance-powerline-tile-vertical.svg`
+- Visual preview screenshot:
+  - `output/powerline-pattern-preview-long-distance.png`
+
+## 2026-02-24 (Default click action = pan / no auto-build)
+- Added explicit passive tool mode `pan` and made it the default at run start.
+  - `TOOL_PAN` introduced in `src/game/core.js`.
+  - Runtime initializes with `this.tool = TOOL_PAN`.
+- Updated primary click behavior so left-click in `pan` mode does nothing.
+  - Prevents accidental build placement when a round starts.
+- Updated snapshot hydration fallback so missing tool state restores to `pan` (not `build`).
+- Updated HUD asset-button active state logic:
+  - build icons only highlight when `tool === build`.
+
+### Validation
+- Syntax checks:
+  - `node --check src/game/core.js`
+  - `node --check src/game.js`
+- Verified passive click behavior at run start:
+  - `output/web-game/default-pan-no-build/state-2.json` shows:
+    - `selectedTool: "pan"`
+    - `infrastructurePoints: []`
+    - capital assets remain `P0 S0 B0`
+- Verified build still works after explicit asset selection:
+  - screenshot: `output/default-pan-build-enable-check/2026-02-24T16-19-25-990Z-default-pan-then-build-sub.png`
+
+## 2026-02-24 (Long-distance powerline pattern integration)
+- Integrated new transmission tile assets from `assets/patterns/powerlines` into runtime icon loading.
+  - Added powerline keys:
+    - `localHorizontal`, `localVertical`
+    - `longHorizontal`, `longVertical`
+- Replaced manual long-distance line renderer (`drawLinks`) from plain stroke lines to patterned corridor rendering:
+  - uses long-distance tile templates,
+  - supports both horizontal-biased and vertical-biased link orientations,
+  - keeps stress tint/feedback overlay and moving pulse marker.
+- Local substation-town powerline renderer continues using local tile assets and now points to explicit local keys.
+- Updated `render_game_to_text` icon load status to report all four powerline assets.
+
+### Validation
+- Syntax:
+  - `node --check src/game/core.js`
+  - `node --check src/game.js`
+- Long-distance link visual checks:
+  - diagonal link: `output/long-distance-powerline-pattern-check/2026-02-24T16-45-19-506Z-long-distance-pattern-link.png`
+  - vertical-biased link: `output/long-distance-powerline-pattern-check/2026-02-24T16-47-46-068Z-long-distance-pattern-link-vertical.png`
+- Skill loop run:
+  - `node "$HOME/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js" --url http://127.0.0.1:5173 --actions-file "$HOME/.codex/skills/develop-web-game/references/action_payloads.json" --click-selector "#start-btn" --iterations 3 --pause-ms 250 --screenshot-dir output/web-game/long-distance-powerline-pattern`

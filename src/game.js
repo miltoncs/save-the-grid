@@ -15,6 +15,7 @@ const {
   STORAGE_KEYS,
   TERRAIN_COST_MULTIPLIERS,
   TICK_SECONDS,
+  TOOL_PAN,
   TOOL_BUILD,
   TOOL_DEMOLISH,
   TOOL_REROUTE,
@@ -73,7 +74,7 @@ const {
   buildRunConfigForTutorial,
 } = GameCore;
 
-const MAP_OBJECT_ICON_WORLD_SIZE = 35;
+const MAP_OBJECT_ICON_WORLD_SIZE = 17.5;
 const MAP_OBJECT_INTERACTION_RADIUS_WORLD = 24;
 const PLANT_TYPE_VALUES = new Set(["wind", "sun", "natural_gas"]);
 const DEFAULT_PLANT_TYPE = "wind";
@@ -119,11 +120,15 @@ class GameRuntime {
       right: false,
     };
 
-    this.zoomLevels = [0.55, 0.72, 0.9, 1.1, 1.32];
+    this.zoomLevels = [0.55, 0.72, 0.9, 1.1, 1.32, 1.64, 1.98, 2.32, 2.64, 3.08, 3.52, 3.96, 4.4, 4.84, 5.28];
+    const defaultZoomLevel = 2.64;
+    const defaultZoomIndex = this.zoomLevels.findIndex(
+      (zoomLevel) => Math.abs(zoomLevel - defaultZoomLevel) < 1e-6
+    );
     this.camera = {
       x: BASE_MAP.width / 2,
       y: BASE_MAP.height / 2,
-      zoomIndex: 2,
+      zoomIndex: defaultZoomIndex >= 0 ? defaultZoomIndex : this.zoomLevels.length - 1,
       dragActive: false,
       dragStartX: 0,
       dragStartY: 0,
@@ -131,7 +136,7 @@ class GameRuntime {
       dragCamY: BASE_MAP.height / 2,
     };
 
-    this.tool = TOOL_BUILD;
+    this.tool = TOOL_PAN;
     this.buildAssetType = "plant";
     this.buildPlantType = DEFAULT_PLANT_TYPE;
     this.selectedRegionId = null;
@@ -162,8 +167,10 @@ class GameRuntime {
         substation: null,
       },
       powerline: {
-        horizontal: null,
-        vertical: null,
+        localHorizontal: null,
+        localVertical: null,
+        longHorizontal: null,
+        longVertical: null,
       },
     };
 
@@ -1587,6 +1594,9 @@ class GameRuntime {
 
   handlePrimaryClick() {
     this.callbacks.onDismissDemolishConfirm?.();
+    if (this.tool === TOOL_PAN) {
+      return;
+    }
     const worldPoint = this.screenToWorld(this.mouse.x, this.mouse.y);
     const region = this.findRegionAt(worldPoint.x, worldPoint.y);
 
@@ -2862,6 +2872,7 @@ class GameRuntime {
   }
 
   drawLinks(ctx) {
+    const zoom = this.zoomLevels[this.camera.zoomIndex] || 1;
     for (const link of this.state.links) {
       if (!link.built) continue;
       const a = this.findRegion(link.a);
@@ -2876,12 +2887,7 @@ class GameRuntime {
       if (stress > 0.8) color = "rgba(244, 180, 88, 0.8)";
       if (stress > 1) color = "rgba(255, 98, 98, 0.92)";
 
-      ctx.strokeStyle = color;
-      ctx.lineWidth = clamp(2 + (link.safeCapacity / 90) * this.zoomLevels[this.camera.zoomIndex], 2, 9);
-      ctx.beginPath();
-      ctx.moveTo(sa.x, sa.y);
-      ctx.lineTo(sb.x, sb.y);
-      ctx.stroke();
+      this.drawLongDistancePowerline(ctx, sa, sb, zoom, color);
 
       const t = (this.renderPulse * 0.5) % 1;
       const pulseX = lerp(sa.x, sb.x, t);
@@ -2891,6 +2897,108 @@ class GameRuntime {
       ctx.arc(pulseX, pulseY, 2.5 + Math.min(4, stress * 3), 0, Math.PI * 2);
       ctx.fill();
     }
+  }
+
+  getLongDistancePowerlineRenderMetrics(zoom) {
+    const tileScale = clamp(zoom * 0.18, 0.16, 0.48);
+    const corridorThickness = clamp(64 * tileScale, 10, 30);
+    return {
+      corridorThickness,
+      horizontalTileWidth: 128 * tileScale,
+      horizontalTileHeight: 64 * tileScale,
+      verticalTileWidth: 64 * tileScale,
+      verticalTileHeight: 128 * tileScale,
+    };
+  }
+
+  drawLongDistancePowerlineFallback(ctx, from, to, zoom, color) {
+    ctx.save();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = clamp(2 + zoom * 0.9, 2, 6);
+    ctx.beginPath();
+    ctx.moveTo(from.x, from.y);
+    ctx.lineTo(to.x, to.y);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  drawLongDistancePowerline(ctx, from, to, zoom, stressColor) {
+    const dx = to.x - from.x;
+    const dy = to.y - from.y;
+    const length = Math.hypot(dx, dy);
+    if (length <= 0.6) return;
+
+    const metrics = this.getLongDistancePowerlineRenderMetrics(zoom);
+    const useVerticalTemplate = Math.abs(dy) > Math.abs(dx) * 1.15;
+    const tile = useVerticalTemplate
+      ? this.iconSet.powerline.longVertical
+      : this.iconSet.powerline.longHorizontal;
+    if (!tile) {
+      this.drawLongDistancePowerlineFallback(ctx, from, to, zoom, stressColor);
+      return;
+    }
+
+    const angle = Math.atan2(dy, dx);
+    const halfThickness = metrics.corridorThickness / 2;
+
+    ctx.save();
+    ctx.translate(from.x, from.y);
+    ctx.rotate(angle);
+    ctx.beginPath();
+    ctx.rect(0, -halfThickness, length, metrics.corridorThickness);
+    ctx.clip();
+    ctx.globalAlpha = 0.96;
+
+    if (useVerticalTemplate) {
+      ctx.save();
+      ctx.rotate(-Math.PI / 2);
+      for (
+        let y = 0;
+        y < length + metrics.verticalTileHeight;
+        y += metrics.verticalTileHeight
+      ) {
+        ctx.drawImage(
+          tile,
+          -metrics.verticalTileWidth / 2,
+          y,
+          metrics.verticalTileWidth,
+          metrics.verticalTileHeight
+        );
+      }
+      ctx.restore();
+    } else {
+      for (
+        let x = 0;
+        x < length + metrics.horizontalTileWidth;
+        x += metrics.horizontalTileWidth
+      ) {
+        ctx.drawImage(
+          tile,
+          x,
+          -metrics.horizontalTileHeight / 2,
+          metrics.horizontalTileWidth,
+          metrics.horizontalTileHeight
+        );
+      }
+    }
+
+    ctx.save();
+    ctx.globalCompositeOperation = "source-atop";
+    ctx.globalAlpha = 0.18;
+    ctx.fillStyle = stressColor;
+    ctx.fillRect(0, -halfThickness, length, metrics.corridorThickness);
+    ctx.restore();
+    ctx.restore();
+
+    ctx.save();
+    ctx.strokeStyle = stressColor;
+    ctx.globalAlpha = 0.44;
+    ctx.lineWidth = clamp(0.9 * zoom, 0.8, 2.2);
+    ctx.beginPath();
+    ctx.moveTo(from.x, from.y);
+    ctx.lineTo(to.x, to.y);
+    ctx.stroke();
+    ctx.restore();
   }
 
   drawTownServiceLinks(ctx) {
@@ -2943,7 +3051,7 @@ class GameRuntime {
     if (length <= 0.6) return;
 
     const metrics = this.getLocalPowerlineRenderMetrics(zoom);
-    const tile = this.iconSet.powerline.horizontal;
+    const tile = this.iconSet.powerline.localHorizontal;
     if (!tile) {
       this.drawLocalPowerlineFallbackSegment(
         ctx,
@@ -2977,7 +3085,7 @@ class GameRuntime {
     if (length <= 0.6) return;
 
     const metrics = this.getLocalPowerlineRenderMetrics(zoom);
-    const tile = this.iconSet.powerline.vertical;
+    const tile = this.iconSet.powerline.localVertical;
     if (!tile) {
       this.drawLocalPowerlineFallbackSegment(
         ctx,
@@ -3421,7 +3529,7 @@ class GameRuntime {
       this.zoomLevels.length - 1
     );
     this.clampCameraToMap();
-    this.tool = snapshotPayload.tool || TOOL_BUILD;
+    this.tool = snapshotPayload.tool ?? TOOL_PAN;
     this.buildAssetType = snapshotPayload.buildAssetType || "plant";
     this.buildPlantType = this.normalizePlantType(snapshotPayload.buildPlantType);
     this.selectedRegionId = snapshotPayload.selectedRegionId || null;
@@ -3564,8 +3672,10 @@ class GameRuntime {
             substation: !!this.iconSet.infrastructure.substation,
           },
           powerline: {
-            horizontal: !!this.iconSet.powerline.horizontal,
-            vertical: !!this.iconSet.powerline.vertical,
+            localHorizontal: !!this.iconSet.powerline.localHorizontal,
+            localVertical: !!this.iconSet.powerline.localVertical,
+            longHorizontal: !!this.iconSet.powerline.longHorizontal,
+            longVertical: !!this.iconSet.powerline.longVertical,
           },
         },
         resourceZoneCounts: { ...this.resourceZoneSummary },
@@ -4582,7 +4692,7 @@ export class SaveTheGridApp {
     assetButtons.forEach((button) => {
       const assetType = button.getAttribute("data-asset");
       const plantType = button.getAttribute("data-plant-type");
-      let isActive = assetType === payload.buildAssetType;
+      let isActive = payload.tool === TOOL_BUILD && assetType === payload.buildAssetType;
       if (isActive && assetType === "plant" && plantType) {
         isActive = plantType === payload.buildPlantType;
       }

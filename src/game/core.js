@@ -30,6 +30,7 @@ export {
   TERRAIN_COST_MULTIPLIERS,
 };
 export const TICK_SECONDS = 0.1;
+export const TOOL_PAN = "pan";
 export const TOOL_BUILD = "build";
 export const TOOL_DEMOLISH = "demolish";
 export const TOOL_REROUTE = "reroute";
@@ -56,8 +57,10 @@ export const ICON_SET_URLS = {
     substation: "/assets/icons/circular/substation.svg",
   },
   powerline: {
-    horizontal: "/assets/patterns/powerlines/local-powerline-tile.svg",
-    vertical: "/assets/patterns/powerlines/local-powerline-tile-vertical.svg",
+    localHorizontal: "/assets/patterns/powerlines/local-powerline-tile.svg",
+    localVertical: "/assets/patterns/powerlines/local-powerline-tile-vertical.svg",
+    longHorizontal: "/assets/patterns/powerlines/long-distance-powerline-tile.svg",
+    longVertical: "/assets/patterns/powerlines/long-distance-powerline-tile-vertical.svg",
   },
 };
 export const LIVABLE_TERRAINS = new Set(["plains", "river", "coast"]);
@@ -523,6 +526,6 @@ export function buildRunConfigForTutorial() {
     terrainMapImageUrl: terrainProfile.imageUrl,
     terrainMapMetadataUrl: terrainProfile.metadataUrl,
     sparseStart: true,
-    townEmergenceMode: "off",
+    townEmergenceMode: "low",
   };
 }

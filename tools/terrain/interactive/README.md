@@ -9,12 +9,16 @@ Fullscreen browser app for tuning topology-based map generation.
 - `Export Panel` (top-right): one `Export` button downloads the terrain image and metadata together using the storage contracts in `docs/implementation/MAP_STORAGE_AND_RESOURCE_ZONES.md`:
   - `<mapId>.metadata.json`
   - `<mapId>.png`
+  - exported metadata declares a blank-town map with `towns: []`
+  - exported metadata includes `terrain_generation.algorithm` and `terrain_generation.seed` (plus `river_seed`)
 - `Mode Toggle` (bottom): switches between `Terrain`, `Resources`, and `Visual effects`.
 - `Terrain` mode: full topology + river tuning controls (existing workflow).
 - `Resources` mode: barebones zone authoring controls for setup iteration.
 - `Visual effects` mode: map styling controls.
 - `Shoreline Relief Colors` (visual effects mode): toggles shoreline relief tinting on/off (green-brown land coast and light-blue sea coast).
 - `River Relief Colors` (visual effects mode): toggles river and riverbank tinting using the same coastline tint colors/logic.
+- `Shadow Effect` (visual effects mode): enables directional per-pixel light/shadow nudging using surface normals + local prominence.
+- `Shadow Amount` (visual effects mode): controls the strength of the shadow nudges when `Shadow Effect` is enabled.
 - `Algorithm`: switch between `Topology` and `Midpoint`.
 - `Smoothness`: controls how rough vs smooth the terrain appears.
 - `Continent Scale`: controls low-frequency continent shaping (continent mask + macro noise) for both `Topology` and `Midpoint`. Higher values create more fragmented large-scale landmasses.

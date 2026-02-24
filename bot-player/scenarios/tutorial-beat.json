@@ -1,0 +1,89 @@
+{
+  "name": "tutorial-beat",
+  "description": "Start tutorial mode and complete all tutorial steps to victory.",
+  "options": {
+    "timeoutMs": 20000,
+    "stepDelayMs": 180,
+    "failOnConsoleError": true
+  },
+  "steps": [
+    {
+      "action": "wait",
+      "name": "initial-load-wait",
+      "ms": 450
+    },
+    {
+      "action": "click",
+      "name": "skip-splash-if-visible",
+      "optional": true,
+      "targets": [
+        { "text": "Press any key" }
+      ]
+    },
+    {
+      "action": "press",
+      "name": "fallback-enter",
+      "optional": true,
+      "key": "Enter"
+    },
+    {
+      "action": "waitFor",
+      "name": "wait-for-tutorial-button",
+      "targets": [
+        { "selector": "#menu-tutorial" }
+      ]
+    },
+    {
+      "action": "click",
+      "name": "prime-first-click",
+      "optional": true,
+      "timeoutMs": 700,
+      "targets": [
+        { "selector": ".menu-screen" },
+        { "selector": "body" }
+      ]
+    },
+    {
+      "action": "click",
+      "name": "start-tutorial",
+      "targets": [
+        { "selector": "#menu-tutorial" }
+      ]
+    },
+    {
+      "action": "waitFor",
+      "name": "wait-for-run-canvas",
+      "targets": [
+        { "selector": "#game-canvas" },
+        { "selector": ".run-screen" }
+      ]
+    },
+    {
+      "action": "tutorialBeat",
+      "name": "complete-tutorial",
+      "canvasSelector": "#game-canvas",
+      "maxIterations": 150,
+      "settleMs": 320,
+      "pauseMs": 180
+    },
+    {
+      "action": "waitFor",
+      "name": "wait-for-end-screen",
+      "targets": [
+        { "selector": ".end-screen" }
+      ]
+    },
+    {
+      "action": "assertText",
+      "name": "assert-tutorial-complete",
+      "selector": ".end-screen",
+      "matches": "tutorial\\s+complete",
+      "flags": "i"
+    },
+    {
+      "action": "screenshot",
+      "name": "tutorial-complete",
+      "fullPage": true
+    }
+  ]
+}

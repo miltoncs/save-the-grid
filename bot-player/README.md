@@ -36,6 +36,12 @@ Or run directly:
 node ./run-bot.mjs --url http://localhost:5173 --scenario ./scenarios/smoke-controls.json --headed
 ```
 
+Tutorial completion run:
+
+```bash
+npm run bot:tutorial
+```
+
 Screenshots are saved to:
 
 `/Users/mstafford/Projects/local/save-the-grid/bot-player/artifacts`
@@ -46,6 +52,7 @@ Current starter scenarios:
 
 - `smoke-menu-to-run.json`: menu -> standard run -> short autoplay -> save & exit.
 - `smoke-controls.json`: quick control-path sweep (tools/assets/pause) -> save & exit.
+- `tutorial-beat.json`: starts tutorial and completes all tutorial objectives to the victory screen.
 
 ## Scenario format
 
@@ -59,6 +66,7 @@ Scenarios are JSON files with ordered `steps`. Supported actions:
 - `assertText`: simple text checks.
 - `advanceTime`: calls `window.advanceTime(ms)` when available.
 - `autoplay`: repeated low-skill interactions for quick playability checks.
+- `tutorialBeat`: solves tutorial objectives in sequence using `render_game_to_text` state.
 - `screenshot`: explicit capture.
 
 Targets can use:

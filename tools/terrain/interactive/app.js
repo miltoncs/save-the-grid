@@ -66,7 +66,7 @@ const COLORS = {
   coastLand: [156, 170, 112],
   plains: [132, 190, 116],
   mountain: [204, 175, 136],
-  mountaintop: [246, 246, 244],
+  mountaintop: [231, 233, 229],
 };
 
 const RIVER_DEFAULT_COUNT = Math.max(0, Math.round(Number(riversCountValue.textContent) || 6));
@@ -84,6 +84,7 @@ const VIEW_MAX_ZOOM = 5;
 const VIEW_ZOOM_STEP = 1.14;
 const VIEW_DRAG_THRESHOLD_PX = 6;
 const VIEW_KEYPAN_SPEED_PX_PER_SEC = 700;
+const VIEW_OVERPAN_SCREENS = 2;
 const NEW_MAP_RESOURCE_ZONE_FRACTION = 0.05;
 const NEW_MAP_RESOURCE_ZONE_STRENGTH = 70;
 const NEW_MAP_RESOURCE_ZONE_TYPES = ["wind", "sun", "gas"];
@@ -225,6 +226,12 @@ function buildExportDocuments(mapId, displayName, output) {
       width: output.width,
       height: output.height,
     },
+    terrain_generation: {
+      algorithm: state.algorithm,
+      seed: state.seed,
+      river_seed: state.riverSeed,
+    },
+    towns: [],
     coordinate_system: {
       origin: "top-left",
       x_axis: "right",
@@ -1175,9 +1182,6 @@ function composeTerrainFrame(output, progress, targetPixels) {
     targetPixels[pixel] = clamp(riverBaseColor[0] * shade, 0, 255);
     targetPixels[pixel + 1] = clamp(riverBaseColor[1] * shade, 0, 255);
     targetPixels[pixel + 2] = clamp(riverBaseColor[2] * shade, 0, 255);
-    if (output.shadowNudges) {
-      applyShadowNudgeToPixel(targetPixels, pixel, output.shadowNudges[idx]);
-    }
   }
 }
 
@@ -1246,8 +1250,13 @@ function getViewTransform(viewWidth, viewHeight) {
 }
 
 function clampViewOffset(viewWidth = window.innerWidth, viewHeight = window.innerHeight) {
-  const maxOffsetX = Math.abs(viewWidth * (state.view.zoom - 1)) * 0.5;
-  const maxOffsetY = Math.abs(viewHeight * (state.view.zoom - 1)) * 0.5;
+  const zoom = clamp(state.view.zoom, VIEW_MIN_ZOOM, VIEW_MAX_ZOOM);
+  const basePanX = Math.abs(viewWidth * (zoom - 1)) * 0.5;
+  const basePanY = Math.abs(viewHeight * (zoom - 1)) * 0.5;
+  const extraPanX = viewWidth * VIEW_OVERPAN_SCREENS;
+  const extraPanY = viewHeight * VIEW_OVERPAN_SCREENS;
+  const maxOffsetX = basePanX + extraPanX;
+  const maxOffsetY = basePanY + extraPanY;
   state.view.offsetX = clamp(state.view.offsetX, -maxOffsetX, maxOffsetX);
   state.view.offsetY = clamp(state.view.offsetY, -maxOffsetY, maxOffsetY);
 }
@@ -1413,6 +1422,8 @@ function buildTerrainImage(
   riverCount,
   shorelineReliefEnabled,
   riverReliefEnabled,
+  shadowEffectEnabled,
+  shadowStrengthPercent,
   animateNewestRiverOnly = false
 ) {
   const smoothnessNorm = clamp(smoothness / 100, 0, 1);
@@ -1503,7 +1514,9 @@ function buildTerrainImage(
           plainsCount += 1;
         }
 
-        const shade = hillshadeFactor(heights, width, height, x, y, 0.22);
+        const shade = shadowEffectEnabled
+          ? hillshadeFactor(heights, width, height, x, y, 0.22)
+          : 1;
         r = clamp(baseColor[0] * shade, 0, 255);
         g = clamp(baseColor[1] * shade, 0, 255);
         b = clamp(baseColor[2] * shade, 0, 255);
@@ -1579,6 +1592,19 @@ function buildTerrainImage(
     }
   }
 
+  const shadowNudges = shadowEffectEnabled
+    ? buildShadowNudgeField(heights, slopes, width, height, shadowStrengthPercent)
+    : null;
+
+  if (shadowNudges) {
+    for (let idx = 0; idx < shadowNudges.length; idx += 1) {
+      // Do not shade any water body pixels (sea/lakes or rivers).
+      if (terrainMask[idx] === 0 || riverOutput.riverMask[idx] === 1) continue;
+      const pixelOffset = idx * 4;
+      applyShadowNudgeToPixel(basePixels, pixelOffset, shadowNudges[idx]);
+    }
+  }
+
   let animationArrivalStep = riverOutput.riverArrivalStep;
   let animationMaxArrivalStep = riverOutput.maxArrivalStep;
 
@@ -1609,6 +1635,7 @@ function buildTerrainImage(
     river: riverOutput,
     riverShade,
     riverTintMask,
+    shadowNudges,
     animationArrivalStep,
     animationMaxArrivalStep,
     stats: {
@@ -1885,6 +1912,8 @@ async function renderTerrain({
     effectiveRiverCount,
     state.visualEffects.shorelineRelief,
     state.visualEffects.riverRelief,
+    state.visualEffects.shadowEffect,
+    state.visualEffects.shadowStrength,
     animateNewestRiverOnly
   );
 
@@ -2557,6 +2586,19 @@ shorelineReliefToggle.addEventListener("input", () => {
 riverReliefToggle.addEventListener("input", () => {
   state.visualEffects.riverRelief = riverReliefToggle.checked;
   updateLabels();
+  renderTerrain({ newSeed: false, skipRiverAnimation: true });
+});
+
+shadowEffectToggle.addEventListener("input", () => {
+  state.visualEffects.shadowEffect = shadowEffectToggle.checked;
+  updateLabels();
+  renderTerrain({ newSeed: false, skipRiverAnimation: true });
+});
+
+shadowStrengthSlider.addEventListener("input", () => {
+  state.visualEffects.shadowStrength = clamp(Number(shadowStrengthSlider.value) || 0, 0, 100);
+  updateLabels();
+  if (!state.visualEffects.shadowEffect) return;
   renderTerrain({ newSeed: false, skipRiverAnimation: true });
 });
 

@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Local Powerline Pattern Preview</title>
+    <title>Powerline Pattern Preview</title>
     <style>
       :root {
         --bg: #0b141e;
@@ -32,6 +32,14 @@
         letter-spacing: 0.04em;
       }
 
+      h2 {
+        margin: 0 0 10px;
+        font-size: 0.95rem;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: #b9d3ea;
+      }
+
       p {
         margin: 0 0 18px;
         color: var(--muted);
@@ -43,6 +51,10 @@
         border-radius: 14px;
         background: linear-gradient(180deg, rgba(17, 30, 44, 0.94), rgba(11, 20, 30, 0.94));
         padding: 16px;
+      }
+
+      .panel + .panel {
+        margin-top: 14px;
       }
 
       .scene {
@@ -105,12 +117,61 @@
       .v3 {
         left: 78%;
       }
+
+      .hv-corridor {
+        position: absolute;
+        height: 64px;
+        width: 120%;
+        left: -10%;
+        background-image: url("./long-distance-powerline-tile.svg");
+        background-repeat: repeat-x;
+        background-size: 128px 64px;
+        transform-origin: left center;
+      }
+
+      .hvl1 {
+        top: 88px;
+        transform: rotate(-13deg);
+      }
+
+      .hvl2 {
+        top: 172px;
+        transform: rotate(-2deg);
+      }
+
+      .hvl3 {
+        top: 254px;
+        transform: rotate(9deg);
+      }
+
+      .vv-corridor {
+        position: absolute;
+        width: 64px;
+        height: 120%;
+        top: -10%;
+        background-image: url("./long-distance-powerline-tile-vertical.svg");
+        background-repeat: repeat-y;
+        background-size: 64px 128px;
+      }
+
+      .vvl1 {
+        left: 16%;
+      }
+
+      .vvl2 {
+        left: 45%;
+      }
+
+      .vvl3 {
+        left: 72%;
+      }
     </style>
   </head>
   <body>
-    <h1>Local Powerline Pattern</h1>
-    <p>Flat tessellating tiles inspired by utility pole + 3-line distribution runs.</p>
+    <h1>Powerline Pattern Pack</h1>
+    <p>Flat tessellating tiles for local distribution and long-distance transmission corridors.</p>
     <section class="panel">
+      <h2>Local Distribution</h2>
       <div class="scene">
         <div class="corridor c1"></div>
         <div class="corridor c2"></div>
@@ -120,6 +181,19 @@
         <div class="v-corridor v1"></div>
         <div class="v-corridor v2"></div>
         <div class="v-corridor v3"></div>
+      </div>
+    </section>
+    <section class="panel">
+      <h2>Long-Distance Transmission</h2>
+      <div class="scene">
+        <div class="hv-corridor hvl1"></div>
+        <div class="hv-corridor hvl2"></div>
+        <div class="hv-corridor hvl3"></div>
+      </div>
+      <div class="scene">
+        <div class="vv-corridor vvl1"></div>
+        <div class="vv-corridor vvl2"></div>
+        <div class="vv-corridor vvl3"></div>
       </div>
     </section>
   </body>

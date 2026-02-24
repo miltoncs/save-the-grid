@@ -7,7 +7,8 @@
   "scripts": {
     "bot": "node ./run-bot.mjs",
     "bot:smoke": "node ./run-bot.mjs --url http://localhost:5173 --scenario ./scenarios/smoke-menu-to-run.json",
-    "bot:controls": "node ./run-bot.mjs --url http://localhost:5173 --scenario ./scenarios/smoke-controls.json"
+    "bot:controls": "node ./run-bot.mjs --url http://localhost:5173 --scenario ./scenarios/smoke-controls.json",
+    "bot:tutorial": "node ./run-bot.mjs --url http://localhost:5173 --scenario ./scenarios/tutorial-beat.json --timeout 25000"
   },
   "dependencies": {
     "playwright": "^1.50.0"
