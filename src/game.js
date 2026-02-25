@@ -76,8 +76,18 @@ const {
 
 const MAP_OBJECT_ICON_WORLD_SIZE = 17.5;
 const MAP_OBJECT_INTERACTION_RADIUS_WORLD = 24;
+const DEMOLITION_DURATION_SECONDS = 20;
 const PLANT_TYPE_VALUES = new Set(["wind", "sun", "natural_gas"]);
 const DEFAULT_PLANT_TYPE = "wind";
+const PLANT_TYPE_DEMOLISH_LABELS = {
+  wind: "Wind Powerplant",
+  sun: "Solar Powerplant",
+  natural_gas: "Natural Gas Powerplant",
+};
+const DEMOLISH_ASSET_LABELS = {
+  substation: "Substation",
+  storage: "Battery",
+};
 
 class GameRuntime {
   constructor(options) {
@@ -271,6 +281,14 @@ class GameRuntime {
     return bestType;
   }
 
+  getDemolishAssetLabel(region, assetType) {
+    if (assetType === "plant") {
+      const plantType = this.normalizePlantType(region?.plantType);
+      return PLANT_TYPE_DEMOLISH_LABELS[plantType] || "Powerplant";
+    }
+    return DEMOLISH_ASSET_LABELS[assetType] || (ASSET_RULES[assetType]?.label ?? "Asset");
+  }
+
   async loadIconSet() {
     const loads = [];
     for (const [groupKey, iconGroup] of Object.entries(ICON_SET_URLS)) {
@@ -367,7 +385,13 @@ class GameRuntime {
 
     if (this.state.tutorial.currentStep >= this.state.tutorial.totalSteps) {
       this.state.tutorial.completed = true;
-      this.finishRun("victory", "Tutorial complete: core controls verified.");
+      this.pushAlert(
+        "Tutorial complete. Use Exit Tutorial to finish the run.",
+        "advisory",
+        8
+      );
+      this.logTimeline("Tutorial complete. Awaiting explicit exit command.");
+      this.pushHudUpdate();
       return;
     }
 
@@ -618,6 +642,7 @@ class GameRuntime {
       totalDemand: 0,
       totalServed: 0,
       totalUnmet: 0,
+      totalGeneration: 0,
       seasonIndex: 0,
       seasonTimer: 0,
       seasonLabel: "neutral",
@@ -631,6 +656,7 @@ class GameRuntime {
         },
       ],
       townsEmerged: 0,
+      pendingDemolitions: [],
       nextLineId: 1,
       nextTownId: 1,
       nextNodeId: 1,
@@ -654,6 +680,24 @@ class GameRuntime {
     safe.alerts = safe.alerts || [];
     safe.incidents = safe.incidents || [];
     safe.timeline = safe.timeline || [];
+    safe.pendingDemolitions = Array.isArray(safe.pendingDemolitions)
+      ? safe.pendingDemolitions
+          .map((item, index) => {
+            const assetType = String(item?.assetType || "");
+            if (!ASSET_RULES[assetType]) return null;
+            return {
+              id: String(item?.id || `pending-demo-${index + 1}`),
+              regionId: String(item?.regionId || ""),
+              regionName: String(item?.regionName || ""),
+              assetType,
+              assetLabel: String(item?.assetLabel || ASSET_RULES[assetType].label),
+              refund: 0,
+              startedAt: Math.max(0, Number(item?.startedAt || 0)),
+              completesAt: Math.max(0, Number(item?.completesAt || 0)),
+            };
+          })
+          .filter((item) => item && item.regionId)
+      : [];
     for (const region of safe.regions) {
       if (!region.entityType) {
         region.entityType = String(region.id || "").startsWith("node-") ? "node" : "town";
@@ -723,6 +767,7 @@ class GameRuntime {
     safe.totalDemand = safe.totalDemand || 0;
     safe.totalServed = safe.totalServed || 0;
     safe.totalUnmet = safe.totalUnmet || 0;
+    safe.totalGeneration = safe.totalGeneration || 0;
     if (this.config.mode === "tutorial") {
       safe.tutorial = this.createTutorialProgressState(safe.tutorial);
     } else {
@@ -1337,7 +1382,11 @@ class GameRuntime {
   canEndpointHostLine(region) {
     if (!region) return false;
     if (this.isTownEntity(region)) return false;
-    return (region.assets.plant || 0) > 0 || (region.assets.substation || 0) > 0;
+    return (
+      (region.assets.plant || 0) > 0 ||
+      (region.assets.substation || 0) > 0 ||
+      (region.assets.storage || 0) > 0
+    );
   }
 
   clearLineSelection() {
@@ -1349,8 +1398,8 @@ class GameRuntime {
     if (!this.lineBuildStartRegionId) {
       if (!this.canEndpointHostLine(region)) {
         const text = this.isTownEntity(region)
-          ? "Towns are demand points. Build a plant/substation on an infrastructure point first."
-          : "Line endpoint must have a plant or substation before connecting.";
+          ? "Towns are demand points. Build a plant/substation/battery on an infrastructure point first."
+          : "Line endpoint must have a plant, substation, or battery before connecting.";
         this.pushAlert(
           text,
           "advisory",
@@ -1376,8 +1425,8 @@ class GameRuntime {
     }
     if (!this.canEndpointHostLine(startRegion) || !this.canEndpointHostLine(region)) {
       const text = this.isTownEntity(region) || this.isTownEntity(startRegion)
-        ? "Line endpoints must be infrastructure points with a plant or substation."
-        : "Line endpoints require plant/substation infrastructure at both points.";
+        ? "Line endpoints must be infrastructure points with a plant, substation, or battery."
+        : "Line endpoints require plant/substation/battery infrastructure at both points.";
       this.pushAlert(
         text,
         "warning",
@@ -1542,15 +1591,38 @@ class GameRuntime {
       return false;
     }
 
-    const { assetType, rule, refund } = candidate;
-    region.assets[assetType] = Math.max(0, Number(region.assets[assetType] || 0) - 1);
-    if (assetType === "plant" && region.assets.plant <= 0) {
-      region.plantType = DEFAULT_PLANT_TYPE;
+    const { assetType } = candidate;
+    const assetLabel = this.getDemolishAssetLabel(region, assetType);
+    const existingPending = this.findPendingDemolition(region.id, assetType);
+    if (existingPending) {
+      this.pushAlert(
+        `${assetLabel} demolition already in progress at ${region.name}.`,
+        "advisory",
+        4
+      );
+      return false;
     }
-    this.state.budget += refund;
-    region.cooldownUntil = this.state.runtimeSeconds + 4.5;
-    this.logTimeline(`Demolished ${rule.label} in ${region.name} (+${refund} budget refund).`);
-    this.pushAlert(`${rule.label} demolished in ${region.name}.`, "warning", 4);
+    const startedAt = this.state.runtimeSeconds;
+    const completesAt = startedAt + DEMOLITION_DURATION_SECONDS;
+    this.state.pendingDemolitions.push({
+      id: `pending-demo-${Math.round(performance.now() * Math.random())}`,
+      regionId: region.id,
+      regionName: region.name,
+      assetType,
+      assetLabel,
+      refund: 0,
+      startedAt,
+      completesAt,
+    });
+    region.cooldownUntil = Math.max(Number(region.cooldownUntil || 0), completesAt);
+    this.logTimeline(
+      `Demolition started for ${assetLabel} in ${region.name} (${DEMOLITION_DURATION_SECONDS}s).`
+    );
+    this.pushAlert(
+      `${assetLabel} demolition started in ${region.name} (${DEMOLITION_DURATION_SECONDS}s).`,
+      "warning",
+      4
+    );
     this.recordTutorialAction("demolish");
     return true;
   }
@@ -1567,8 +1639,7 @@ class GameRuntime {
       if (rule && count > 0) {
         return {
           assetType,
-          rule,
-          refund: Math.floor(rule.cost * rule.refundRatio),
+          refund: 0,
         };
       }
     }
@@ -1582,6 +1653,45 @@ class GameRuntime {
     const demolished = this.handleDemolish(region, assetType || this.buildAssetType);
     this.pushHudUpdate();
     return demolished;
+  }
+
+  findPendingDemolition(regionId, assetType = null) {
+    const pending = this.state.pendingDemolitions || [];
+    return (
+      pending.find(
+        (item) =>
+          item.regionId === regionId &&
+          (assetType == null || item.assetType === assetType)
+      ) || null
+    );
+  }
+
+  updatePendingDemolitions() {
+    const pending = this.state.pendingDemolitions || [];
+    if (!pending.length) return;
+
+    const now = this.state.runtimeSeconds;
+    const remaining = [];
+    for (const item of pending) {
+      if (item.completesAt > now) {
+        remaining.push(item);
+        continue;
+      }
+      const region = this.findRegion(item.regionId);
+      if (!region || !region.assets) {
+        continue;
+      }
+      const count = Number(region.assets[item.assetType] || 0);
+      if (count > 0) {
+        region.assets[item.assetType] = Math.max(0, count - 1);
+        if (item.assetType === "plant" && region.assets.plant <= 0) {
+          region.plantType = DEFAULT_PLANT_TYPE;
+        }
+        this.logTimeline(`Demolished ${item.assetLabel} in ${region.name}.`);
+        this.pushAlert(`${item.assetLabel} demolished in ${region.name}.`, "warning", 4);
+      }
+    }
+    this.state.pendingDemolitions = remaining;
   }
 
   handleReroute(region) {
@@ -1603,6 +1713,9 @@ class GameRuntime {
     if (this.tool === TOOL_BUILD) {
       const target = this.handleBuild(region, worldPoint);
       this.selectedRegionId = target ? target.id : region ? region.id : null;
+      if (target) {
+        this.tool = TOOL_PAN;
+      }
       this.pushHudUpdate();
       return;
     }
@@ -1647,7 +1760,7 @@ class GameRuntime {
       regionId: region.id,
       regionName: region.name,
       assetType: demolishCandidate.assetType,
-      assetLabel: demolishCandidate.rule.label,
+      assetLabel: this.getDemolishAssetLabel(region, demolishCandidate.assetType),
       refund: demolishCandidate.refund,
       x: this.mouse.x,
       y: this.mouse.y,
@@ -1695,6 +1808,7 @@ class GameRuntime {
   stepSimulation(dt) {
     this.state.runtimeSeconds += dt;
 
+    this.updatePendingDemolitions();
     this.updateSeason(dt);
     this.expireIncidents();
     this.spawnEventsIfNeeded();
@@ -2441,6 +2555,10 @@ class GameRuntime {
     this.state.totalDemand = towns.reduce((acc, town) => acc + town.demand, 0);
     this.state.totalServed = towns.reduce((acc, town) => acc + town.served, 0);
     this.state.totalUnmet = towns.reduce((acc, town) => acc + town.unmet, 0);
+    this.state.totalGeneration = Array.from(generationByComponent.values()).reduce(
+      (acc, value) => acc + value,
+      0
+    );
   }
 
   findPath(startId, endId) {
@@ -3235,6 +3353,37 @@ class GameRuntime {
     ctx.restore();
   }
 
+  drawDemolitionProgressRing(ctx, x, y, iconSize, pendingDemolition) {
+    if (!pendingDemolition) return;
+    const duration = Math.max(
+      0.001,
+      Number(pendingDemolition.completesAt || 0) - Number(pendingDemolition.startedAt || 0)
+    );
+    const remainingRatio = clamp(
+      (Number(pendingDemolition.completesAt || 0) - this.state.runtimeSeconds) / duration,
+      0,
+      1
+    );
+    if (remainingRatio <= 0) return;
+
+    const radius = iconSize * 0.62;
+    const lineWidth = Math.max(1.2, iconSize * 0.095);
+
+    ctx.save();
+    ctx.strokeStyle = "rgba(255, 94, 94, 0.28)";
+    ctx.lineWidth = lineWidth;
+    ctx.beginPath();
+    ctx.arc(x, y, radius, 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.strokeStyle = "rgba(255, 73, 73, 0.95)";
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.arc(x, y, radius, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * remainingRatio, false);
+    ctx.stroke();
+    ctx.restore();
+  }
+
   getTownIconForRegion(region) {
     if (!this.isTownEntity(region)) return null;
     if (region.id === "capital") return this.iconSet.town.capital || null;
@@ -3393,7 +3542,11 @@ class GameRuntime {
     );
     assetTypes.forEach((assetType, index) => {
       const offset = offsets[index] || { x: 0, y: 0 };
-      this.drawAssetIcon(ctx, assetType, point.x + offset.x, point.y + offset.y, iconSize, region);
+      const iconX = point.x + offset.x;
+      const iconY = point.y + offset.y;
+      this.drawAssetIcon(ctx, assetType, iconX, iconY, iconSize, region);
+      const pendingDemolition = this.findPendingDemolition(region.id, assetType);
+      this.drawDemolitionProgressRing(ctx, iconX, iconY, iconSize, pendingDemolition);
     });
   }
 
@@ -3540,12 +3693,15 @@ class GameRuntime {
       reliability: this.state.reliability,
       unmetDemand: this.state.totalUnmet,
       servedDemand: this.state.totalServed,
+      powerSupply: this.state.totalGeneration,
+      powerDemand: this.state.totalDemand,
       timer: this.state.runtimeSeconds,
       season: this.state.seasonLabel,
       populationActive: this.config.populationEnabled,
       lawsuits: this.state.lawsuits,
       score: this.state.score,
       paused: this.paused,
+      tutorialCompleted: this.config.mode === "tutorial" && !!this.state.tutorial?.completed,
       tool: this.tool,
       buildAssetType: this.buildAssetType,
       buildPlantType: this.buildPlantType,
@@ -3785,6 +3941,20 @@ class GameRuntime {
           ).toFixed(2)
         ),
       },
+      pendingDemolitions: (this.state.pendingDemolitions || []).map((item) => ({
+        id: item.id,
+        regionId: item.regionId,
+        regionName: item.regionName,
+        assetType: item.assetType,
+        assetLabel: item.assetLabel,
+        refund: Number(item.refund || 0),
+        remainingSeconds: Number(
+          Math.max(0, Number(item.completesAt || 0) - this.state.runtimeSeconds).toFixed(2)
+        ),
+        durationSeconds: Number(
+          Math.max(0, Number(item.completesAt || 0) - Number(item.startedAt || 0)).toFixed(2)
+        ),
+      })),
       terrainMap: {
         id: this.config.terrainMapId || DEFAULT_TERRAIN_MAP_ID,
         label: this.config.terrainMapLabel || "National Core Terrain",
@@ -3952,8 +4122,10 @@ export class SaveTheGridApp {
     popover.style.left = `${x}px`;
     popover.style.top = `${y}px`;
     popover.innerHTML = `
-      <p>Demolish ${payload.assetLabel} at ${payload.regionName}?</p>
-      <p class="demolish-confirm-refund">Refund +${Math.round(payload.refund || 0)} budget</p>
+      <p>Demolish ${payload.assetLabel}?</p>
+      <p class="demolish-confirm-refund">
+        Completes in ${DEMOLITION_DURATION_SECONDS}s. No refund on demolition.
+      </p>
       <div class="demolish-confirm-actions">
         <button class="demolish-confirm-btn demolish-confirm-cancel" type="button">Cancel</button>
         <button class="demolish-confirm-btn demolish-confirm-accept" type="button">Demolish</button>
@@ -4495,6 +4667,7 @@ export class SaveTheGridApp {
           <div class="floating-group floating-top-right">
             <span class="floating-chip">Time <strong id="hud-timer">00:00</strong></span>
             <button class="ghost-btn floating-btn" id="run-pause-btn">Pause</button>
+            <button class="ghost-btn floating-btn" id="run-exit-tutorial-btn" hidden>Exit Tutorial</button>
             <button class="ghost-btn floating-btn" id="run-save-exit-btn">Save &amp; Exit</button>
           </div>
 
@@ -4517,18 +4690,11 @@ export class SaveTheGridApp {
 
           <div class="floating-group floating-bottom-left">
             <section class="floating-card hud-summary-panel" id="hud-metrics">
-              <div class="hud-metric-card"><span class="hud-metric-label">Budget</span><strong id="hud-budget">0</strong></div>
-              <div class="hud-metric-card"><span class="hud-metric-label">Supply</span><strong id="hud-served">0</strong></div>
-              <div class="hud-metric-card"><span class="hud-metric-label">Unmet</span><strong id="hud-unmet">0</strong></div>
+              <div class="hud-metric-card"><span class="hud-metric-label">Money</span><strong id="hud-budget">0</strong></div>
+              <div class="hud-metric-card"><span class="hud-metric-label">Power Supply</span><strong id="hud-power-supply">0 MW</strong></div>
+              <div class="hud-metric-card"><span class="hud-metric-label">Power Demand</span><strong id="hud-power-demand">0 MW</strong></div>
               <div class="hud-metric-card"><span class="hud-metric-label">Reliability</span><strong id="hud-reliability">0%</strong></div>
               <div class="hud-metric-card"><span class="hud-metric-label">Score</span><strong id="hud-score">0</strong></div>
-              <div class="hud-metric-card"><span class="hud-metric-label">Season</span><strong id="hud-season">neutral</strong></div>
-              <div class="hud-metric-card"><span class="hud-metric-label">Lawsuits</span><strong id="hud-lawsuits">0</strong></div>
-              <div class="hud-metric-card"><span class="hud-metric-label">Zoom</span><strong id="hud-zoom">1.00x</strong></div>
-              <div class="hud-metric-card"><span class="hud-metric-label">Pan</span><strong>Drag / WASD</strong></div>
-              <div class="hud-metric-card"><span class="hud-metric-label">Resources</span><strong id="hud-resource-visibility">Hidden (hold R)</strong></div>
-              <div class="hud-metric-card"><span class="hud-metric-label">Towns</span><strong id="hud-town-emergence">0 emerged</strong></div>
-              <div class="hud-metric-card"><span class="hud-metric-label">Substation Radius</span><strong id="hud-substation-radius">0</strong></div>
             </section>
           </div>
 
@@ -4684,6 +4850,12 @@ export class SaveTheGridApp {
       this.renderMainMenu();
     });
 
+    this.root.querySelector("#run-exit-tutorial-btn")?.addEventListener("click", () => {
+      if (!this.runtime) return;
+      if (this.runtime.config.mode !== "tutorial" || !this.runtime.state.tutorial?.completed) return;
+      this.runtime.finishRun("victory", "Tutorial complete: core controls verified.");
+    });
+
     this.root.querySelector("#run-zoom-in-btn")?.addEventListener("click", () => {
       if (!this.runtime) return;
       this.runtime.camera.zoomIndex = clamp(
@@ -4803,55 +4975,36 @@ export class SaveTheGridApp {
 
     const runLabelNode = $("#hud-run-label");
     const budgetNode = $("#hud-budget");
-    const servedNode = $("#hud-served");
+    const powerSupplyNode = $("#hud-power-supply");
     const reliabilityNode = $("#hud-reliability");
-    const unmetNode = $("#hud-unmet");
+    const powerDemandNode = $("#hud-power-demand");
     const timerNode = $("#hud-timer");
-    const seasonNode = $("#hud-season");
     const scoreNode = $("#hud-score");
-    const lawsuitsNode = $("#hud-lawsuits");
-    const zoomNode = $("#hud-zoom");
-    const resourceLayerNode = $("#hud-resource-visibility");
-    const townEmergenceNode = $("#hud-town-emergence");
-    const substationRadiusNode = $("#hud-substation-radius");
     const pauseNode = $("#run-pause-btn");
+    const exitTutorialNode = $("#run-exit-tutorial-btn");
 
     if (
       !budgetNode ||
-      !servedNode ||
+      !powerSupplyNode ||
       !reliabilityNode ||
-      !unmetNode ||
+      !powerDemandNode ||
       !timerNode ||
-      !seasonNode ||
-      !scoreNode ||
-      !lawsuitsNode
+      !scoreNode
     ) {
       return;
     }
 
     if (runLabelNode) runLabelNode.textContent = payload.runLabel;
     budgetNode.textContent = payload.devMode ? "INF" : Math.round(payload.budget).toString();
-    servedNode.textContent = payload.servedDemand.toFixed(1);
+    powerSupplyNode.textContent = `${payload.powerSupply.toFixed(1)} MW`;
     reliabilityNode.textContent = `${payload.reliability.toFixed(1)}%`;
-    unmetNode.textContent = payload.unmetDemand.toFixed(1);
+    powerDemandNode.textContent = `${payload.powerDemand.toFixed(1)} MW`;
     timerNode.textContent = formatTime(payload.timer);
-    seasonNode.textContent = payload.season.toUpperCase();
     scoreNode.textContent = Math.round(payload.score).toString();
-    lawsuitsNode.textContent = String(payload.lawsuits);
-    if (zoomNode && this.runtime) {
-      zoomNode.textContent = `${this.runtime.zoomLevels[this.runtime.camera.zoomIndex].toFixed(2)}x`;
-    }
-    if (resourceLayerNode) {
-      resourceLayerNode.textContent = payload.resourceLayerVisible ? "Visible" : "Hidden (hold R)";
-    }
-    if (townEmergenceNode) {
-      const modeLabel = String(payload.townEmergenceMode || "normal").toUpperCase();
-      townEmergenceNode.textContent = `${payload.townsEmerged} emerged (${modeLabel})`;
-    }
-    if (substationRadiusNode) {
-      substationRadiusNode.textContent = `${Math.round(payload.substationRadius || 0)}u`;
-    }
     if (pauseNode) pauseNode.textContent = payload.paused ? "Resume" : "Pause";
+    if (exitTutorialNode) {
+      exitTutorialNode.hidden = !payload.tutorialCompleted;
+    }
 
     const assetButtons = this.root.querySelectorAll(".asset-btn");
     assetButtons.forEach((button) => {

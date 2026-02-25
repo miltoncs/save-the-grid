@@ -173,8 +173,8 @@
 
 .hud-summary-panel {
   display: grid;
-  gap: 6px;
-  padding: 8px;
+  gap: 2px;
+  padding: 8px 10px;
 }
 
 .hud-metric-card {
@@ -182,10 +182,15 @@
   align-items: baseline;
   justify-content: space-between;
   gap: 14px;
-  border: 1px solid rgba(183, 221, 230, 0.22);
-  border-radius: 10px;
-  background: rgba(9, 23, 34, 0.72);
-  padding: 6px 8px;
+  border: none;
+  border-bottom: 1px solid rgba(183, 221, 230, 0.2);
+  border-radius: 0;
+  background: transparent;
+  padding: 4px 0;
+}
+
+.hud-metric-card:last-child {
+  border-bottom: none;
 }
 
 .hud-metric-label {

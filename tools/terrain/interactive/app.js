@@ -22,6 +22,15 @@ import {
   riverReliefValue,
   shadowEffectToggle,
   shadowEffectValue,
+  shadowLengthRow,
+  shadowLengthSlider,
+  shadowLengthValue,
+  peakLighteningRow,
+  peakLighteningSlider,
+  peakLighteningValue,
+  prominenceThresholdRow,
+  prominenceThresholdSlider,
+  prominenceThresholdValue,
   shadowStrengthRow,
   shadowStrengthSlider,
   shadowStrengthValue,
@@ -66,7 +75,7 @@ const COLORS = {
   coastLand: [156, 170, 112],
   plains: [132, 190, 116],
   mountain: [204, 175, 136],
-  mountaintop: [231, 233, 229],
+  mountaintop: [224, 226, 222],
 };
 
 const RIVER_DEFAULT_COUNT = Math.max(0, Math.round(Number(riversCountValue.textContent) || 6));
@@ -89,14 +98,38 @@ const NEW_MAP_RESOURCE_ZONE_FRACTION = 0.05;
 const NEW_MAP_RESOURCE_ZONE_STRENGTH = 70;
 const NEW_MAP_RESOURCE_ZONE_TYPES = ["wind", "sun", "gas"];
 const EXPORT_IMAGE_BASE_PATH = "/assets/maps/terrain";
+const SHADOW_STRENGTH_MAX = Number(shadowStrengthSlider?.max || 200);
 const SHADOW_DEFAULT_STRENGTH = Number(shadowStrengthSlider?.value || 22);
-const SHADOW_MAX_NUDGE = 0.22;
-const SHADOW_PROMINENCE_SCALE = 0.16;
-const SHADOW_LIGHT_MODEL = {
-  nx: -0.28,
-  ny: -0.2,
-  zScale: 1.45,
-};
+const SHADOW_DEFAULT_LENGTH = Number(shadowLengthSlider?.value || 120);
+const SHADOW_DEFAULT_PEAK_LIGHTENING = Number(peakLighteningSlider?.value || 35);
+const SHADOW_DEFAULT_PROMINENCE_THRESHOLD = Number(prominenceThresholdSlider?.value || 8);
+const SHADOW_LIGHT_DIRECTION = Object.freeze((() => {
+  const rawX = -0.72;
+  const rawY = -0.72;
+  const rawZ = 0.9;
+  const invLen = 1 / Math.sqrt((rawX * rawX) + (rawY * rawY) + (rawZ * rawZ));
+  return { x: rawX * invLen, y: rawY * invLen, z: rawZ * invLen };
+})());
+const SHADOW_CAST_DIRECTION = Object.freeze((() => {
+  const rawX = 1;
+  const rawY = 1;
+  const invLen = 1 / Math.sqrt((rawX * rawX) + (rawY * rawY));
+  return { x: rawX * invLen, y: rawY * invLen };
+})());
+const SHADOW_NORMAL_SCALE = 3.2;
+const SHADOW_DIRECTIONAL_MAX = 0.2;
+const SHADOW_CAST_MAX = 0.24;
+const SHADOW_PEAK_MAX = 0.18;
+const SHADOW_PROMINENCE_BLUR_PASSES = 4;
+const SHADOW_MAX_CASTERS = 2400;
+const TERRAIN_CLASS = Object.freeze({
+  SEA: 0,
+  PLAINS: 1,
+  MOUNTAIN: 2,
+  SNOWCAP: 3,
+});
+const SNOWCAP_BORDER_BLEND_RATIO = 0.5;
+const SNOWCAP_BORDER_DITHER_FRACTION = 0.5;
 
 const state = {
   seed: randomSeed(),
@@ -109,7 +142,10 @@ const state = {
     shorelineRelief: true,
     riverRelief: true,
     shadowEffect: false,
-    shadowStrength: clamp(SHADOW_DEFAULT_STRENGTH, 0, 100),
+    shadowStrength: clamp(SHADOW_DEFAULT_STRENGTH, 0, SHADOW_STRENGTH_MAX),
+    shadowLength: clamp(SHADOW_DEFAULT_LENGTH, 20, 260),
+    peakLightening: clamp(SHADOW_DEFAULT_PEAK_LIGHTENING, 0, 100),
+    prominenceThreshold: clamp(SHADOW_DEFAULT_PROMINENCE_THRESHOLD, 1, 35),
   },
   resourceZones: [],
   resourceDraftVertices: [],
@@ -372,6 +408,48 @@ function blurHeightField(source, width, height, passes) {
   return field;
 }
 
+function blurHeightFieldMasked(source, includeMask, width, height, passes) {
+  let field = new Float32Array(source);
+
+  for (let pass = 0; pass < passes; pass += 1) {
+    const next = new Float32Array(field.length);
+
+    for (let y = 0; y < height; y += 1) {
+      const y0 = Math.max(0, y - 1);
+      const y1 = Math.min(height - 1, y + 1);
+
+      for (let x = 0; x < width; x += 1) {
+        const idx = (y * width) + x;
+        if (includeMask[idx] === 0) {
+          next[idx] = field[idx];
+          continue;
+        }
+
+        const x0 = Math.max(0, x - 1);
+        const x1 = Math.min(width - 1, x + 1);
+        let sum = 0;
+        let count = 0;
+
+        for (let yy = y0; yy <= y1; yy += 1) {
+          const row = yy * width;
+          for (let xx = x0; xx <= x1; xx += 1) {
+            const nIdx = row + xx;
+            if (includeMask[nIdx] === 0) continue;
+            sum += field[nIdx];
+            count += 1;
+          }
+        }
+
+        next[idx] = count > 0 ? (sum / count) : field[idx];
+      }
+    }
+
+    field = next;
+  }
+
+  return field;
+}
+
 function normalizeHeightField(source) {
   if (!source || source.length === 0) {
     return new Float32Array(0);
@@ -399,6 +477,16 @@ function normalizeHeightField(source) {
   }
 
   return normalized;
+}
+
+function hash01FromUint(input) {
+  let x = (input >>> 0);
+  x ^= x >>> 16;
+  x = Math.imul(x, 0x7feb352d) >>> 0;
+  x ^= x >>> 15;
+  x = Math.imul(x, 0x846ca68b) >>> 0;
+  x ^= x >>> 16;
+  return x / 4294967295;
 }
 
 function computePolygonAreaPx(points) {
@@ -1075,106 +1163,272 @@ function buildRiverMask(
   };
 }
 
-function hillshadeFactor(heights, width, height, x, y, strength) {
-  const idx = (y * width) + x;
-
-  const left = heights[x > 0 ? idx - 1 : idx];
-  const right = heights[x < width - 1 ? idx + 1 : idx];
-  const up = heights[y > 0 ? idx - width : idx];
-  const down = heights[y < height - 1 ? idx + width : idx];
-
-  const gx = right - left;
-  const gy = down - up;
-
-  let nx = -gx * 2.6;
-  let ny = -gy * 2.6;
-  let nz = 1;
-  const invLen = 1 / Math.sqrt((nx * nx) + (ny * ny) + (nz * nz));
-  nx *= invLen;
-  ny *= invLen;
-  nz *= invLen;
-
-  const lx = -0.58;
-  const ly = -0.42;
-  const lz = 0.69;
-  const dot = clamp((nx * lx) + (ny * ly) + (nz * lz), -1, 1);
-  return clamp(1 + (dot * strength), 0.75, 1.25);
+function isProminentLocalMaximum(prominenceField, width, height, x, y, idx) {
+  const center = prominenceField[idx];
+  const x0 = Math.max(0, x - 1);
+  const x1 = Math.min(width - 1, x + 1);
+  const y0 = Math.max(0, y - 1);
+  const y1 = Math.min(height - 1, y + 1);
+  for (let yy = y0; yy <= y1; yy += 1) {
+    const row = yy * width;
+    for (let xx = x0; xx <= x1; xx += 1) {
+      if (xx === x && yy === y) continue;
+      if (prominenceField[row + xx] > center + 1e-5) {
+        return false;
+      }
+    }
+  }
+  return true;
 }
 
-function buildShadowNudgeField(heights, slopes, width, height, strengthPercent) {
-  const strengthNorm = clamp((Number(strengthPercent) || 0) / 100, 0, 1);
+function applyProminenceCastShadows(
+  nudges,
+  heights,
+  terrainMask,
+  riverMask,
+  width,
+  height,
+  casters,
+  shadowLengthPx,
+  strengthNorm
+) {
+  if (!casters.length || strengthNorm <= 0) return;
+
+  const maxSteps = Math.max(1, Math.round(shadowLengthPx));
+  const lengthNorm = clamp((shadowLengthPx - 20) / 240, 0, 1);
+  const dropPerStep = lerp(0.0105, 0.0015, lengthNorm);
+  const maxDarkNudge = SHADOW_CAST_MAX * strengthNorm;
+
+  for (let i = 0; i < casters.length; i += 1) {
+    const caster = casters[i];
+    const casterHeight = heights[caster.idx] + (caster.prominenceWeight * 0.22);
+    const castStrength = (
+      0.25 +
+      (caster.prominenceWeight * 0.5) +
+      ((caster.ridgeWeight || 0) * 0.25)
+    ) * strengthNorm;
+    let fx = caster.x + 0.5;
+    let fy = caster.y + 0.5;
+
+    for (let step = 1; step <= maxSteps; step += 1) {
+      fx += SHADOW_CAST_DIRECTION.x;
+      fy += SHADOW_CAST_DIRECTION.y;
+      const tx = fx | 0;
+      const ty = fy | 0;
+      if (tx < 0 || tx >= width || ty < 0 || ty >= height) break;
+
+      const targetIdx = (ty * width) + tx;
+      if (terrainMask[targetIdx] === 0 || riverMask[targetIdx] === 1) continue;
+
+      const rayHeight = casterHeight - (step * dropPerStep);
+      const targetHeight = heights[targetIdx];
+      if (targetHeight > rayHeight + 0.0025) break;
+
+      const depth = rayHeight - targetHeight;
+      if (depth <= 0) continue;
+
+      const distFade = 1 - (step / (maxSteps + 1));
+      const darkNudge = clamp(
+        depth * (2.4 + (caster.prominenceWeight * 1.6)) * distFade * castStrength,
+        0,
+        maxDarkNudge
+      );
+      nudges[targetIdx] = clamp(nudges[targetIdx] - darkNudge, -maxDarkNudge, 1);
+    }
+  }
+}
+
+function buildShadowNudgeField(
+  heights,
+  slopes,
+  terrainMask,
+  riverMask,
+  width,
+  height,
+  {
+    strengthPercent,
+    shadowLengthPx,
+    peakLighteningPercent,
+    prominenceThresholdPercent,
+  }
+) {
+  const maxStrengthNorm = Math.max(1, SHADOW_STRENGTH_MAX / 100);
+  const strengthNorm = clamp((Number(strengthPercent) || 0) / 100, 0, maxStrengthNorm);
   if (strengthNorm <= 0) {
     return null;
   }
 
-  const localBase = blurHeightField(heights, width, height, 2);
+  const prominenceThreshold = clamp((Number(prominenceThresholdPercent) || 0) / 100, 0.01, 0.5);
+  const peakLightNorm = clamp((Number(peakLighteningPercent) || 0) / 100, 0, 1);
+  const shadingMask = new Uint8Array(width * height);
+  for (let idx = 0; idx < shadingMask.length; idx += 1) {
+    if (terrainMask[idx] === 1 && riverMask[idx] === 0) {
+      shadingMask[idx] = 1;
+    }
+  }
+  const localBase = blurHeightFieldMasked(
+    heights,
+    shadingMask,
+    width,
+    height,
+    SHADOW_PROMINENCE_BLUR_PASSES
+  );
   const nudges = new Float32Array(width * height);
+  const prominenceRatioField = new Float32Array(width * height);
+  const peakCandidates = [];
 
-  const lightX = width * SHADOW_LIGHT_MODEL.nx;
-  const lightY = height * SHADOW_LIGHT_MODEL.ny;
-  const lightZ = Math.max(width, height) * SHADOW_LIGHT_MODEL.zScale;
-  const maxAbsNudge = strengthNorm * SHADOW_MAX_NUDGE;
+  let landCount = 0;
+  let slopeSum = 0;
+  let slopeSqSum = 0;
+  for (let idx = 0; idx < slopes.length; idx += 1) {
+    if (shadingMask[idx] === 0) continue;
+    const slope = slopes[idx];
+    slopeSum += slope;
+    slopeSqSum += slope * slope;
+    landCount += 1;
+  }
+
+  const meanSlope = landCount > 0 ? slopeSum / landCount : 0;
+  const variance = landCount > 0 ? Math.max(0, (slopeSqSum / landCount) - (meanSlope * meanSlope)) : 0;
+  const slopeStd = Math.sqrt(variance);
+  const slopeDeadzone = Math.max(0.0025, (meanSlope * 0.9) + (slopeStd * 0.22));
+  const slopeRange = Math.max(0.0075, (meanSlope * 2.25) + (slopeStd * 1.3));
+
+  const directionalCap = SHADOW_DIRECTIONAL_MAX * strengthNorm;
+  const peakCap = SHADOW_PEAK_MAX * strengthNorm;
+  const flatDot = SHADOW_LIGHT_DIRECTION.z;
 
   for (let y = 0; y < height; y += 1) {
     for (let x = 0; x < width; x += 1) {
       const idx = (y * width) + x;
+      if (shadingMask[idx] === 0) continue;
 
       const left = heights[x > 0 ? idx - 1 : idx];
       const right = heights[x < width - 1 ? idx + 1 : idx];
       const up = heights[y > 0 ? idx - width : idx];
       const down = heights[y < height - 1 ? idx + width : idx];
-
       const gx = right - left;
       const gy = down - up;
+      const slopeMag = Math.sqrt((gx * gx) + (gy * gy));
 
-      let nx = -gx * 3.2;
-      let ny = -gy * 3.2;
-      let nz = 1;
-      const nLen = Math.sqrt((nx * nx) + (ny * ny) + (nz * nz));
-      if (nLen > 1e-7) {
-        const invNLen = 1 / nLen;
-        nx *= invNLen;
-        ny *= invNLen;
-        nz *= invNLen;
-      } else {
-        nx = 0;
-        ny = 0;
-        nz = 1;
+      const slopeWeight = smoothstep01((slopeMag - slopeDeadzone) / slopeRange);
+      if (slopeWeight > 0) {
+        let nx = -gx * SHADOW_NORMAL_SCALE;
+        let ny = -gy * SHADOW_NORMAL_SCALE;
+        let nz = 1;
+        const nLen = Math.sqrt((nx * nx) + (ny * ny) + (nz * nz));
+        if (nLen > 1e-6) {
+          const invNLen = 1 / nLen;
+          nx *= invNLen;
+          ny *= invNLen;
+          nz *= invNLen;
+        }
+
+        const ndotl = clamp(
+          (nx * SHADOW_LIGHT_DIRECTION.x) +
+          (ny * SHADOW_LIGHT_DIRECTION.y) +
+          (nz * SHADOW_LIGHT_DIRECTION.z),
+          -1,
+          1
+        );
+        const directional = ndotl - flatDot;
+        const directionalNudge = clamp(
+          directional * slopeWeight * (strengthNorm * 1.6),
+          -directionalCap,
+          directionalCap
+        );
+        nudges[idx] += directionalNudge;
       }
 
-      let lx = lightX - x;
-      let ly = lightY - y;
-      let lz = lightZ;
-      const lLen = Math.sqrt((lx * lx) + (ly * ly) + (lz * lz));
-      if (lLen > 1e-7) {
-        const invLLen = 1 / lLen;
-        lx *= invLLen;
-        ly *= invLLen;
-        lz *= invLLen;
-      } else {
-        lx = -0.58;
-        ly = -0.42;
-        lz = 0.69;
-      }
+      const localHeight = Math.max(0.05, localBase[idx]);
+      const prominenceRatio = Math.max(0, (heights[idx] - localBase[idx]) / localHeight);
+      prominenceRatioField[idx] = prominenceRatio;
+      if (prominenceRatio <= prominenceThreshold) continue;
 
-      const ndotl = clamp((nx * lx) + (ny * ly) + (nz * lz), -1, 1);
-      const relief = heights[idx] - localBase[idx];
-      const reliefSign = relief >= 0 ? 1 : -1;
-      const prominence =
-        clamp(Math.abs(relief) / SHADOW_PROMINENCE_SCALE, 0, 1) * 0.7 +
-        clamp(slopes[idx] * 9, 0, 1) * 0.3;
-      const prominenceWeight = clamp(0.18 + (prominence * 0.82), 0.18, 1);
-
-      const directionality = (ndotl * 0.78) + (reliefSign * 0.22);
-      const nudge = clamp(
-        directionality * prominenceWeight * maxAbsNudge,
-        -maxAbsNudge,
-        maxAbsNudge
+      const prominenceWeight = smoothstep01(
+        (prominenceRatio - prominenceThreshold) / Math.max(1e-5, 1 - prominenceThreshold)
       );
-      nudges[idx] = nudge;
+      const ridgeWeight = smoothstep01(
+        (slopeMag - slopeDeadzone) / Math.max(1e-5, slopeRange)
+      );
+      if (ridgeWeight > 0) {
+        const peakNudge = clamp(
+          prominenceWeight * ridgeWeight * peakLightNorm * strengthNorm * 0.9,
+          0,
+          peakCap
+        );
+        nudges[idx] += peakNudge;
+      }
+
+      peakCandidates.push({
+        idx,
+        x,
+        y,
+        prominenceRatio,
+        prominenceWeight,
+        ridgeWeight,
+      });
     }
   }
 
+  if (peakCandidates.length > 0) {
+    const casters = [];
+    for (let i = 0; i < peakCandidates.length; i += 1) {
+      const candidate = peakCandidates[i];
+      if (!isProminentLocalMaximum(
+        prominenceRatioField,
+        width,
+        height,
+        candidate.x,
+        candidate.y,
+        candidate.idx
+      )) {
+        continue;
+      }
+      if (candidate.ridgeWeight <= 0.08) continue;
+      casters.push(candidate);
+    }
+
+    casters.sort((a, b) => b.prominenceRatio - a.prominenceRatio);
+    if (casters.length > SHADOW_MAX_CASTERS) {
+      casters.length = SHADOW_MAX_CASTERS;
+    }
+
+    applyProminenceCastShadows(
+      nudges,
+      heights,
+      terrainMask,
+      riverMask,
+      width,
+      height,
+      casters,
+      clamp(Number(shadowLengthPx) || 0, 20, 260),
+      strengthNorm
+    );
+  }
+
+  // Keep overall illumination stable: preserve local contrast without globally brightening the map.
+  let nudgeSum = 0;
+  let nudgeCount = 0;
+  for (let idx = 0; idx < nudges.length; idx += 1) {
+    if (shadingMask[idx] === 0) continue;
+    if (Math.abs(nudges[idx]) < 1e-4) continue;
+    nudgeSum += nudges[idx];
+    nudgeCount += 1;
+  }
+  const nudgeMean = nudgeCount > 0 ? (nudgeSum / nudgeCount) : 0;
+  if (nudgeMean > 0.003) {
+    for (let idx = 0; idx < nudges.length; idx += 1) {
+      if (shadingMask[idx] === 0) continue;
+      if (Math.abs(nudges[idx]) < 1e-4) continue;
+      nudges[idx] -= nudgeMean;
+    }
+  }
+
+  const maxAbsNudge = Math.max(SHADOW_CAST_MAX, SHADOW_PEAK_MAX, SHADOW_DIRECTIONAL_MAX) * strengthNorm;
+  for (let idx = 0; idx < nudges.length; idx += 1) {
+    nudges[idx] = clamp(nudges[idx], -maxAbsNudge, maxAbsNudge);
+  }
   return nudges;
 }
 
@@ -1336,16 +1590,37 @@ function updateLabels() {
   shorelineReliefToggle.checked = state.visualEffects.shorelineRelief;
   riverReliefValue.textContent = state.visualEffects.riverRelief ? "On" : "Off";
   riverReliefToggle.checked = state.visualEffects.riverRelief;
-  const shadowStrength = clamp(Math.round(state.visualEffects.shadowStrength), 0, 100);
+  const shadowStrength = clamp(Math.round(state.visualEffects.shadowStrength), 0, SHADOW_STRENGTH_MAX);
+  const shadowLength = clamp(Math.round(state.visualEffects.shadowLength), 20, 260);
+  const peakLightening = clamp(Math.round(state.visualEffects.peakLightening), 0, 100);
+  const prominenceThreshold = clamp(Math.round(state.visualEffects.prominenceThreshold), 1, 35);
   const shadowEnabled = state.visualEffects.shadowEffect;
   shadowEffectValue.textContent = shadowEnabled ? "On" : "Off";
   shadowEffectToggle.checked = shadowEnabled;
   shadowStrengthValue.textContent = `${shadowStrength}%`;
+  shadowLengthValue.textContent = `${shadowLength} px`;
+  peakLighteningValue.textContent = `${peakLightening}%`;
+  prominenceThresholdValue.textContent = `${prominenceThreshold}%`;
   if (Number(shadowStrengthSlider.value) !== shadowStrength) {
     shadowStrengthSlider.value = String(shadowStrength);
   }
+  if (Number(shadowLengthSlider.value) !== shadowLength) {
+    shadowLengthSlider.value = String(shadowLength);
+  }
+  if (Number(peakLighteningSlider.value) !== peakLightening) {
+    peakLighteningSlider.value = String(peakLightening);
+  }
+  if (Number(prominenceThresholdSlider.value) !== prominenceThreshold) {
+    prominenceThresholdSlider.value = String(prominenceThreshold);
+  }
   shadowStrengthSlider.disabled = !shadowEnabled;
+  shadowLengthSlider.disabled = !shadowEnabled;
+  peakLighteningSlider.disabled = !shadowEnabled;
+  prominenceThresholdSlider.disabled = !shadowEnabled;
   shadowStrengthRow.classList.toggle("is-disabled", !shadowEnabled);
+  shadowLengthRow.classList.toggle("is-disabled", !shadowEnabled);
+  peakLighteningRow.classList.toggle("is-disabled", !shadowEnabled);
+  prominenceThresholdRow.classList.toggle("is-disabled", !shadowEnabled);
   seedValue.textContent = `Seed T${state.seed} | R${state.riverSeed}`;
 }
 
@@ -1428,7 +1703,7 @@ function updateStats(stats) {
     const shorelineState = state.visualEffects.shorelineRelief ? "Coast On" : "Coast Off";
     const riverState = state.visualEffects.riverRelief ? "River Tint On" : "River Tint Off";
     const shadowState = state.visualEffects.shadowEffect
-      ? `Shadow ${Math.round(state.visualEffects.shadowStrength)}%`
+      ? `Shadow ${Math.round(state.visualEffects.shadowStrength)}% L${Math.round(state.visualEffects.shadowLength)} P${Math.round(state.visualEffects.peakLightening)} T${Math.round(state.visualEffects.prominenceThreshold)}`
       : "Shadow Off";
     statsValue.textContent = `${baseStats} | ${shorelineState} | ${riverState} | ${shadowState}`;
     return;
@@ -1455,6 +1730,9 @@ function buildTerrainImage(
   riverReliefEnabled,
   shadowEffectEnabled,
   shadowStrengthPercent,
+  shadowLengthPx,
+  peakLighteningPercent,
+  prominenceThresholdPercent,
   animateNewestRiverOnly = false
 ) {
   const smoothnessNorm = clamp(smoothness / 100, 0, 1);
@@ -1512,6 +1790,7 @@ function buildTerrainImage(
   const riverShade = new Float32Array(width * height);
   const riverTintMask = new Uint8Array(width * height);
   const terrainMask = new Uint8Array(width * height); // 0 = sea, 1 = land
+  const terrainClass = new Uint8Array(width * height); // See TERRAIN_CLASS enum.
 
   let waterCount = 0;
   let plainsCount = 0;
@@ -1531,26 +1810,27 @@ function buildTerrainImage(
         [r, g, b] = COLORS.water;
         waterCount += 1;
         terrainMask[idx] = 0;
+        terrainClass[idx] = TERRAIN_CLASS.SEA;
       } else {
         terrainMask[idx] = 1;
         let baseColor;
         if (h >= mountaintopLevel) {
           baseColor = COLORS.mountaintop;
           mountaintopCount += 1;
+          terrainClass[idx] = TERRAIN_CLASS.SNOWCAP;
         } else if (slopes[idx] >= mountainSlopeLevel) {
           baseColor = COLORS.mountain;
           mountainCount += 1;
+          terrainClass[idx] = TERRAIN_CLASS.MOUNTAIN;
         } else {
           baseColor = COLORS.plains;
           plainsCount += 1;
+          terrainClass[idx] = TERRAIN_CLASS.PLAINS;
         }
 
-        const shade = shadowEffectEnabled
-          ? hillshadeFactor(heights, width, height, x, y, 0.22)
-          : 1;
-        r = clamp(baseColor[0] * shade, 0, 255);
-        g = clamp(baseColor[1] * shade, 0, 255);
-        b = clamp(baseColor[2] * shade, 0, 255);
+        r = baseColor[0];
+        g = baseColor[1];
+        b = baseColor[2];
       }
 
       if (riverOutput.riverMask[idx] && h > seaLevel) {
@@ -1562,6 +1842,58 @@ function buildTerrainImage(
       basePixels[p + 1] = g;
       basePixels[p + 2] = b;
       basePixels[p + 3] = 255;
+    }
+  }
+
+  // Dither snowcap borders so transition into surrounding terrain is less abrupt.
+  for (let y = 0; y < height; y += 1) {
+    const y0 = Math.max(0, y - 1);
+    const y1 = Math.min(height - 1, y + 1);
+    for (let x = 0; x < width; x += 1) {
+      const idx = (y * width) + x;
+      if (terrainClass[idx] !== TERRAIN_CLASS.SNOWCAP) continue;
+
+      const x0 = Math.max(0, x - 1);
+      const x1 = Math.min(width - 1, x + 1);
+      let sumR = 0;
+      let sumG = 0;
+      let sumB = 0;
+      let neighborCount = 0;
+
+      for (let yy = y0; yy <= y1; yy += 1) {
+        const row = yy * width;
+        for (let xx = x0; xx <= x1; xx += 1) {
+          if (xx === x && yy === y) continue;
+          const nIdx = row + xx;
+          const nClass = terrainClass[nIdx];
+          let neighborColor = null;
+          if (nClass === TERRAIN_CLASS.PLAINS) {
+            neighborColor = COLORS.plains;
+          } else if (nClass === TERRAIN_CLASS.MOUNTAIN) {
+            neighborColor = COLORS.mountain;
+          }
+          if (!neighborColor) continue;
+
+          sumR += neighborColor[0];
+          sumG += neighborColor[1];
+          sumB += neighborColor[2];
+          neighborCount += 1;
+        }
+      }
+
+      if (neighborCount === 0) continue;
+
+      const noise = hash01FromUint(((seed * 1103515245) ^ idx ^ 0x9e3779b9) >>> 0);
+      if (noise >= SNOWCAP_BORDER_DITHER_FRACTION) continue;
+
+      const avgR = sumR / neighborCount;
+      const avgG = sumG / neighborCount;
+      const avgB = sumB / neighborCount;
+      const blend = SNOWCAP_BORDER_BLEND_RATIO;
+      const p = idx * 4;
+      basePixels[p] = Math.round((basePixels[p] * (1 - blend)) + (avgR * blend));
+      basePixels[p + 1] = Math.round((basePixels[p + 1] * (1 - blend)) + (avgG * blend));
+      basePixels[p + 2] = Math.round((basePixels[p + 2] * (1 - blend)) + (avgB * blend));
     }
   }
 
@@ -1624,7 +1956,20 @@ function buildTerrainImage(
   }
 
   const shadowNudges = shadowEffectEnabled
-    ? buildShadowNudgeField(heights, slopes, width, height, shadowStrengthPercent)
+    ? buildShadowNudgeField(
+      heights,
+      slopes,
+      terrainMask,
+      riverOutput.riverMask,
+      width,
+      height,
+      {
+        strengthPercent: shadowStrengthPercent,
+        shadowLengthPx,
+        peakLighteningPercent,
+        prominenceThresholdPercent,
+      }
+    )
     : null;
 
   if (shadowNudges) {
@@ -1945,6 +2290,9 @@ async function renderTerrain({
     state.visualEffects.riverRelief,
     state.visualEffects.shadowEffect,
     state.visualEffects.shadowStrength,
+    state.visualEffects.shadowLength,
+    state.visualEffects.peakLightening,
+    state.visualEffects.prominenceThreshold,
     animateNewestRiverOnly
   );
 
@@ -2627,7 +2975,32 @@ shadowEffectToggle.addEventListener("input", () => {
 });
 
 shadowStrengthSlider.addEventListener("input", () => {
-  state.visualEffects.shadowStrength = clamp(Number(shadowStrengthSlider.value) || 0, 0, 100);
+  state.visualEffects.shadowStrength = clamp(
+    Number(shadowStrengthSlider.value) || 0,
+    0,
+    SHADOW_STRENGTH_MAX
+  );
+  updateLabels();
+  if (!state.visualEffects.shadowEffect) return;
+  renderTerrain({ newSeed: false, skipRiverAnimation: true });
+});
+
+shadowLengthSlider.addEventListener("input", () => {
+  state.visualEffects.shadowLength = clamp(Number(shadowLengthSlider.value) || 0, 20, 260);
+  updateLabels();
+  if (!state.visualEffects.shadowEffect) return;
+  renderTerrain({ newSeed: false, skipRiverAnimation: true });
+});
+
+peakLighteningSlider.addEventListener("input", () => {
+  state.visualEffects.peakLightening = clamp(Number(peakLighteningSlider.value) || 0, 0, 100);
+  updateLabels();
+  if (!state.visualEffects.shadowEffect) return;
+  renderTerrain({ newSeed: false, skipRiverAnimation: true });
+});
+
+prominenceThresholdSlider.addEventListener("input", () => {
+  state.visualEffects.prominenceThreshold = clamp(Number(prominenceThresholdSlider.value) || 0, 1, 35);
   updateLabels();
   if (!state.visualEffects.shadowEffect) return;
   renderTerrain({ newSeed: false, skipRiverAnimation: true });

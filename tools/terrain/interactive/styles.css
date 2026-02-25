@@ -316,11 +316,20 @@ input[type="range"] {
 }
 
 .shadow-strength-row.is-disabled,
-.shadow-strength-slider:disabled {
+.shadow-length-row.is-disabled,
+.peak-lightening-row.is-disabled,
+.prominence-threshold-row.is-disabled,
+.shadow-strength-slider:disabled,
+.shadow-length-slider:disabled,
+.peak-lightening-slider:disabled,
+.prominence-threshold-slider:disabled {
   opacity: 0.5;
 }
 
-.shadow-strength-slider:disabled {
+.shadow-strength-slider:disabled,
+.shadow-length-slider:disabled,
+.peak-lightening-slider:disabled,
+.prominence-threshold-slider:disabled {
   cursor: not-allowed;
 }
 

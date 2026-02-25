@@ -148,12 +148,54 @@
           </label>
           <input
             id="shadow-strength-slider"
-            class="shadow-strength-slider"
+            class="shadow-strength-slider effect-controlled-slider"
+            type="range"
+            min="0"
+            max="400"
+            step="1"
+            value="22"
+          />
+
+          <label id="shadow-length-row" class="control-row shadow-length-row" for="shadow-length-slider">
+            <span>Shadow Length</span>
+            <strong id="shadow-length-value">120 px</strong>
+          </label>
+          <input
+            id="shadow-length-slider"
+            class="shadow-length-slider effect-controlled-slider"
+            type="range"
+            min="20"
+            max="260"
+            step="1"
+            value="120"
+          />
+
+          <label id="peak-lightening-row" class="control-row peak-lightening-row" for="peak-lightening-slider">
+            <span>Peak Lightening</span>
+            <strong id="peak-lightening-value">35%</strong>
+          </label>
+          <input
+            id="peak-lightening-slider"
+            class="peak-lightening-slider effect-controlled-slider"
             type="range"
             min="0"
             max="100"
             step="1"
-            value="22"
+            value="35"
+          />
+
+          <label id="prominence-threshold-row" class="control-row prominence-threshold-row" for="prominence-threshold-slider">
+            <span>Prominence Threshold</span>
+            <strong id="prominence-threshold-value">8%</strong>
+          </label>
+          <input
+            id="prominence-threshold-slider"
+            class="prominence-threshold-slider effect-controlled-slider"
+            type="range"
+            min="1"
+            max="35"
+            step="1"
+            value="8"
           />
         </div>
 

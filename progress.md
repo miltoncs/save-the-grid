@@ -1922,3 +1922,272 @@ Original prompt: Develop the game MVP based on all provided documentation
 - Validation:
   - `node --check tools/terrain/interactive/app.js` passed.
   - Playwright smoke capture: `output/web-game/terrain-midpoint-normalize-check/shot-0.png` renders successfully.
+
+## 2026-02-24 (Bottom palette: added Powerlines + Reroute)
+- Added two new bottom-dock tool buttons:
+  - `Powerlines` (`data-tool="line"`, test id `tool-powerlines`)
+  - `Reroute` (`data-tool="reroute"`, test id `tool-reroute`)
+
+### Wiring
+- `src/game.js`
+  - Added button markup in `buildRunScreenMarkup()`.
+  - Added click listeners for `[data-tool]` in `attachRunUiListeners()`.
+    - `line` -> `TOOL_LINE`
+    - `reroute` -> `TOOL_REROUTE`
+  - Added active-state handling for `.tool-btn` in `updateRunHud()` so selected tool is highlighted.
+
+### Visuals
+- `src/styles/run.css`
+  - Added simple glyph styles:
+    - `.asset-icon-glyph-powerline`
+    - `.asset-icon-glyph-reroute`
+
+### Validation
+- Syntax:
+  - `node --check src/game.js`
+- Playwright checks/screenshots:
+  - default dock: `output/web-game/bottom-palette-tools/default.png`
+  - powerlines active: `output/web-game/bottom-palette-tools/powerlines-active.png`
+  - reroute active: `output/web-game/bottom-palette-tools/reroute-active.png`
+
+## 2026-02-24 (Allow long-distance lines to connect batteries)
+- Updated long-distance endpoint validation so storage/battery assets can host line endpoints.
+
+### Code
+- `/Users/mstafford/Projects/local/save-the-grid/src/game.js`
+  - `canEndpointHostLine(region)` now returns true when endpoint has:
+    - plant OR substation OR storage.
+  - Updated line-tool validation alerts to reflect battery support.
+
+### Validation
+- Syntax:
+  - `node --check src/game.js`
+- End-to-end behavior check (headless Playwright script):
+  - Built storage on `node-1` and substation on `node-2`.
+  - Selected `Powerlines` tool and connected `node-1 -> node-2`.
+  - Verified alert: `Line commissioned: Grid Point 1 to Grid Point 2.`
+  - Verified line exists in runtime text state (`links` includes `a:"node-1", b:"node-2"`).
+  - Screenshot: `/Users/mstafford/Projects/local/save-the-grid/output/web-game/storage-line-connect/debug-flow.png`
+
+## 2026-02-24 (Build once then auto-return to pan)
+- Updated build click behavior so successful placement is single-shot.
+
+### Behavior
+- If player selects a build icon and clicks the map:
+  - one infrastructure build is placed,
+  - tool automatically returns to `pan` mode.
+- A second click on map now does nothing unless player explicitly selects a build tool again.
+- If build attempt fails (invalid target, out of budget, etc.), tool remains in build mode.
+
+### Code
+- `/Users/mstafford/Projects/local/save-the-grid/src/game.js`
+  - `handlePrimaryClick()` now switches `this.tool = TOOL_PAN` when `handleBuild(...)` returns a successful target.
+
+### Validation
+- Syntax:
+  - `node --check src/game.js`
+- End-to-end browser check:
+  - Selected substation build tool.
+  - Clicked map twice at same location.
+  - Verified runtime state:
+    - `selectedTool: "pan"`
+    - `infraCount: 1`
+    - `totalSubstations: 1`
+  - Screenshot: `/Users/mstafford/Projects/local/save-the-grid/output/web-game/build-once-then-pan/verify.png`
+
+## 2026-02-24 (Shadow Model Refinement: Directional + Prominence)
+- Refined terrain shadow model in `tools/terrain/interactive/app.js` to match the requested behavior:
+  - Added land-only prominence baseline via new helper `blurHeightFieldMasked(...)`.
+  - Shadow prominence now ignores sea/river pixels when building local baseline, preventing coast-adjacent false prominence.
+  - Tightened slope deadzone/range calibration so flat and mostly-flat land is minimally affected.
+  - Peak lightening now applies only to genuinely prominent + ridge-like terrain (no broad plateau brightening).
+  - Shadow casters are filtered to prominent local maxima with ridge weight.
+  - Added stabilization pass to remove positive illumination bias from non-flat shaded land (prevents whole-map brightening drift).
+- Existing controls introduced in this pass remain wired and active in Visual Effects mode:
+  - `Shadow Length`
+  - `Peak Lightening`
+  - `Prominence Threshold`
+
+### Validation
+- Syntax:
+  - `node --check tools/terrain/interactive/app.js`
+- Required web-game Playwright loop (develop-web-game skill):
+  - `node /Users/mstafford/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js --url http://127.0.0.1:5173/tools/terrain/interactive/ --actions-file /Users/mstafford/.codex/skills/develop-web-game/references/action_payloads.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game/terrain-shadow-debug-postpatch`
+- Focused visual verification screenshots:
+  - `output/web-game/terrain-shadow-debug-postpatch/full-shadow-off.png`
+  - `output/web-game/terrain-shadow-debug-postpatch/full-shadow-on.png`
+- Pixel/luma sanity check in-browser (same seed, relief toggles off):
+  - Land luma delta (`shadow on - shadow off`): `-0.7399`
+  - Water luma delta: `0`
+  - Confirms no global brightening drift and no water shading side effects.
+
+## 2026-02-24 (Timed demolition: 20s with radial progress ring)
+- Demolition is now asynchronous and takes 20 simulation seconds to complete.
+
+### Gameplay behavior
+- Confirming demolition no longer removes asset immediately.
+- A pending demolition job starts and completes after `20s`.
+- On completion:
+  - one target asset is removed,
+  - refund is credited,
+  - completion alert/timeline entry is emitted.
+- Duplicate demolition requests for the same asset type at the same point are blocked while one is in progress.
+
+### Visualization
+- Added a small red radial progress ring around the target asset icon while demolition is pending.
+- Ring shrinks over time (full circle -> empty) and disappears on completion.
+
+### Code
+- `/Users/mstafford/Projects/local/save-the-grid/src/game.js`
+  - Added `DEMOLITION_DURATION_SECONDS = 20`.
+  - Added state queue: `state.pendingDemolitions` (fresh + rehydrate-safe).
+  - `handleDemolish(...)` now schedules demolition instead of instant removal.
+  - Added `findPendingDemolition(...)` and `updatePendingDemolitions()`.
+  - Hooked `updatePendingDemolitions()` into `stepSimulation()`.
+  - Added `drawDemolitionProgressRing(...)` and integrated into `drawRegionAssets(...)`.
+  - Updated demolish confirm copy to indicate 20s completion + deferred refund.
+  - Exposed `pendingDemolitions` in `render_game_to_text` payload for deterministic testing.
+
+### Validation
+- Syntax:
+  - `node --check src/game.js`
+- End-to-end timed check in tutorial mode (no defeat interruption):
+  - Build substation, request demolition.
+  - Confirm pending queue exists with ~20s remaining.
+  - Advance time to near completion -> ring nearly gone.
+  - Advance past completion -> asset removed, pending queue empty, demolition alert shown.
+- Screenshots:
+  - `/Users/mstafford/Projects/local/save-the-grid/output/web-game/demolition-timer/tutorial-pending.png`
+  - `/Users/mstafford/Projects/local/save-the-grid/output/web-game/demolition-timer/tutorial-near-complete.png`
+  - `/Users/mstafford/Projects/local/save-the-grid/output/web-game/demolition-timer/tutorial-complete.png`
+
+## 2026-02-24 (Shadow Amount >100%)
+- Extended `Shadow Amount` slider max in `tools/terrain/interactive/index.html` from `100` to `200`.
+- Removed 100% hard cap in `tools/terrain/interactive/app.js`:
+  - Added `SHADOW_STRENGTH_MAX` (read from slider max).
+  - `state.visualEffects.shadowStrength` now clamps to `SHADOW_STRENGTH_MAX`.
+  - `buildShadowNudgeField(...)` strength normalization now supports values above `1.0` up to slider max.
+  - UI label/update and input listener clamps now use `SHADOW_STRENGTH_MAX`.
+- Validation:
+  - `node --check tools/terrain/interactive/app.js`
+  - Develop-web-game Playwright loop run completed.
+  - Targeted browser check confirms `#shadow-strength-slider.max = 200` and visible value `150%` with no console/page errors.
+
+## 2026-02-24 (Demolition refunds removed)
+- Removed demolition refunds entirely.
+
+### Behavior
+- Demolishing buildings now yields **no budget refund**.
+- Confirmation copy explicitly states: `No refund on demolition`.
+- Pending demolition completion removes the asset without any budget credit.
+
+### Code
+- `/Users/mstafford/Projects/local/save-the-grid/src/game.js`
+  - `getDemolishCandidate(...)` now returns `refund: 0`.
+  - Pending demolition enqueue stores `refund: 0`.
+  - Rehydration normalizes any legacy pending entries to `refund: 0`.
+  - `updatePendingDemolitions()` no longer adds refund to budget and no longer logs refund text.
+  - Demolish confirmation popover text updated to no-refund wording.
+
+### Validation
+- Syntax:
+  - `node --check src/game.js`
+- Timed demolition verification (tutorial mode):
+  - Queue starts near 20s remaining.
+  - Completes after timer with pending queue cleared.
+  - Budget delta across completion window was negative (no refund bump):
+    - `budgetNearDone: 4691.44`
+    - `budgetAfterComplete: 4675.53`
+    - `budgetDeltaAfterComplete: -15.91`
+- Screenshot:
+  - `/Users/mstafford/Projects/local/save-the-grid/output/web-game/demolition-no-refund/complete.png`
+
+## 2026-02-24 (Shadow Amount range expansion, second pass)
+- Increased Visual Effects `Shadow Amount` slider max from `200` to `400` in `tools/terrain/interactive/index.html`.
+- Since `app.js` now derives `SHADOW_STRENGTH_MAX` from slider max, no further JS changes were needed.
+- Validation:
+  - Develop-web-game Playwright loop run completed.
+  - Targeted browser check confirms `#shadow-strength-slider.max = 400` and live value display supports `320%` with no console/page errors.
+
+## 2026-02-24 (Snowcap dim + border transition)
+- Updated snowcap base color in `tools/terrain/interactive/app.js`:
+  - `COLORS.mountaintop` from `[231, 233, 229]` to `[224, 226, 222]` (dimmer off-white).
+- Added deterministic snowcap-edge transition pass in `buildTerrainImage(...)`:
+  - Introduced terrain classes (`SEA`, `PLAINS`, `MOUNTAIN`, `SNOWCAP`) for per-pixel neighborhood analysis.
+  - Added `hash01FromUint(...)` and a seeded dither selection for reproducible randomness.
+  - For snowcap pixels that border non-snow land, ~50% are selected and blended to:
+    - `50% snowcap color + 50% average neighboring base terrain color`.
+  - Transition is applied before shoreline/rivers/shadow post effects.
+- Validation:
+  - `node --check tools/terrain/interactive/app.js`
+  - Develop-web-game Playwright loop run completed.
+  - Visual screenshot check: `output/web-game/terrain-snowcap-dither/full-after.png`.
+
+## 2026-02-25 (No-demolition-refund verification)
+- Confirmed demolition refunds are disabled in runtime flow:
+  - `getDemolishCandidate(...)` now returns `refund: 0`.
+  - Pending demolition queue stores `refund: 0`.
+  - `updatePendingDemolitions()` no longer credits budget when demolition completes.
+  - Demolition confirm copy states: `Completes in 20s. No refund on demolition.`
+- Validation performed:
+  - `node --check src/game.js` passed.
+  - Playwright smoke via `develop-web-game` client completed (`output/web-game/no-refund-smoke/shot-0.png`).
+  - Deterministic tutorial demolition run confirmed no refund is applied at completion:
+    - `pendingRefund: 0`
+    - `pendingLenStart: 1 -> pendingLenAfter: 0`
+    - budget changed only from simulation economics over time (no positive demolition credit).
+
+### TODO / Follow-up
+- If desired, also remove line-removal refund in `handleLineBuild` to enforce a strict global no-refund policy (currently user request was interpreted as building demolition only).
+
+## 2026-02-25 (Demolish confirmation wording fix)
+- Fixed demolish confirmation copy to remove location wording and generic asset naming.
+- Added demolition display labels:
+  - Plant labels now resolve by plant type: `Wind Powerplant`, `Solar Powerplant`, `Natural Gas Powerplant`.
+  - Non-plant labels: `Substation`, `Battery`.
+- Updated confirmation dialog text from `Demolish <asset> at <region>?` to `Demolish <asset>?` so it no longer includes `Grid Point`.
+- Updated demolition-start messages to use the same typed labels instead of `Generation Plant`.
+- Validation:
+  - `node --check src/game.js` passed.
+  - Playwright check confirmed popover text:
+    - `Demolish Substation?`
+    - `Demolish Natural Gas Powerplant?`
+    - no `Grid Point` or `Generation Plant` present.
+  - Screenshot: `output/web-game/demolish-copy-fix.png`.
+
+## 2026-02-25 (HUD summary simplification)
+- Updated in-round left summary panel to match requested fields and wording:
+  - `Budget` -> `Money`
+  - `Supply` -> `Power Supply` (shown as generated MW)
+  - `Unmet` -> `Power Demand` (shown as total demanded MW)
+  - Kept only: Money, Power Supply, Power Demand, Reliability, Score.
+  - Removed: Season, Lawsuits, Zoom, Pan, Resources, Towns, Substation Radius.
+- Removed per-row boxed containers in the left summary panel; rows now render as plain lines inside the panel.
+- Added runtime tracking `totalGeneration` and wired it into HUD updates for `Power Supply`.
+- Validation:
+  - `node --check src/game.js` and `node --check src/main.js` passed.
+  - Playwright/DOM verification:
+    - labels exactly `[Money, Power Supply, Power Demand, Reliability, Score]`
+    - removed HUD nodes no longer present.
+  - Screenshot: `output/web-game/hud-left-panel-slim/fullpage.png`.
+
+## 2026-02-25 (Tutorial completion now explicit exit)
+- Changed tutorial completion behavior so final step no longer auto-exits the run.
+  - In `completeTutorialStep()`, replaced immediate `finishRun(...)` with:
+    - tutorial completion alert
+    - timeline entry
+    - HUD refresh
+- Added in-run `Exit Tutorial` button in top-right controls:
+  - Markup id: `#run-exit-tutorial-btn` (hidden by default).
+  - HUD now receives `tutorialCompleted` and toggles button visibility.
+  - Button click explicitly calls `finishRun("victory", "Tutorial complete: core controls verified.")` only when tutorial is completed.
+- End-to-end validation (Playwright):
+  - Completed all 8 tutorial steps programmatically.
+  - Confirmed after step 8:
+    - run remains active (`#game-canvas` still present)
+    - end screen is not shown automatically
+    - `Exit Tutorial` button is visible
+  - Confirmed clicking `Exit Tutorial` opens end screen with reason: `Tutorial complete: core controls verified.`
+  - Screenshots:
+    - `output/web-game/tutorial-exit-button/before-exit.png`
+    - `output/web-game/tutorial-exit-button/after-exit.png`
