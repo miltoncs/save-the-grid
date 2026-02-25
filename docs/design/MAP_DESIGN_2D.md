@@ -33,8 +33,8 @@ Layers:
 
 1. Game board layer (always visible): land/water plus land type (mountain, desert, plains).
 2. Civilization layer: towns shown as point icons.
-3. powergrid asset layer: power plants and substations shown as point icons.
-4. Player-built `Line` layer: manual long-distance power lines between valid plant/substation endpoint pairs.
+3. powergrid asset layer: powerplants and substations shown as point icons.
+4. Player-built `Line` layer: manual long-distance power lines between valid powerplant/substation endpoint pairs.
 5. Resource layer: natural resource zones, hidden by default and revealed while holding `R`.
 6. Alerts/objective layer: incidents, demand deficits, and mission markers.
 
@@ -111,16 +111,16 @@ Terrain effects should be visible and explainable in tooltips.
 
 ## 5. Infrastructure Placement and Line Rules
 
-1. Power plants and substations place directly on valid map points.
-2. Plant build options are fixed to `Wind`, `Solar`, and `Natural Gas`.
+1. Powerplants and substations place directly on valid map points.
+2. Powerplant build options are fixed to `Wind`, `Solar`, and `Natural Gas`.
 3. In-game `Line` tool creates manual long-distance links between allowed endpoint pairs:
-   - plant to plant,
-   - plant to substation,
+   - powerplant to powerplant,
+   - powerplant to substation,
    - substation to substation,
-   - substation to plant.
-4. Power plants cannot be built within one plant diameter of another power plant.
-5. Storage assets attach to plant/substation clusters.
-6. Demolishing a power plant takes 20 seconds and then removes it completely with no visual artifact left on the map.
+   - substation to powerplant.
+4. Powerplants cannot be built within one powerplant diameter of another powerplant.
+5. Storage assets attach to powerplant/substation clusters.
+6. Demolishing a powerplant takes 20 seconds and then removes it completely with no visual artifact left on the map.
 
 Placement preview should always show:
 
@@ -128,7 +128,7 @@ Placement preview should always show:
 2. Capacity change.
 3. Local reliability impact.
 4. For substations: service radius and expected town coverage count.
-5. For power plants: exclusion-zone warning when the one-diameter spacing rule blocks placement.
+5. For powerplants: exclusion-zone warning when the one-powerplant-diameter spacing rule blocks placement.
 
 ## 6. Routing and Flow Visualization
 
@@ -158,13 +158,13 @@ Different zoom levels should present different levels of detail, similar to Goog
 
 Point icon scale target:
 
-- Standard map zoom uses small point icons around 20x20 px for towns, plants, and substations.
+- Standard map zoom uses small point icons around 20x20 px for towns, powerplants, and substations.
 
 1. Far zoom (national view):
    - Show game-board terrain classes, town clusters, prominent player-built `Line` routes, high-level deficits, active critical alerts, and current season state.
    - Collapse point icons into minimal markers to avoid clutter.
 2. Mid zoom (network view):
-   - Show town, plant, and substation point icons at standard size.
+   - Show town, powerplant, and substation point icons at standard size.
    - Show manual `Line` stress states, major incidents, population pressure hotspots, and climate-pressure hotspots.
 3. Near zoom (local view):
    - Show placement points, placement previews, local capacity stats, fine routing details, substation radius rings, and town growth trend markers.

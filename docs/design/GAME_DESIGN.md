@@ -38,9 +38,9 @@ The player is the Energy Directory for a fictional country. In real time, they b
 18. As conditions improve, new towns can emerge on livable powered terrain during a run.
 19. Large player-built power routing is handled by a single tool named `Line`.
 20. Substations power all towns within radius and automatically generate short orthogonal town-connection lines.
-21. v1 power plant types are fixed: `Wind`, `Solar`, and `Natural Gas`.
-22. A power plant cannot be built within one plant diameter of another power plant.
-23. Demolishing a power plant takes 20 seconds and removes it fully with no persistent visual artifact.
+21. v1 powerplant types are fixed: `Wind`, `Solar`, and `Natural Gas`.
+22. A powerplant cannot be built within one powerplant diameter of another powerplant.
+23. Demolishing a powerplant takes 20 seconds and removes it fully with no persistent visual artifact.
 
 ## 4. Player Fantasy and Role
 
@@ -49,8 +49,8 @@ You are not an engineer placing wires in a sandbox. You are a national decision-
 ## 5. Core Gameplay Loop
 
 1. Start from a mostly terrain-first map with a few seeded towns.
-2. Build power plants and substations to create supply and local coverage.
-3. Build manual `Lines` to connect plants and substations across distance (`plant->plant`, `plant->substation`, `substation->substation`, `substation->plant`).
+2. Build powerplants and substations to create supply and local coverage.
+3. Build manual `Lines` to connect powerplants and substations across distance (`powerplant->powerplant`, `powerplant->substation`, `substation->substation`, `substation->powerplant`).
 4. Stabilize service quality so additional towns can emerge.
 5. Demolish or replace aging or inefficient assets.
 6. Absorb random pressures (weather, fuel shocks, policy changes).
@@ -101,7 +101,7 @@ The primary strategic question is always the same: what to build, when to build 
 ### 8.1 Map and Spatial Layout
 
 - Country map represented as a 2D overhead layered board/network view.
-- Layer model includes: base game board (land/water/land type), civilization town points, infrastructure icons (plants, substations, storage), player-built `Line` network, and resource-zone overlays.
+- Layer model includes: base game board (land/water/land type), civilization town points, infrastructure icons (powerplants, substations, storage), player-built `Line` network, and resource-zone overlays.
 - There are no authored region service hubs; towns are placed directly on the board as first-class entities.
 - There are no pre-authored major transmission corridors in gameplay.
 - Maps are handcrafted in v1 to ensure balanced and readable scenarios.
@@ -117,17 +117,17 @@ The primary strategic question is always the same: what to build, when to build 
 
 ### 8.2 Infrastructure
 
-- Generation assets are fixed to three power plant types: `Wind`, `Solar`, and `Natural Gas`.
+- Generation assets are fixed to three powerplant types: `Wind`, `Solar`, and `Natural Gas`.
 - powergrid assets: substations, `Lines`, storage.
-- Power plants cannot be placed within one plant diameter of another power plant.
+- Powerplants cannot be placed within one powerplant diameter of another powerplant.
 - `Line` connections can be built between:
-  - power plant to power plant,
-  - power plant to substation,
+  - powerplant to powerplant,
+  - powerplant to substation,
   - substation to substation,
-  - substation to power plant.
+  - substation to powerplant.
 - Substations provide circular service radius for nearby towns.
 - When a town is in range of a powered substation, a short orthogonal service line is auto-generated between them.
-- Demolishing a power plant starts a 20-second decommission timer and then removes the plant completely with no residue.
+- Demolishing a powerplant starts a 20-second decommission timer and then removes the powerplant completely with no residue.
 - Exact build costs and generation values are intentionally TBD for tuning.
 - Actions: build, demolish, reroute priorities, and `Line` routing.
 
@@ -190,9 +190,9 @@ The primary strategic question is always the same: what to build, when to build 
 To keep the game shallow and fast:
 
 - Include:
-  - Plant output, demand growth, reliability pressure, basic operating costs.
+  - Powerplant output, demand growth, reliability pressure, basic operating costs.
   - Substation coverage radius and auto-generated orthogonal town links.
-  - Manual `Line` routing between plants and substations.
+  - Manual `Line` routing between powerplants and substations.
   - Population growth pressure as a simple demand multiplier once onboarding is complete.
   - Seasonal and local-climate demand modifiers as simple, visible multipliers once onboarding is complete.
   - Event-driven modifiers (for example heat wave demand spikes).

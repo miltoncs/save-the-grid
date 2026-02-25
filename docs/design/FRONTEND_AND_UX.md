@@ -139,10 +139,10 @@ Let players tune scenario pressure for practice or challenge runs while preservi
 
 1. Select tool.
 2. Hover map to preview impact (cost, capacity, risk).
-3. If `Plant` is selected, choose one type: `Wind`, `Solar`, or `Natural Gas`.
-4. Place plants/substations or draw manual `Line` paths (`plant<->plant`, `plant<->substation`, `substation<->substation`) based on current demand and terrain.
-5. Plant placement previews must show spacing violations when within one plant diameter of another power plant.
-6. Plant demolish actions must show a 20-second decommission timer before full removal.
+3. If `Powerplant` is selected, choose one type: `Wind`, `Solar`, or `Natural Gas`.
+4. Place powerplants/substations or draw manual `Line` paths (`powerplant<->powerplant`, `powerplant<->substation`, `substation<->substation`) based on current demand and terrain.
+5. Powerplant placement previews must show spacing violations when within one powerplant diameter of another powerplant.
+6. Powerplant demolish actions must show a 20-second decommission timer before full removal.
 7. Commit action with one click/tap.
 8. Receive immediate visual and metric feedback.
 
@@ -150,7 +150,7 @@ No region-unlock or corridor-purchase action should exist in this flow.
 
 ### Layer Visibility Controls
 
-1. Base board, town points, and infrastructure icons (plants, substations, storage) are visible by default.
+1. Base board, town points, and infrastructure icons (powerplants, substations, storage) are visible by default.
 2. Natural resource zones are hidden by default to reduce map noise.
 3. Hold `R` to reveal resource zones while planning builds.
 4. Releasing `R` hides resource zones immediately.

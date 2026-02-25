@@ -1,0 +1,18 @@
+{
+  "contentVersion": 1,
+  "source": "src/data.js::CAMPAIGN_MISSIONS",
+  "missionIds": [
+    "m01-cold-start",
+    "m02-rolling-summer",
+    "m03-fuel-shock",
+    "m04-coastal-storm",
+    "m05-industrial-push",
+    "m06-dry-season",
+    "m07-night-surge",
+    "m08-election-quarter",
+    "m09-grid-retrofit",
+    "m10-cross-country-link",
+    "m11-green-mandate",
+    "m12-national-peak"
+  ]
+}

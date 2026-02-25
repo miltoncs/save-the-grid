@@ -6,8 +6,8 @@ Browser-native strategy game prototype focused on real-time power-grid operation
 
 - `src/`: gameplay runtime, UI flow, and styles (`src/README.md`).
 - `assets/`: runtime-served static files (icons, terrain images).
-- `data/`: runtime JSON/content contracts (maps, metadata).
-- `tools/`: generation tools and interactive authoring utilities.
+- `data/`: runtime JSON/content contracts (maps, metadata, mission indexes).
+- `tools/`: generation tools, interactive authoring utilities, and non-runtime preview pages.
 - `docs/`: design, implementation, and visual mockup documentation only.
 - `bot-player/`: Playwright bot runner and smoke scenarios.
 
@@ -25,3 +25,4 @@ Then open [http://127.0.0.1:5173](http://127.0.0.1:5173).
 - Keep authored runtime content in `data/`.
 - Keep runtime-consumed binaries in `assets/`.
 - Keep generation and migration scripts in `tools/`.
+- Keep tooling-only preview pages in `tools/previews/` (not `assets/`).

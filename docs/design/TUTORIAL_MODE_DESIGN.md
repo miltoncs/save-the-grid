@@ -40,7 +40,7 @@ Tutorial is step-based. Only one step is "current" at a time.
 
 Required step set (covers all core mechanics):
 
-1. Build a `Wind`, `Solar`, or `Natural Gas` plant on an open map point.
+1. Build a `Wind`, `Solar`, or `Natural Gas` powerplant on an open map point.
 2. Build a `Substation` on an open map point.
 3. Build a manual `Line` between valid infrastructure endpoints.
 4. Achieve active service to at least one town (covered and receiving power).
@@ -54,8 +54,8 @@ Completion policy:
 1. Steps complete as soon as their condition is observed.
 2. Completion immediately advances to the next task.
 3. Final step completion immediately triggers tutorial victory.
-4. The one-diameter plant spacing rule is active in tutorial and should be introduced with placement feedback text.
-5. If a plant is selected for demolish, completion triggers only after the full 20-second decommission timer.
+4. The one-powerplant-diameter spacing rule is active in tutorial and should be introduced with placement feedback text.
+5. If a powerplant is selected for demolish, completion triggers only after the full 20-second decommission timer.
 
 ## 5. Guidance UX
 
@@ -68,7 +68,7 @@ Guidance behavior:
 2. Alert rail can echo "step complete" and "next step" messages.
 3. Instructions must reference live controls exactly as labeled in HUD:
    - Build / Demolish / Reroute / Line,
-   - Plant (1), Sub (2), Storage (3),
+   - Powerplant (1), Sub (2), Storage (3),
    - `R` for resources,
    - `Space` for pause.
 

@@ -1,7 +1,7 @@
 # Save the powergrid Architecture
 
 Status: Draft v0.3
-Last updated: 2026-02-21
+Last updated: 2026-02-25
 
 ## 1. Purpose and Scope
 
@@ -64,7 +64,7 @@ Scope:
 
 1. `src/main.js` resolves `#app`.
 2. `src/main.js` calls `preloadRuntimeMapContent()` from `src/data.js`.
-3. `SaveTheGridApp` is created from `src/game.js`.
+3. `SaveTheGridApp` is imported via `src/game.js` (barrel) and instantiated.
 
 ### 4.2 Source modules
 
@@ -72,19 +72,29 @@ Scope:
   - bootstrap entrypoint.
   - preloads runtime map JSON before app start.
 
-- `src/data.js`
+- `src/data.content.js`
   - authored constants and presets (standard/custom/campaign, alerts, storage keys).
+
+- `src/data.loader.js`
   - runtime map preload adapter (`/data/maps/index.json` + selected `*.map.json`).
   - map-document normalization into `BASE_MAP`.
+
+- `src/data.js`
+  - barrel export for content + loader entrypoint.
 
 - `src/game/core.js`
   - shared constants and utility helpers.
   - run-config builders for standard/campaign/custom/tutorial.
   - normalization helpers and storage helpers.
 
-- `src/game.js`
+- `src/game/runtime.js`
   - `GameRuntime`: authoritative in-run simulation + canvas rendering + input handling.
+
+- `src/game/app.js`
   - `SaveTheGridApp`: app-shell screens, flow transitions, HUD binding, run lifecycle.
+
+- `src/game.js`
+  - compatibility barrel export for runtime/app entry classes.
 
 - `src/styles.css` + `src/styles/*.css`
   - segmented presentation layers (`base`, `setup`, `run`, `end`, `responsive`).
@@ -112,9 +122,13 @@ Scope:
 src/
   main.js
   data.js
+  data.content.js
+  data.loader.js
   game.js
   game/
+    app.js
     core.js
+    runtime.js
   styles.css
   styles/
     base.css
@@ -128,12 +142,15 @@ assets/
   maps/
 
 data/
+  missions/
+    campaign-missions.index.json
   maps/
     index.json
     *.map.json
     terrain/
 
 tools/
+  previews/
   terrain/
     generate_terrain_map_png.py
     generate_mission_terrain_maps.py
@@ -209,7 +226,7 @@ Per simulation tick:
   - authored map documents (`world`, `terrainMap`, `towns`, optional `links`, optional `resourceZones`).
 
 - `data/maps/terrain/*.metadata.json`
-  - terrain metadata with optional `resource_zones` polygons.
+  - terrain metadata with optional `resourceZones` polygons (legacy `resource_zones` accepted).
 
 ### 7.2 Loading path
 
@@ -217,7 +234,7 @@ Per simulation tick:
 2. Selected map file is fetched and normalized.
 3. `BASE_MAP` is hydrated before app boot.
 4. Runtime then loads terrain image and metadata.
-5. Resource zones are resolved from metadata when available, else map document fallback.
+5. Resource zones are resolved from metadata (`resourceZones`) with legacy fallback support.
 
 ### 7.3 Validation status
 
@@ -292,4 +309,4 @@ Preserved constraints for future expansion:
 1. Introduce seeded RNG for reproducible run replay.
 2. Decide whether to add schema validation library for map/content contracts.
 3. Define lightweight CI gates for Playwright smoke scenarios.
-4. Decide whether to split `src/game.js` further as runtime complexity grows.
+4. Decide whether to further split `src/game/runtime.js` by simulation/render/input concerns.

@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
 import sys
 import zlib
 from pathlib import Path
@@ -16,24 +15,19 @@ if str(ROOT) not in sys.path:
 
 from submodules.topology_mapgen import TerrainConfig, generate_terrain, save_png
 
-MISSION_SOURCE = ROOT / "src/data.js"
+MISSION_INDEX = ROOT / "data/missions/campaign-missions.index.json"
 DEFAULT_OUTPUT_DIR = ROOT / "assets/maps/terrain/mission-terrain-maps"
+DEFAULT_MANIFEST_PATH = ROOT / "data/maps/terrain/mission-terrain-maps.index.json"
 
 
 def parse_campaign_mission_ids(path: Path) -> list[str]:
-    text = path.read_text(encoding="utf-8")
-    block_match = re.search(
-        r"export\s+const\s+CAMPAIGN_MISSIONS\s*=\s*\[(.*?)\n\];",
-        text,
-        re.DOTALL,
-    )
-    if not block_match:
-        raise RuntimeError("Could not find CAMPAIGN_MISSIONS block in src/data.js")
-
-    block = block_match.group(1)
-    ids = re.findall(r"\bid:\s*\"([^\"]+)\"", block)
+    document = json.loads(path.read_text(encoding="utf-8"))
+    ids = document.get("missionIds")
+    if not isinstance(ids, list):
+        raise RuntimeError(f"No missionIds array found in {path}")
+    ids = [str(mid).strip() for mid in ids if str(mid).strip()]
     if not ids:
-        raise RuntimeError("No mission ids found in CAMPAIGN_MISSIONS block")
+        raise RuntimeError("No mission ids found in mission index")
     return ids
 
 
@@ -49,7 +43,13 @@ def parse_args() -> argparse.Namespace:
         "--output-dir",
         type=Path,
         default=DEFAULT_OUTPUT_DIR,
-        help="Directory where mission map PNGs and index.json are written",
+        help="Directory where mission map PNGs are written",
+    )
+    parser.add_argument(
+        "--manifest",
+        type=Path,
+        default=DEFAULT_MANIFEST_PATH,
+        help="Manifest JSON path to write mission generation stats",
     )
     parser.add_argument("--width", type=int, default=1800, help="Map width in pixels")
     parser.add_argument("--height", type=int, default=1080, help="Map height in pixels")
@@ -94,7 +94,7 @@ def display_path(path: Path) -> str:
 def main() -> None:
     args = parse_args()
 
-    mission_ids = parse_campaign_mission_ids(MISSION_SOURCE)
+    mission_ids = parse_campaign_mission_ids(MISSION_INDEX)
 
     if args.mission:
         requested = set(args.mission)
@@ -111,10 +111,13 @@ def main() -> None:
 
     output_dir = resolve_path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
+    manifest_path = resolve_path(args.manifest)
+    manifest_path.parent.mkdir(parents=True, exist_ok=True)
 
     manifest = {
         "generator": "submodules/topology_mapgen",
         "source_script": "tools/terrain/generate_mission_terrain_maps.py",
+        "mission_index": display_path(MISSION_INDEX),
         "output_directory": display_path(output_dir),
         "image": {
             "width": args.width,
@@ -147,9 +150,8 @@ def main() -> None:
         }
         manifest["missions"].append(mission_entry)
 
-    index_path = output_dir / "index.json"
-    index_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
-    print(f"wrote {display_path(index_path)}")
+    manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    print(f"wrote {display_path(manifest_path)}")
 
 
 if __name__ == "__main__":

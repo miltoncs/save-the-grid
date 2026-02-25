@@ -6,6 +6,7 @@ This directory contains utility scripts used to generate or transform project ar
 
 - `terrain/`: terrain map generation scripts and interactive terrain lab.
 - `terrain/compat/`: optional compatibility wrappers that forward to canonical terrain scripts.
+- `previews/`: non-runtime HTML previews for asset packs.
 
 ## Rule
 

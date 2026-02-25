@@ -12,7 +12,7 @@
     "y_axis": "down",
     "units": "pixels"
   },
-  "resource_zones": [
+  "resourceZones": [
     {
       "id": "wind-northwest-steppe",
       "resource": "wind",

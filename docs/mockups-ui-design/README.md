@@ -6,12 +6,9 @@ It contains simple SVG mockups so we can discuss visual direction quickly withou
 
 ## Mockups
 
-- `mockup-main-menu.svg`: Main menu composition with a map preview and run-entry actions.
-- `mockup-gameplay-map-layer.svg`: Map-only layer focused on terrain, coastlines, rivers, boundaries, and powergrid geography.
-- `mockup-gameplay-ui-layer.svg`: Transparent UI-only layer for HUD controls and status cards.
-- `mockup-gameplay-hud.svg`: Combined composition (map layer + UI layer) for full-screen review.
-- `mockup-gameplay-round-floating-ui.svg`: Full-screen in-round HUD concept with map edge-to-edge and Google-Maps-like floating controls only (no docked panels).
-- `mockup-results-screen.svg`: End-of-run summary hierarchy (score, reliability, medals, action buttons).
+- `mockup-gameplay-round-floating-ui.svg`: Full-screen in-round HUD concept with map edge-to-edge and floating controls only.
+
+Earlier mockup variants were removed during repository cleanup; re-add them as separate files when needed.
 
 ## Runtime-Coupled Artifacts (Moved Out of `docs/`)
 

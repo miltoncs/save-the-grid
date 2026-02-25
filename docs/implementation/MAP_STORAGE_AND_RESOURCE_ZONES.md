@@ -1,7 +1,7 @@
 # Map Storage and Resource Zone Spec
 
 Status: Draft v0.2
-Last updated: 2026-02-21
+Last updated: 2026-02-25
 
 ## 1. Decision Summary
 
@@ -10,20 +10,23 @@ Current map/content storage model:
 1. Map catalog is stored in `data/maps/index.json`.
 2. Each map is stored in a single file: `data/maps/<mapId>.map.json`.
 3. Runtime gameplay map data is loaded from map JSON into `BASE_MAP` during app boot.
-4. Resource zones may come from either:
-   - terrain metadata (`data/maps/terrain/*.metadata.json`), or
-   - map document `resourceZones[]` fallback.
-5. Resource simulation remains shallow and placement-oriented.
+4. Resource zones are authored in terrain metadata (`data/maps/terrain/*.metadata.json`) using `resourceZones[]`.
+5. Legacy key `resource_zones[]` and map document `resourceZones[]` remain backward-compatible fallbacks.
+6. Resource simulation remains shallow and placement-oriented.
 
 ## 2. File Layout
 
 ```txt
 data/
+  missions/
+    campaign-missions.index.json
   maps/
     index.json
     national_core.map.json
     terrain/
       mockup-terrain-map.metadata.json
+      tutorial-core.metadata.json
+      mission-terrain-maps.index.json
 ```
 
 ## 3. Catalog Contract (`index.json`)
@@ -68,7 +71,7 @@ type MapDocument = {
   };
   towns: TownRecord[];
   links?: LinkRecord[];
-  resourceZones?: ResourceZoneRecord[];
+  resourceZones?: ResourceZoneRecord[]; // fallback only
 };
 ```
 
@@ -121,11 +124,12 @@ type ResourceZoneRecord = {
 
 Player-facing naming note:
 
-- Runtime key `sun` maps to the `Solar` power plant type label in design/UI copy.
+- Runtime key `sun` maps to the `Solar` powerplant type label in design/UI copy.
 
 ## 5. Terrain Metadata Resource Zones
 
-When terrain metadata is present and includes `resource_zones`, runtime prefers metadata zones over map-file zones.
+Terrain metadata is the authoritative source for resource zones.
+Runtime reads `resourceZones[]` first and accepts `resource_zones[]` for backward compatibility.
 
 Expected metadata zone shape:
 
@@ -142,7 +146,7 @@ Runtime behavior:
 1. Metadata polygon coordinates are scaled to map world dimensions.
 2. Invalid polygons (`< 3` points) are ignored.
 3. Unsupported resource types are ignored.
-4. If no valid metadata zones exist, map-file `resourceZones[]` is used.
+4. If no valid metadata zones exist, map-file `resourceZones[]` may be used as a fallback.
 
 ## 6. Runtime Loading Pipeline
 
@@ -158,7 +162,7 @@ Runtime behavior:
 
 1. Load terrain image URL from run config / map profile.
 2. Load terrain metadata JSON when `metadataUrl` is set.
-3. Build `resourceZones` from metadata or map fallback.
+3. Build `resourceZones` from metadata (with legacy fallback support).
 4. Compute region resource coverage weights via polygon overlap sampling.
 
 ## 7. Resource Zone Gameplay Semantics
@@ -211,17 +215,7 @@ Validation is code-based normalization (no external schema library currently):
       "starterAssets": { "plant": 2, "substation": 2, "storage": 1 }
     }
   ],
-  "resourceZones": [
-    {
-      "id": "rz-wind-northwest",
-      "resource": "wind",
-      "polygon": [
-        { "x": 170, "y": 220 },
-        { "x": 520, "y": 170 },
-        { "x": 760, "y": 280 }
-      ]
-    }
-  ]
+  "resourceZones": []
 }
 ```
 

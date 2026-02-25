@@ -15,7 +15,8 @@ Core generation logic lives in the shared submodule:
   - highest 5% terrain as mountaintops (white),
   - below sea level as water (blue).
 - `generate_mission_terrain_maps.py`:
-  Generates mission terrain set under `/assets/maps/terrain/mission-terrain-maps/`.
+  Generates mission terrain PNGs under `/assets/maps/terrain/mission-terrain-maps/` and writes the generation manifest to `/data/maps/terrain/mission-terrain-maps.index.json`.
+  Mission IDs are read from `/data/missions/campaign-missions.index.json`.
 - `compat/generate_terrain_map_png.py`:
   Compatibility wrapper that forwards to `generate_terrain_map_png.py`.
 - `compat/generate_mission_terrain_maps.py`:

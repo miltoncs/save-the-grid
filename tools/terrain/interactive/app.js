@@ -67,6 +67,7 @@ import {
   smoothstep01,
 } from "./lib/math.js";
 import { getResourceStyle, resourceTypeLabel } from "./lib/resource-zones.js";
+import { createExportController } from "./lib/exporter.js";
 
 const COLORS = {
   water: [68, 134, 195],
@@ -97,7 +98,6 @@ const VIEW_OVERPAN_SCREENS = 2;
 const NEW_MAP_RESOURCE_ZONE_FRACTION = 0.05;
 const NEW_MAP_RESOURCE_ZONE_STRENGTH = 70;
 const NEW_MAP_RESOURCE_ZONE_TYPES = ["wind", "sun", "gas"];
-const EXPORT_IMAGE_BASE_PATH = "/assets/maps/terrain";
 const SHADOW_STRENGTH_MAX = Number(shadowStrengthSlider?.max || 200);
 const SHADOW_DEFAULT_STRENGTH = Number(shadowStrengthSlider?.value || 22);
 const SHADOW_DEFAULT_LENGTH = Number(shadowLengthSlider?.value || 120);
@@ -138,6 +138,8 @@ const state = {
   algorithm: "topology",
   riverCount: RIVER_DEFAULT_COUNT,
   controlsCollapsed: false,
+  commitHash: "unknown",
+  commitHashPromise: null,
   visualEffects: {
     shorelineRelief: true,
     riverRelief: true,
@@ -190,189 +192,6 @@ function clearPendingSliderRegenerate() {
   sliderTimer = 0;
 }
 
-function normalizeMapId(rawValue) {
-  const normalized = String(rawValue || "")
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-  return normalized || `terrain-map-${state.seed}`;
-}
-
-function mapIdToDisplayName(mapId) {
-  const words = String(mapId || "")
-    .split("-")
-    .filter(Boolean)
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1));
-  if (!words.length) return `Terrain Map ${state.seed}`;
-  return words.join(" ");
-}
-
-function mapResourceTypeToSpec(resourceType) {
-  if (resourceType === "gas") return "natural_gas";
-  if (resourceType === "sun") return "sun";
-  return "wind";
-}
-
-function normalizedVerticesToPixelPolygon(vertices, width, height) {
-  return vertices.map((vertex) => ({
-    x: clamp(Math.round(vertex.nx * Math.max(1, width - 1)), 0, width - 1),
-    y: clamp(Math.round(vertex.ny * Math.max(1, height - 1)), 0, height - 1),
-  }));
-}
-
-function buildExportResourceZones(width, height) {
-  const typeCounters = {
-    wind: 0,
-    sun: 0,
-    natural_gas: 0,
-  };
-  const zones = [];
-
-  for (let i = 0; i < state.resourceZones.length; i += 1) {
-    const zone = state.resourceZones[i];
-    if (!zone.vertices || zone.vertices.length < 3) continue;
-
-    const resource = mapResourceTypeToSpec(zone.type);
-    typeCounters[resource] += 1;
-    const zoneOrdinal = typeCounters[resource];
-    const idResource = resource.replace(/_/g, "-");
-
-    zones.push({
-      id: `rz-${idResource}-${zoneOrdinal}`,
-      resource,
-      polygon: normalizedVerticesToPixelPolygon(zone.vertices, width, height),
-    });
-  }
-
-  return zones;
-}
-
-function buildExportDocuments(mapId, displayName, output) {
-  const metadataFileName = `${mapId}.metadata.json`;
-  const imageFileName = `${mapId}.png`;
-  const imageUrl = `${EXPORT_IMAGE_BASE_PATH}/${imageFileName}`;
-  const resourceZones = buildExportResourceZones(output.width, output.height);
-
-  const metadata = {
-    map_id: mapId,
-    display_name: displayName,
-    image: {
-      file: imageUrl,
-      width: output.width,
-      height: output.height,
-    },
-    terrain_generation: {
-      algorithm: state.algorithm,
-      seed: state.seed,
-      river_seed: state.riverSeed,
-    },
-    towns: [],
-    coordinate_system: {
-      origin: "top-left",
-      x_axis: "right",
-      y_axis: "down",
-      units: "pixels",
-    },
-    resource_zones: resourceZones,
-  };
-
-  return {
-    metadata,
-    fileNames: {
-      metadata: metadataFileName,
-      image: imageFileName,
-    },
-  };
-}
-
-function triggerDownload(blob, fileName) {
-  const objectUrl = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = objectUrl;
-  anchor.download = fileName;
-  document.body.appendChild(anchor);
-  anchor.click();
-  document.body.removeChild(anchor);
-  window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
-}
-
-function setExportStatus(message, isError = false) {
-  if (!exportStatusValue) return;
-  exportStatusValue.textContent = message;
-  exportStatusValue.classList.toggle("is-error", isError);
-}
-
-function initializeExportFields() {
-  if (!exportMapIdInput || !exportDisplayNameInput) return;
-  if (!exportMapIdInput.value.trim()) {
-    exportMapIdInput.value = normalizeMapId("");
-  }
-  if (!exportDisplayNameInput.value.trim()) {
-    exportDisplayNameInput.value = mapIdToDisplayName(exportMapIdInput.value.trim());
-  }
-}
-
-function getExportContext() {
-  if (!state.currentOutput || !state.lastRaster) {
-    throw new Error("No map rendered yet");
-  }
-
-  const mapId = normalizeMapId(exportMapIdInput?.value);
-  const displayNameInput = String(exportDisplayNameInput?.value || "").trim();
-  const displayName = displayNameInput || mapIdToDisplayName(mapId);
-
-  if (exportMapIdInput) exportMapIdInput.value = mapId;
-  if (exportDisplayNameInput && !displayNameInput) {
-    exportDisplayNameInput.value = displayName;
-  }
-
-  const { metadata, fileNames } = buildExportDocuments(
-    mapId,
-    displayName,
-    state.currentOutput
-  );
-
-  return {
-    metadata,
-    fileNames,
-  };
-}
-
-async function exportCurrentMapPng(fileName) {
-  if (!state.lastRaster) {
-    throw new Error("No map raster available");
-  }
-
-  const pngBlob = await new Promise((resolve, reject) => {
-    state.lastRaster.toBlob((blob) => {
-      if (!blob) {
-        reject(new Error("Could not serialize map PNG"));
-        return;
-      }
-      resolve(blob);
-    }, "image/png");
-  });
-
-  triggerDownload(pngBlob, fileName);
-}
-
-async function exportMetadataJsonFile(fileName) {
-  const { metadata, fileNames } = getExportContext();
-  const targetName = fileName || fileNames.metadata;
-  triggerDownload(
-    new Blob([`${JSON.stringify(metadata, null, 2)}\n`], { type: "application/json" }),
-    targetName
-  );
-}
-
-async function exportBundle() {
-  const { fileNames } = getExportContext();
-  setExportStatus("Exporting...");
-  await exportMetadataJsonFile(fileNames.metadata);
-  await exportCurrentMapPng(fileNames.image);
-  setExportStatus(`Exported ${fileNames.image} + ${fileNames.metadata}`);
-}
 
 function blurHeightField(source, width, height, passes) {
   let field = source;
@@ -499,6 +318,35 @@ function computePolygonAreaPx(points) {
   }
   return Math.abs(twiceArea) * 0.5;
 }
+
+const exportController = createExportController({
+  state,
+  controls: {
+    exportMapIdInput,
+    exportDisplayNameInput,
+    exportStatusValue,
+    smoothnessSlider,
+    continentScaleSlider,
+    seaLevelSlider,
+    mountaintopSlider,
+    resourceTypeSelect,
+    resourceStrengthSlider,
+  },
+  constants: {
+    exportImageBasePath: "/assets/maps/terrain",
+    resourceVertexSnapPx: RESOURCE_VERTEX_SNAP_PX,
+    riverWidthPx: RIVER_WIDTH_PX,
+  },
+  computePolygonAreaPx,
+});
+const {
+  exportBundle,
+  initializeExportFields,
+  mapIdToDisplayName,
+  normalizeMapId,
+  preloadCommitHash,
+  setExportStatus,
+} = exportController;
 
 function buildSeededResourcePolygonVertices(
   rand,
@@ -3115,4 +2963,5 @@ applyControlsPanelState();
 applyEditorModeState();
 initializeExportFields();
 setExportStatus("Ready");
+void preloadCommitHash();
 renderTerrain({ newSeed: false });

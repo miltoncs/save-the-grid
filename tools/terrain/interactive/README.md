@@ -61,3 +61,4 @@ Open:
 - `lib/dom.js`: DOM element bindings.
 - `lib/math.js`: pure math/noise helpers.
 - `lib/resource-zones.js`: resource zone styles + labels.
+- `lib/exporter.js`: export-bundle + metadata assembly pipeline.

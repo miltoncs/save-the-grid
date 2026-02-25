@@ -41,6 +41,10 @@ export const DRAG_THRESHOLD_PX = 6;
 export const DEFAULT_TERRAIN_MAP_ID = "national-core";
 export const DEFAULT_TERRAIN_MAP_IMAGE_URL = "/assets/maps/terrain/mockup-terrain-map.png";
 export const DEFAULT_TERRAIN_MAP_METADATA_URL = "/data/maps/terrain/mockup-terrain-map.metadata.json";
+export const TUTORIAL_TERRAIN_MAP_ID = "tutorial-core";
+export const TUTORIAL_TERRAIN_MAP_IMAGE_URL = "/assets/maps/tutorial/terrain-map-4143667724.png";
+export const TUTORIAL_TERRAIN_MAP_METADATA_URL =
+  "/data/maps/terrain/tutorial-core.metadata.json";
 export const MISSION_TERRAIN_MAP_BASE_URL = "/assets/maps/terrain/mission-terrain-maps";
 export const ICON_SET_URLS = {
   town: {
@@ -227,6 +231,15 @@ export function getMissionTerrainImageUrl(missionId) {
 }
 
 export function resolveTerrainMapProfile(config) {
+  if (config?.mode === "tutorial") {
+    return {
+      id: TUTORIAL_TERRAIN_MAP_ID,
+      label: "Tutorial Terrain",
+      imageUrl: TUTORIAL_TERRAIN_MAP_IMAGE_URL,
+      metadataUrl: TUTORIAL_TERRAIN_MAP_METADATA_URL,
+    };
+  }
+
   const selectedId = String(config?.mapSelectionId || config?.terrainMapId || "").trim();
   if (selectedId && selectedId !== DEFAULT_TERRAIN_MAP_ID) {
     const mission = CAMPAIGN_MISSIONS.find((item) => item.id === selectedId);

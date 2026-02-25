@@ -11,4 +11,4 @@ This directory contains static files served directly to the game at runtime.
 ## Rule
 
 Store only runtime-consumed static assets here.
-Do not place design docs or generation scripts in this directory.
+Do not place design docs, tooling previews, or generation scripts in this directory.

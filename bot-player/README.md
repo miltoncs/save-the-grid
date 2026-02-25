@@ -16,7 +16,7 @@ The bot lives in `bot-player/` with its own dependency and scripts so game imple
 ## Install
 
 ```bash
-cd /Users/mstafford/Projects/local/save-the-grid/bot-player
+cd bot-player
 npm install
 npx playwright install chromium
 ```
@@ -26,7 +26,7 @@ npx playwright install chromium
 Start the game dev server in another terminal, then run a scenario:
 
 ```bash
-cd /Users/mstafford/Projects/local/save-the-grid/bot-player
+cd bot-player
 npm run bot:smoke
 ```
 
@@ -42,9 +42,7 @@ Tutorial completion run:
 npm run bot:tutorial
 ```
 
-Screenshots are saved to:
-
-`/Users/mstafford/Projects/local/save-the-grid/bot-player/artifacts`
+Screenshots are saved to `./artifacts` (inside `bot-player/`) by default.
 
 You can override this with `--screenshot-dir <path>`.
 
@@ -53,6 +51,13 @@ Current starter scenarios:
 - `smoke-menu-to-run.json`: menu -> standard run -> short autoplay -> save & exit.
 - `smoke-controls.json`: quick control-path sweep (tools/assets/pause) -> save & exit.
 - `tutorial-beat.json`: starts tutorial and completes all tutorial objectives to the victory screen.
+
+Runner internals are split into:
+
+- `lib/cli.mjs`: argument parsing + path resolution.
+- `lib/scenario.mjs`: scenario loading/target helpers.
+- `lib/actions.mjs`: executable step actions.
+- `lib/tutorial-beat.mjs`: tutorial completion strategy.
 
 ## Scenario format
 

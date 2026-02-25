@@ -103,7 +103,7 @@ Each mission defines:
 
 ### Constraint Examples
 
-1. Limited plant type availability (`Wind`, `Solar`, `Natural Gas` subsets only).
+1. Limited powerplant type availability (`Wind`, `Solar`, `Natural Gas` subsets only).
 2. Higher `Line` construction costs.
 3. Increased weather event frequency.
 4. Restricted demolition refunds.
@@ -187,7 +187,7 @@ Avoid hidden multipliers that reduce player confidence in outcomes.
 6. `Still Air`: low wind availability constraint.
 7. `Night Surge`: manage steep evening demand profile.
 8. `Election Quarter`: keep underserved-town penalty exposure low under mixed events.
-9. `powergrid Retrofit`: replace inefficient plants with strict budget cap on a medium map.
+9. `powergrid Retrofit`: replace inefficient powerplants with strict budget cap on a medium map.
 10. `Cross-Country Link`: establish stable long-haul `Line` paths between distant supply and demand clusters.
 11. `Green Mandate`: meet demand with limited fossil capacity across a large map.
 12. `National Peak`: final full-map management scenario with high town density and peak seasonal stress.

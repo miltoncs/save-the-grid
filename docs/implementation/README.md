@@ -6,6 +6,7 @@ This folder is for engineering execution details that realize the design docs.
 
 - `ARCHITECTURE.md`: Runtime architecture, module boundaries, data contracts, testing strategy, and release plan for MVP implementation.
 - `MAP_STORAGE_AND_RESOURCE_ZONES.md`: Authoritative map JSON storage contract, geometry model, and resource zone gameplay data model.
+- `archive/progress-legacy-2026-02.md`: archived detailed implementation log.
 
 ## Intended Contents
 
