@@ -76,7 +76,7 @@ const COLORS = {
   coastLand: [156, 170, 112],
   plains: [132, 190, 116],
   mountain: [204, 175, 136],
-  mountaintop: [224, 226, 222],
+  mountaintop: [216, 218, 214],
 };
 
 const RIVER_DEFAULT_COUNT = Math.max(0, Math.round(Number(riversCountValue.textContent) || 6));
@@ -130,6 +130,7 @@ const TERRAIN_CLASS = Object.freeze({
 });
 const SNOWCAP_BORDER_BLEND_RATIO = 0.5;
 const SNOWCAP_BORDER_DITHER_FRACTION = 0.5;
+const SNOWCAP_BORDER_BLEND_WIDTH = 2;
 
 const state = {
   seed: randomSeed(),
@@ -1143,7 +1144,6 @@ function buildShadowNudgeField(
   const slopeRange = Math.max(0.0075, (meanSlope * 2.25) + (slopeStd * 1.3));
 
   const directionalCap = SHADOW_DIRECTIONAL_MAX * strengthNorm;
-  const peakCap = SHADOW_PEAK_MAX * strengthNorm;
   const flatDot = SHADOW_LIGHT_DIRECTION.z;
 
   for (let y = 0; y < height; y += 1) {
@@ -1200,12 +1200,11 @@ function buildShadowNudgeField(
         (slopeMag - slopeDeadzone) / Math.max(1e-5, slopeRange)
       );
       if (ridgeWeight > 0) {
-        const peakNudge = clamp(
-          prominenceWeight * ridgeWeight * peakLightNorm * strengthNorm * 0.9,
-          0,
-          peakCap
-        );
-        nudges[idx] += peakNudge;
+        // Peak lightening is controlled directly by the peak slider:
+        // at 100%, strong prominent ridges can reach full white.
+        const peakHighlight = smoothstep01(((prominenceWeight * ridgeWeight) - 0.15) / 0.6);
+        const peakNudge = clamp(peakLightNorm * peakHighlight, 0, 1);
+        nudges[idx] = Math.max(nudges[idx], peakNudge);
       }
 
       peakCandidates.push({
@@ -1274,8 +1273,9 @@ function buildShadowNudgeField(
   }
 
   const maxAbsNudge = Math.max(SHADOW_CAST_MAX, SHADOW_PEAK_MAX, SHADOW_DIRECTIONAL_MAX) * strengthNorm;
+  const maxPositiveNudge = Math.max(maxAbsNudge, peakLightNorm);
   for (let idx = 0; idx < nudges.length; idx += 1) {
-    nudges[idx] = clamp(nudges[idx], -maxAbsNudge, maxAbsNudge);
+    nudges[idx] = clamp(nudges[idx], -maxAbsNudge, maxPositiveNudge);
   }
   return nudges;
 }
@@ -1694,15 +1694,17 @@ function buildTerrainImage(
   }
 
   // Dither snowcap borders so transition into surrounding terrain is less abrupt.
+  // Blend width is intentionally 2 px (twice the original 1 px border).
   for (let y = 0; y < height; y += 1) {
-    const y0 = Math.max(0, y - 1);
-    const y1 = Math.min(height - 1, y + 1);
     for (let x = 0; x < width; x += 1) {
       const idx = (y * width) + x;
       if (terrainClass[idx] !== TERRAIN_CLASS.SNOWCAP) continue;
 
-      const x0 = Math.max(0, x - 1);
-      const x1 = Math.min(width - 1, x + 1);
+      const y0 = Math.max(0, y - SNOWCAP_BORDER_BLEND_WIDTH);
+      const y1 = Math.min(height - 1, y + SNOWCAP_BORDER_BLEND_WIDTH);
+      const x0 = Math.max(0, x - SNOWCAP_BORDER_BLEND_WIDTH);
+      const x1 = Math.min(width - 1, x + SNOWCAP_BORDER_BLEND_WIDTH);
+      let nearestDistance = Number.POSITIVE_INFINITY;
       let sumR = 0;
       let sumG = 0;
       let sumB = 0;
@@ -1714,6 +1716,7 @@ function buildTerrainImage(
           if (xx === x && yy === y) continue;
           const nIdx = row + xx;
           const nClass = terrainClass[nIdx];
+          const distance = Math.max(Math.abs(xx - x), Math.abs(yy - y));
           let neighborColor = null;
           if (nClass === TERRAIN_CLASS.PLAINS) {
             neighborColor = COLORS.plains;
@@ -1721,6 +1724,16 @@ function buildTerrainImage(
             neighborColor = COLORS.mountain;
           }
           if (!neighborColor) continue;
+          if (distance > SNOWCAP_BORDER_BLEND_WIDTH) continue;
+
+          if (distance < nearestDistance) {
+            nearestDistance = distance;
+            sumR = 0;
+            sumG = 0;
+            sumB = 0;
+            neighborCount = 0;
+          }
+          if (distance > nearestDistance) continue;
 
           sumR += neighborColor[0];
           sumG += neighborColor[1];
@@ -1729,15 +1742,16 @@ function buildTerrainImage(
         }
       }
 
-      if (neighborCount === 0) continue;
+      if (!Number.isFinite(nearestDistance) || neighborCount === 0) continue;
 
       const noise = hash01FromUint(((seed * 1103515245) ^ idx ^ 0x9e3779b9) >>> 0);
-      if (noise >= SNOWCAP_BORDER_DITHER_FRACTION) continue;
+      const distanceWeight = (SNOWCAP_BORDER_BLEND_WIDTH - nearestDistance + 1) / SNOWCAP_BORDER_BLEND_WIDTH;
+      if (noise >= (SNOWCAP_BORDER_DITHER_FRACTION * distanceWeight)) continue;
 
       const avgR = sumR / neighborCount;
       const avgG = sumG / neighborCount;
       const avgB = sumB / neighborCount;
-      const blend = SNOWCAP_BORDER_BLEND_RATIO;
+      const blend = SNOWCAP_BORDER_BLEND_RATIO * distanceWeight;
       const p = idx * 4;
       basePixels[p] = Math.round((basePixels[p] * (1 - blend)) + (avgR * blend));
       basePixels[p + 1] = Math.round((basePixels[p + 1] * (1 - blend)) + (avgG * blend));

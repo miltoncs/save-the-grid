@@ -7,11 +7,6 @@
     width: min(420px, 56vw);
   }
 
-  .floating-alerts,
-  .floating-incidents {
-    width: min(280px, 32vw);
-  }
-
   .floating-bottom-left {
     max-width: min(320px, 34vw);
     width: min(320px, 34vw);
@@ -21,8 +16,8 @@
     width: min(700px, calc(100vw - 340px));
   }
 
-  .floating-bottom-right {
-    width: min(320px, 32vw);
+  .floating-ops-panel {
+    width: min(320px, 34vw);
   }
 }
 
@@ -57,9 +52,7 @@
     width: auto;
   }
 
-  .floating-alerts,
-  .floating-incidents,
-  .floating-bottom-right {
+  .floating-ops-panel {
     display: none;
   }
 
@@ -99,6 +92,20 @@
   .floating-dock-btn {
     flex: 0 0 auto;
     min-width: 44px;
+  }
+
+  .floating-controls-panel {
+    width: calc(100vw - 14px);
+    max-height: calc(100vh - 20px);
+    padding: 12px 10px 12px;
+  }
+
+  .controls-panel-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .floating-controls-close {
+    min-width: 74px;
   }
 
   .dock-separator {

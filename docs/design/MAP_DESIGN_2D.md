@@ -35,7 +35,7 @@ Layers:
 2. Civilization layer: towns shown as point icons.
 3. powergrid asset layer: powerplants and substations shown as point icons.
 4. Player-built `Line` layer: manual long-distance power lines between valid powerplant/substation endpoint pairs.
-5. Resource layer: natural resource zones, hidden by default and revealed while holding `R`.
+5. Resource layer: natural resource zones, hidden by default and toggled with `R`.
 6. Alerts/objective layer: incidents, demand deficits, and mission markers.
 
 This keeps routing legible without deep electrical simulation complexity.
@@ -173,8 +173,8 @@ Point icon scale target:
 
 Resource layer visibility:
 
-- Resource zones remain hidden unless the player is holding `R`.
-- Releasing `R` returns the map to normal operational layers.
+- Resource zones remain hidden until the player toggles them on with `R`.
+- Pressing `R` again returns the map to normal operational layers.
 
 At every zoom level, hide non-essential detail before reducing legibility of critical signals.
 

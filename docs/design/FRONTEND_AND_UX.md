@@ -152,8 +152,8 @@ No region-unlock or corridor-purchase action should exist in this flow.
 
 1. Base board, town points, and infrastructure icons (powerplants, substations, storage) are visible by default.
 2. Natural resource zones are hidden by default to reduce map noise.
-3. Hold `R` to reveal resource zones while planning builds.
-4. Releasing `R` hides resource zones immediately.
+3. Press `R` to toggle resource zones while planning builds.
+4. Press `R` again to hide resource zones.
 
 ### Alert Tiers
 
@@ -203,7 +203,7 @@ Onboarding rule:
 5. Middle mouse drag or edge pan: camera movement.
 6. `Tab`: cycle critical alerts.
 7. `Space`: toggle pause and resume (singleplayer only).
-8. Hold `R`: reveal natural resource zones on the map.
+8. `R`: toggle natural resource zones on the map.
 9. `Esc`: close open panel.
 
 ## 10. Visual Style Guidelines

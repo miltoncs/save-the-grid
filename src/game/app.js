@@ -46,6 +46,7 @@ const {
   lerp,
   deepClone,
   formatTime,
+  formatCompactMoney,
   randomRange,
   pickRandom,
   pointInPolygon,
@@ -164,6 +165,7 @@ export class SaveTheGridApp {
     const x = clamp(Number(payload.x || 0), 20, Math.max(20, layerRect.width - 20));
     const y = clamp(Number(payload.y || 0), 20, Math.max(20, layerRect.height - 20));
     const placeBelow = y < 100;
+    const estimatedRefund = Math.max(0, Math.round(Number(payload.refund || 0)));
 
     const popover = document.createElement("div");
     popover.id = "demolish-confirm-popover";
@@ -173,7 +175,7 @@ export class SaveTheGridApp {
     popover.innerHTML = `
       <p>Demolish ${payload.assetLabel}?</p>
       <p class="demolish-confirm-refund">
-        Completes in ${DEMOLITION_DURATION_SECONDS}s. No refund on demolition.
+        Completes in ${DEMOLITION_DURATION_SECONDS}s. Estimated refund: ${formatCompactMoney(estimatedRefund)}.
       </p>
       <div class="demolish-confirm-actions">
         <button class="demolish-confirm-btn demolish-confirm-cancel" type="button">Cancel</button>
@@ -357,7 +359,7 @@ export class SaveTheGridApp {
           <h3>${preset.label}</h3>
           <p>${preset.description}</p>
           <p>Growth x${preset.demandGrowthMultiplier.toFixed(2)} | Event x${preset.eventIntensity.toFixed(2)}</p>
-          <p>Budget ${preset.budget} | Routing ${preset.routingComplexity}</p>
+          <p>Budget ${formatCompactMoney(preset.budget)} | Routing ${preset.routingComplexity}</p>
         </button>
       `;
     }).join("");
@@ -701,6 +703,11 @@ export class SaveTheGridApp {
   }
 
   buildRunScreenMarkup(newsTickerText) {
+    const plantCost = Math.ceil(ASSET_RULES.plant?.cost ?? 0);
+    const substationCost = Math.ceil(ASSET_RULES.substation?.cost ?? 0);
+    const storageCost = Math.ceil(ASSET_RULES.storage?.cost ?? 0);
+    const lineCostPer100px = Math.ceil((LINE_BASE_BUILD_COST_PER_WORLD_UNIT ?? 0) * 100);
+
     return `
       <section class="screen run-screen" data-testid="in-run-screen" data-surface="run">
         <main class="map-shell" id="map-shell">
@@ -715,9 +722,81 @@ export class SaveTheGridApp {
 
           <div class="floating-group floating-top-right">
             <span class="floating-chip">Time <strong id="hud-timer">00:00</strong></span>
-            <button class="ghost-btn floating-btn" id="run-pause-btn">Pause</button>
+            <button
+              class="ghost-btn floating-btn floating-icon-btn"
+              id="run-controls-btn"
+              data-testid="run-controls-btn"
+              aria-label="Show controls panel"
+              aria-controls="run-controls-overlay"
+              aria-expanded="false"
+            >
+              ?
+            </button>
+            <button class="ghost-btn floating-btn" id="run-pause-btn" aria-label="Pause simulation">❚❚</button>
             <button class="ghost-btn floating-btn" id="run-exit-tutorial-btn" hidden>Exit Tutorial</button>
             <button class="ghost-btn floating-btn" id="run-save-exit-btn">Save &amp; Exit</button>
+          </div>
+
+          <div
+            class="floating-group floating-controls-overlay"
+            id="run-controls-overlay"
+            data-testid="run-controls-overlay"
+            hidden
+          >
+            <section class="floating-controls-panel" role="dialog" aria-modal="true" aria-labelledby="run-controls-title">
+              <header class="floating-controls-header">
+                <h3 id="run-controls-title">Control Reference</h3>
+                <button class="ghost-btn floating-btn floating-controls-close" id="run-controls-close-btn" aria-label="Close controls panel">
+                  Close
+                </button>
+              </header>
+
+              <p class="floating-controls-intro">
+                Full command list for camera, build tools, and run operations.
+              </p>
+
+              <div class="controls-panel-grid">
+                <section class="controls-panel-section">
+                  <h4>Mouse</h4>
+                  <ul class="controls-panel-list">
+                    <li><kbd>Wheel</kbd><span>Zoom in and out (centered on cursor).</span></li>
+                    <li><kbd>LMB</kbd><span>Select and apply the active tool.</span></li>
+                    <li><kbd>LMB Drag</kbd><span>Pan the map.</span></li>
+                    <li><kbd>RMB</kbd><span>Quick demolition interaction at cursor.</span></li>
+                    <li><kbd>MMB</kbd><span>Pan the map.</span></li>
+                    <li><kbd>Alt + LMB</kbd><span>Pan the map.</span></li>
+                  </ul>
+                </section>
+
+                <section class="controls-panel-section">
+                  <h4>Navigation + View</h4>
+                  <ul class="controls-panel-list">
+                    <li><kbd>W A S D</kbd><span>Pan camera.</span></li>
+                    <li><kbd>Arrow Keys</kbd><span>Pan camera.</span></li>
+                    <li><kbd>Space</kbd><span>Pause or resume simulation.</span></li>
+                    <li><kbd>F</kbd><span>Toggle fullscreen.</span></li>
+                    <li><kbd>Tab</kbd><span>Cycle highlighted critical alert.</span></li>
+                    <li><kbd>Enter</kbd><span>Cycle highlighted critical alert.</span></li>
+                  </ul>
+                </section>
+
+                <section class="controls-panel-section">
+                  <h4>Build + Tools</h4>
+                  <ul class="controls-panel-list">
+                    <li><kbd>1</kbd><span>Select wind powerplant; press again to cycle plant types.</span></li>
+                    <li><kbd>2</kbd><span>Select solar powerplant build tool.</span></li>
+                    <li><kbd>3</kbd><span>Select gas powerplant build tool.</span></li>
+                    <li><kbd>4</kbd><span>Select substation build tool.</span></li>
+                    <li><kbd>5</kbd><span>Select storage build tool.</span></li>
+                    <li><kbd>6 / L</kbd><span>Select long-range powerline tool.</span></li>
+                    <li><kbd>E / B</kbd><span>Select reroute tool.</span></li>
+                    <li><kbd>X</kbd><span>Select demolish tool.</span></li>
+                    <li><kbd>R</kbd><span>Toggle resource layer.</span></li>
+                    <li><kbd>Esc</kbd><span>Return to pan mode and clear selection.</span></li>
+                  </ul>
+                </section>
+              </div>
+            </section>
           </div>
 
           <section class="floating-group floating-objective floating-card">
@@ -727,14 +806,23 @@ export class SaveTheGridApp {
             <p id="objective-detail" class="objective-detail"></p>
           </section>
 
-          <section class="floating-group floating-alerts floating-card">
-            <h3>Alert Rail</h3>
-            <ul id="alert-list" class="alert-list"></ul>
-          </section>
+          <section class="floating-group floating-ops-panel floating-card">
+            <h3>Operations Feed</h3>
 
-          <section class="floating-group floating-incidents floating-card">
-            <h3>Incident Rail</h3>
-            <ul id="incident-list" class="incident-list"></ul>
+            <div class="ops-panel-block">
+              <h4>Alert Rail</h4>
+              <ul id="alert-list" class="alert-list"></ul>
+            </div>
+
+            <div class="ops-panel-block">
+              <h4>Incident Rail</h4>
+              <ul id="incident-list" class="incident-list"></ul>
+            </div>
+
+            <div class="ops-panel-block">
+              <h4>News</h4>
+              <div class="ticker floating-ticker" id="news-ticker">${newsTickerText}</div>
+            </div>
           </section>
 
           <div class="floating-group floating-bottom-left">
@@ -742,6 +830,7 @@ export class SaveTheGridApp {
               <div class="hud-metric-card"><span class="hud-metric-label">Money</span><strong id="hud-budget">0</strong></div>
               <div class="hud-metric-card"><span class="hud-metric-label">Power Supply</span><strong id="hud-power-supply">0 MW</strong></div>
               <div class="hud-metric-card"><span class="hud-metric-label">Power Demand</span><strong id="hud-power-demand">0 MW</strong></div>
+              <div class="hud-metric-card"><span class="hud-metric-label">Stored Power</span><strong id="hud-stored-power">0 MWh</strong></div>
               <div class="hud-metric-card"><span class="hud-metric-label">Reliability</span><strong id="hud-reliability">0%</strong></div>
               <div class="hud-metric-card"><span class="hud-metric-label">Score</span><strong id="hud-score">0</strong></div>
             </section>
@@ -755,7 +844,6 @@ export class SaveTheGridApp {
                 data-plant-type="wind"
                 data-testid="asset-plant"
                 aria-label="Build wind plant (1)"
-                title="Build wind plant (1)"
               >
                 <img
                   class="asset-icon-image"
@@ -763,14 +851,17 @@ export class SaveTheGridApp {
                   alt=""
                   aria-hidden="true"
                 />
+                <span class="dock-tooltip" aria-hidden="true">
+                  <span class="dock-tooltip-title">Wind Plant</span>
+                  <span class="dock-tooltip-price">Price ${plantCost}</span>
+                </span>
               </button>
               <button
                 class="asset-btn floating-dock-btn asset-icon-btn"
                 data-asset="plant"
                 data-plant-type="sun"
                 data-testid="asset-plant-solar"
-                aria-label="Build solar plant"
-                title="Build solar plant"
+                aria-label="Build solar plant (2)"
               >
                 <img
                   class="asset-icon-image"
@@ -778,14 +869,17 @@ export class SaveTheGridApp {
                   alt=""
                   aria-hidden="true"
                 />
+                <span class="dock-tooltip" aria-hidden="true">
+                  <span class="dock-tooltip-title">Solar Plant</span>
+                  <span class="dock-tooltip-price">Price ${plantCost}</span>
+                </span>
               </button>
               <button
                 class="asset-btn floating-dock-btn asset-icon-btn"
                 data-asset="plant"
                 data-plant-type="natural_gas"
                 data-testid="asset-plant-gas"
-                aria-label="Build natural gas plant"
-                title="Build natural gas plant"
+                aria-label="Build natural gas plant (3)"
               >
                 <img
                   class="asset-icon-image"
@@ -793,13 +887,16 @@ export class SaveTheGridApp {
                   alt=""
                   aria-hidden="true"
                 />
+                <span class="dock-tooltip" aria-hidden="true">
+                  <span class="dock-tooltip-title">Gas Plant</span>
+                  <span class="dock-tooltip-price">Price ${plantCost}</span>
+                </span>
               </button>
               <button
                 class="asset-btn floating-dock-btn asset-icon-btn"
                 data-asset="substation"
                 data-testid="asset-substation"
-                aria-label="Build substation (2)"
-                title="Build substation (2)"
+                aria-label="Build substation (4)"
               >
                 <img
                   class="asset-icon-image"
@@ -807,24 +904,39 @@ export class SaveTheGridApp {
                   alt=""
                   aria-hidden="true"
                 />
+                <span class="dock-tooltip" aria-hidden="true">
+                  <span class="dock-tooltip-title">Substation</span>
+                  <span class="dock-tooltip-price">Price ${substationCost}</span>
+                </span>
               </button>
               <button
                 class="asset-btn floating-dock-btn asset-icon-btn"
                 data-asset="storage"
                 data-testid="asset-storage"
-                aria-label="Build storage (3)"
-                title="Build storage (3)"
+                aria-label="Build storage (5)"
               >
                 <span class="asset-icon-glyph asset-icon-glyph-storage" aria-hidden="true"></span>
+                <span class="dock-tooltip" aria-hidden="true">
+                  <span class="dock-tooltip-title">Storage</span>
+                  <span class="dock-tooltip-price">Price ${storageCost}</span>
+                </span>
               </button>
               <button
                 class="tool-btn floating-dock-btn asset-icon-btn"
                 data-tool="line"
                 data-testid="tool-powerlines"
-                aria-label="Powerlines tool (4)"
-                title="Powerlines tool (4)"
+                aria-label="Powerlines tool (6 / L)"
               >
-                <span class="asset-icon-glyph asset-icon-glyph-powerline" aria-hidden="true"></span>
+                <img
+                  class="asset-icon-image"
+                  src="/assets/icons/circular/line-long-range.svg"
+                  alt=""
+                  aria-hidden="true"
+                />
+                <span class="dock-tooltip" aria-hidden="true">
+                  <span class="dock-tooltip-title">Long-Range Powerline</span>
+                  <span class="dock-tooltip-price">Price ${lineCostPer100px} / 100px (+10 / blue|white px)</span>
+                </span>
               </button>
               <button
                 class="tool-btn floating-dock-btn asset-icon-btn"
@@ -833,27 +945,55 @@ export class SaveTheGridApp {
                 aria-label="Reroute tool (E)"
                 title="Reroute tool (E)"
               >
-                <span class="asset-icon-glyph asset-icon-glyph-reroute" aria-hidden="true"></span>
+                <img
+                  class="asset-icon-image"
+                  src="/assets/icons/circular/line-reroute.svg"
+                  alt=""
+                  aria-hidden="true"
+                />
               </button>
             </div>
           </div>
 
-          <div class="floating-group floating-map-controls">
-            <button class="floating-map-btn" id="run-zoom-in-btn" aria-label="Zoom in">+</button>
-            <button class="floating-map-btn" id="run-zoom-out-btn" aria-label="Zoom out">-</button>
-            <button class="floating-map-btn" id="run-center-btn" aria-label="Center map">Center</button>
-            <button class="floating-map-btn" id="run-fullscreen-btn" aria-label="Toggle fullscreen">Full</button>
-          </div>
-
-          <div class="floating-group floating-bottom-right">
-            <div class="ticker floating-ticker" id="news-ticker">${newsTickerText}</div>
-          </div>
         </div>
       </section>
     `;
   }
 
   attachRunUiListeners() {
+    const controlsButton = this.root.querySelector("#run-controls-btn");
+    const controlsOverlay = this.root.querySelector("#run-controls-overlay");
+    const controlsCloseButton = this.root.querySelector("#run-controls-close-btn");
+
+    const setControlsOverlayOpen = (open) => {
+      if (!controlsButton || !controlsOverlay) return;
+      const isOpen = !!open;
+      controlsOverlay.hidden = !isOpen;
+      controlsButton.setAttribute("aria-expanded", isOpen ? "true" : "false");
+      controlsButton.setAttribute(
+        "aria-label",
+        isOpen ? "Hide controls panel" : "Show controls panel"
+      );
+    };
+
+    setControlsOverlayOpen(false);
+
+    controlsButton?.addEventListener("click", (event) => {
+      event.preventDefault();
+      setControlsOverlayOpen(controlsOverlay?.hidden);
+    });
+
+    controlsCloseButton?.addEventListener("click", (event) => {
+      event.preventDefault();
+      setControlsOverlayOpen(false);
+    });
+
+    controlsOverlay?.addEventListener("click", (event) => {
+      if (event.target === controlsOverlay) {
+        setControlsOverlayOpen(false);
+      }
+    });
+
     this.root.querySelectorAll("[data-asset]").forEach((button) => {
       button.addEventListener("click", () => {
         if (!this.runtime) return;
@@ -905,43 +1045,6 @@ export class SaveTheGridApp {
       this.runtime.finishRun("victory", "Tutorial complete: core controls verified.");
     });
 
-    this.root.querySelector("#run-zoom-in-btn")?.addEventListener("click", () => {
-      if (!this.runtime) return;
-      this.runtime.camera.zoomIndex = clamp(
-        this.runtime.camera.zoomIndex + 1,
-        0,
-        this.runtime.zoomLevels.length - 1
-      );
-      this.runtime.clampCameraToMap();
-      this.runtime.pushHudUpdate();
-      this.runtime.render();
-    });
-
-    this.root.querySelector("#run-zoom-out-btn")?.addEventListener("click", () => {
-      if (!this.runtime) return;
-      this.runtime.camera.zoomIndex = clamp(
-        this.runtime.camera.zoomIndex - 1,
-        0,
-        this.runtime.zoomLevels.length - 1
-      );
-      this.runtime.clampCameraToMap();
-      this.runtime.pushHudUpdate();
-      this.runtime.render();
-    });
-
-    this.root.querySelector("#run-center-btn")?.addEventListener("click", () => {
-      if (!this.runtime) return;
-      this.runtime.camera.x = BASE_MAP.width / 2;
-      this.runtime.camera.y = BASE_MAP.height / 2;
-      this.runtime.clampCameraToMap();
-      this.runtime.pushHudUpdate();
-      this.runtime.render();
-    });
-
-    this.root.querySelector("#run-fullscreen-btn")?.addEventListener("click", () => {
-      if (!this.runtime) return;
-      this.runtime.toggleFullscreen();
-    });
   }
 
   startRun(runConfig) {
@@ -1027,6 +1130,7 @@ export class SaveTheGridApp {
     const powerSupplyNode = $("#hud-power-supply");
     const reliabilityNode = $("#hud-reliability");
     const powerDemandNode = $("#hud-power-demand");
+    const storedPowerNode = $("#hud-stored-power");
     const timerNode = $("#hud-timer");
     const scoreNode = $("#hud-score");
     const pauseNode = $("#run-pause-btn");
@@ -1037,6 +1141,7 @@ export class SaveTheGridApp {
       !powerSupplyNode ||
       !reliabilityNode ||
       !powerDemandNode ||
+      !storedPowerNode ||
       !timerNode ||
       !scoreNode
     ) {
@@ -1044,13 +1149,18 @@ export class SaveTheGridApp {
     }
 
     if (runLabelNode) runLabelNode.textContent = payload.runLabel;
-    budgetNode.textContent = payload.devMode ? "INF" : Math.round(payload.budget).toString();
+    budgetNode.textContent = payload.devMode ? "INF" : formatCompactMoney(payload.budget);
     powerSupplyNode.textContent = `${payload.powerSupply.toFixed(1)} MW`;
     reliabilityNode.textContent = `${payload.reliability.toFixed(1)}%`;
     powerDemandNode.textContent = `${payload.powerDemand.toFixed(1)} MW`;
+    storedPowerNode.textContent = `${(payload.storedPowerMWh || 0).toFixed(1)} MWh`;
     timerNode.textContent = formatTime(payload.timer);
     scoreNode.textContent = Math.round(payload.score).toString();
-    if (pauseNode) pauseNode.textContent = payload.paused ? "Resume" : "Pause";
+    if (pauseNode) {
+      const isPaused = !!payload.paused;
+      pauseNode.textContent = isPaused ? "▶" : "❚❚";
+      pauseNode.setAttribute("aria-label", isPaused ? "Resume simulation" : "Pause simulation");
+    }
     if (exitTutorialNode) {
       exitTutorialNode.hidden = !payload.tutorialCompleted;
     }
@@ -1203,7 +1313,7 @@ export class SaveTheGridApp {
           <article><h3>Final Score</h3><p>${summary.finalScore}</p></article>
           <article><h3>Leaderboard</h3><p>${placement >= 0 ? toOrdinal(placement) : "Unranked"}</p></article>
           <article><h3>Reliability</h3><p>${summary.reliability.toFixed(1)}%</p></article>
-          <article><h3>Budget</h3><p>${Math.round(summary.budget)}</p></article>
+          <article><h3>Budget</h3><p>${formatCompactMoney(summary.budget)}</p></article>
           <article><h3>Demand Served</h3><p>${Math.round(summary.demandServedRatio * 100)}%</p></article>
         </div>
 

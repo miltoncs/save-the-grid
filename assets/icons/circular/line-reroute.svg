@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96" fill="none">
+  <defs>
+    <radialGradient id="core-line-reroute" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(38 32) rotate(50) scale(62)">
+      <stop offset="0" stop-color="#1b2a3a"/>
+      <stop offset="1" stop-color="#101821"/>
+    </radialGradient>
+  </defs>
+  <circle cx="48" cy="48" r="44" fill="#0b1118"/>
+  <circle cx="48" cy="48" r="39" fill="url(#core-line-reroute)" stroke="#8ea4ba" stroke-width="1.5"/>
+  <circle cx="48" cy="48" r="31" stroke="#95d7ff" stroke-opacity="0.45" stroke-width="1.5"/>
+
+  <g stroke="#e8f2ff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+    <!-- Bolt -->
+    <path d="M50 29L39.8 47.4H47.3L43.8 62.7L56.2 44.6H48.6L52.6 29Z" fill="#e8f2ff" stroke="none"/>
+
+    <!-- Crosshair -->
+    <circle cx="62" cy="33" r="8.5" fill="none" stroke-width="2"/>
+    <path d="M62 22V27"/>
+    <path d="M62 39V44"/>
+    <path d="M51 33H56"/>
+    <path d="M68 33H73"/>
+    <circle cx="62" cy="33" r="2.1" fill="#e8f2ff" stroke="none"/>
+  </g>
+</svg>

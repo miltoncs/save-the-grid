@@ -9,11 +9,25 @@
   <circle cx="48" cy="48" r="39" fill="url(#core-town-capital)" stroke="#8ea4ba" stroke-width="1.5"/>
   <circle cx="48" cy="48" r="31" stroke="#ffd27d" stroke-opacity="0.45" stroke-width="1.5"/>
   <g stroke="#e8f2ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none">
-    <path d="M30 58H66"/>
-    <path d="M34 58V52H62V58"/>
-    <path d="M34 52C34 44 62 44 62 52"/>
-    <path d="M48 52V41"/>
-    <path d="M46 42H50"/>
-    <path d="M48 39L49.5 41.7H46.5L48 39Z" fill="#e8f2ff" stroke="none"/>
+    <!-- Base and wings -->
+    <path d="M28 60H68"/>
+    <path d="M31 60V52H39V60"/>
+    <path d="M57 60V52H65V60"/>
+
+    <!-- Center portico -->
+    <path d="M39 60V49H57V60"/>
+    <path d="M39 49L48 45L57 49"/>
+    <path d="M43 60V51"/>
+    <path d="M48 60V51"/>
+    <path d="M53 60V51"/>
+    <path d="M32 52H39"/>
+    <path d="M57 52H64"/>
+
+    <!-- Dome and cupola -->
+    <path d="M40 45C40 35 56 35 56 45"/>
+    <path d="M42 45H54"/>
+    <path d="M44 38C44 34 52 34 52 38"/>
+    <path d="M46 34V31H50V34"/>
+    <circle cx="48" cy="29.5" r="1.5" fill="#e8f2ff" stroke="none"/>
   </g>
 </svg>

@@ -31,3 +31,5 @@ All icons in `/assets/icons/circular/` follow one system:
 ## Grid Infrastructure
 
 - `substation.svg`
+- `line-long-range.svg`
+- `line-reroute.svg`

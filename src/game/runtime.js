@@ -45,6 +45,7 @@ const {
   lerp,
   deepClone,
   formatTime,
+  formatCompactMoney,
   randomRange,
   pickRandom,
   pointInPolygon,
@@ -77,7 +78,11 @@ const {
 const MAP_OBJECT_ICON_WORLD_SIZE = 17.5;
 const MAP_OBJECT_INTERACTION_RADIUS_WORLD = 24;
 const DEMOLITION_DURATION_SECONDS = 20;
-const PLANT_TYPE_VALUES = new Set(["wind", "sun", "natural_gas"]);
+const DEMOLITION_BUILDING_REFUND_RATIO = 0.5;
+const DEMOLITION_LINE_REFUND_RATIO = 0.5;
+const LINE_WATER_OR_SNOW_PIXEL_SURCHARGE = 10;
+const PLANT_TYPE_ORDER = ["wind", "sun", "natural_gas"];
+const PLANT_TYPE_VALUES = new Set(PLANT_TYPE_ORDER);
 const DEFAULT_PLANT_TYPE = "wind";
 const PLANT_TYPE_DEMOLISH_LABELS = {
   wind: "Wind Powerplant",
@@ -88,6 +93,15 @@ const DEMOLISH_ASSET_LABELS = {
   substation: "Substation",
   storage: "Battery",
 };
+const LONG_RANGE_LINE_MAX_DISTANCE = 1000;
+const LEGACY_ZOOM_LEVELS = [0.55, 0.72, 0.9, 1.1, 1.32, 1.64, 1.98, 2.32, 2.64, 3.08, 3.52, 3.96, 4.4, 4.84, 5.28];
+const MIN_CAMERA_ZOOM = 0.55;
+const MAX_CAMERA_ZOOM = 8;
+const DEFAULT_CAMERA_ZOOM = 2.64;
+const ZOOM_WHEEL_SENSITIVITY = 0.0016;
+const ZOOM_SMOOTHING_PER_SECOND = 12;
+const ZOOM_EPSILON = 0.0001;
+const CAMERA_PAN_OVERSCROLL_VIEWPORTS = 0.5;
 
 export class GameRuntime {
   constructor(options) {
@@ -130,21 +144,18 @@ export class GameRuntime {
       right: false,
     };
 
-    this.zoomLevels = [0.55, 0.72, 0.9, 1.1, 1.32, 1.64, 1.98, 2.32, 2.64, 3.08, 3.52, 3.96, 4.4, 4.84, 5.28];
-    const defaultZoomLevel = 2.64;
-    const defaultZoomIndex = this.zoomLevels.findIndex(
-      (zoomLevel) => Math.abs(zoomLevel - defaultZoomLevel) < 1e-6
-    );
     this.camera = {
       x: BASE_MAP.width / 2,
       y: BASE_MAP.height / 2,
-      zoomIndex: defaultZoomIndex >= 0 ? defaultZoomIndex : this.zoomLevels.length - 1,
+      zoom: DEFAULT_CAMERA_ZOOM,
+      zoomTarget: DEFAULT_CAMERA_ZOOM,
       dragActive: false,
       dragStartX: 0,
       dragStartY: 0,
       dragCamX: BASE_MAP.width / 2,
       dragCamY: BASE_MAP.height / 2,
     };
+    this.zoomFocus = null;
 
     this.tool = TOOL_PAN;
     this.buildAssetType = "plant";
@@ -155,6 +166,9 @@ export class GameRuntime {
     this.highlightedAlertId = null;
     this.mapImage = null;
     this.mapImageReady = false;
+    this.mapPixelData = null;
+    this.mapPixelWidth = 0;
+    this.mapPixelHeight = 0;
     this.resourceZones = [];
     this.resourceZoneSummary = {
       wind: 0,
@@ -222,9 +236,7 @@ export class GameRuntime {
     this.config.substationRadiusProfile = normalizeSubstationRadiusProfile(
       this.config.substationRadiusProfile
     );
-    this.config.substationRadius =
-      Number(this.config.substationRadius) ||
-      SUBSTATION_RADIUS_BY_PROFILE[this.config.substationRadiusProfile];
+    this.config.substationRadius = SUBSTATION_RADIUS_BY_PROFILE[this.config.substationRadiusProfile];
     this.config.lineMaintenanceProfile = normalizeLineMaintenanceProfile(
       this.config.lineMaintenanceProfile
     );
@@ -265,6 +277,14 @@ export class GameRuntime {
     return PLANT_TYPE_VALUES.has(value) ? value : DEFAULT_PLANT_TYPE;
   }
 
+  getNextBuildPlantType(currentType = this.buildPlantType) {
+    const normalizedType = this.normalizePlantType(currentType);
+    const currentIndex = PLANT_TYPE_ORDER.indexOf(normalizedType);
+    if (currentIndex < 0) return DEFAULT_PLANT_TYPE;
+    const nextIndex = (currentIndex + 1) % PLANT_TYPE_ORDER.length;
+    return PLANT_TYPE_ORDER[nextIndex] || DEFAULT_PLANT_TYPE;
+  }
+
   inferPlantTypeFromRegionResource(region) {
     const profile = region?.resourceProfile || {};
     const candidates = ["wind", "sun", "natural_gas"];
@@ -287,6 +307,56 @@ export class GameRuntime {
       return PLANT_TYPE_DEMOLISH_LABELS[plantType] || "Powerplant";
     }
     return DEMOLISH_ASSET_LABELS[assetType] || (ASSET_RULES[assetType]?.label ?? "Asset");
+  }
+
+  createEmptyAssetBuildCosts() {
+    return {
+      plant: [],
+      substation: [],
+      storage: [],
+    };
+  }
+
+  normalizeAssetBuildCostHistory(values) {
+    if (!Array.isArray(values)) return [];
+    return values
+      .map((value) => Math.max(0, Math.round(Number(value) || 0)))
+      .filter((value) => value > 0);
+  }
+
+  ensureRegionAssetBuildCosts(region) {
+    if (!region) return this.createEmptyAssetBuildCosts();
+    const existing = region.assetBuildCosts && typeof region.assetBuildCosts === "object"
+      ? region.assetBuildCosts
+      : {};
+    const normalized = this.createEmptyAssetBuildCosts();
+    for (const assetType of ASSET_ORDER) {
+      normalized[assetType] = this.normalizeAssetBuildCostHistory(existing[assetType]);
+      const assetCount = Math.max(0, Number(region.assets?.[assetType] || 0));
+      if (normalized[assetType].length > assetCount) {
+        normalized[assetType] = normalized[assetType].slice(-assetCount);
+      }
+    }
+    region.assetBuildCosts = normalized;
+    return normalized;
+  }
+
+  estimateAssetBuildCost(region, assetType) {
+    const rule = ASSET_RULES[assetType];
+    if (!rule) return 0;
+    const terrainFactor = TERRAIN_COST_MULTIPLIERS[region?.terrain] || 1;
+    const globalCostFactor = this.getModifierValue("build_cost", 1);
+    const rawCost = rule.cost * terrainFactor * this.config.infraCostMultiplier * globalCostFactor;
+    return Math.max(0, Math.ceil(rawCost));
+  }
+
+  peekDemolishAssetValue(region, assetType) {
+    const ledger = this.ensureRegionAssetBuildCosts(region);
+    const history = ledger[assetType];
+    if (history.length) {
+      return Math.max(0, Number(history[history.length - 1] || 0));
+    }
+    return this.estimateAssetBuildCost(region, assetType);
   }
 
   async loadIconSet() {
@@ -484,6 +554,11 @@ export class GameRuntime {
     if (image) {
       this.mapImage = image;
       this.mapImageReady = true;
+      this.cacheMapPixelsForLineCost(image);
+    } else {
+      this.mapPixelData = null;
+      this.mapPixelWidth = 0;
+      this.mapPixelHeight = 0;
     }
 
     let zones = [];
@@ -550,6 +625,28 @@ export class GameRuntime {
     this.render();
   }
 
+  cacheMapPixelsForLineCost(image) {
+    if (!image) return;
+    try {
+      const canvas = document.createElement("canvas");
+      const width = Math.max(1, Number(image.naturalWidth || image.width || 0));
+      const height = Math.max(1, Number(image.naturalHeight || image.height || 0));
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d", { willReadFrequently: true });
+      if (!ctx) return;
+      ctx.drawImage(image, 0, 0, width, height);
+      const imageData = ctx.getImageData(0, 0, width, height);
+      this.mapPixelData = imageData.data;
+      this.mapPixelWidth = width;
+      this.mapPixelHeight = height;
+    } catch {
+      this.mapPixelData = null;
+      this.mapPixelWidth = 0;
+      this.mapPixelHeight = 0;
+    }
+  }
+
   estimateZoneCoverageForRegion(region, zonePolygon) {
     // Fast radial sample to estimate overlap between a circular region and polygon zones.
     const samples = [{ x: region.x, y: region.y }];
@@ -606,6 +703,7 @@ export class GameRuntime {
         coverageSourceId: null,
         coverageDistance: 0,
         assets,
+        assetBuildCosts: this.createEmptyAssetBuildCosts(),
         plantType: DEFAULT_PLANT_TYPE,
         resourceProfile: this.createEmptyResourceProfile(),
         demand: demandAnchor,
@@ -696,7 +794,8 @@ export class GameRuntime {
               regionName: String(item?.regionName || ""),
               assetType,
               assetLabel: String(item?.assetLabel || ASSET_RULES[assetType].label),
-              refund: 0,
+              refund: Math.max(0, Number(item?.refund || 0)),
+              buildingValue: Math.max(0, Number(item?.buildingValue || 0)),
               startedAt: Math.max(0, Number(item?.startedAt || 0)),
               completesAt: Math.max(0, Number(item?.completesAt || 0)),
             };
@@ -727,6 +826,7 @@ export class GameRuntime {
       region.assets.plant = Math.max(0, Number(region.assets.plant || 0));
       region.assets.substation = Math.max(0, Number(region.assets.substation || 0));
       region.assets.storage = Math.max(0, Number(region.assets.storage || 0));
+      this.ensureRegionAssetBuildCosts(region);
       const serializedPlantType = region.plantType;
       if (PLANT_TYPE_VALUES.has(serializedPlantType)) {
         region.plantType = this.normalizePlantType(serializedPlantType);
@@ -858,6 +958,7 @@ export class GameRuntime {
     }
 
     this.renderPulse += dt;
+    this.updateZoom(dt);
     this.handleKeyboardPan(dt);
     this.handleEdgePan(dt);
     this.render();
@@ -872,6 +973,7 @@ export class GameRuntime {
         this.stepSimulation(TICK_SECONDS);
       }
       this.renderPulse += TICK_SECONDS;
+      this.updateZoom(TICK_SECONDS);
     }
     this.render();
     return Promise.resolve();
@@ -939,7 +1041,8 @@ export class GameRuntime {
     }
 
     if (this.camera.dragActive) {
-      const zoom = this.zoomLevels[this.camera.zoomIndex];
+      this.zoomFocus = null;
+      const zoom = this.getCameraZoom();
       const dx = (event.clientX - this.camera.dragStartX) / zoom;
       const dy = (event.clientY - this.camera.dragStartY) / zoom;
       this.camera.x = this.camera.dragCamX - dx;
@@ -1019,11 +1122,123 @@ export class GameRuntime {
     this.camera.dragActive = false;
   }
 
+  getCameraZoom() {
+    const zoom = Number(this.camera.zoom);
+    if (Number.isFinite(zoom) && zoom > 0) return zoom;
+    return DEFAULT_CAMERA_ZOOM;
+  }
+
+  getTargetZoom() {
+    const zoomTarget = Number(this.camera.zoomTarget);
+    if (Number.isFinite(zoomTarget) && zoomTarget > 0) return zoomTarget;
+    return this.getCameraZoom();
+  }
+
+  setZoomTarget(nextZoom) {
+    const numericZoom = Number(nextZoom);
+    if (!Number.isFinite(numericZoom) || numericZoom <= 0) return false;
+    const clampedZoom = clamp(numericZoom, MIN_CAMERA_ZOOM, MAX_CAMERA_ZOOM);
+    if (Math.abs(clampedZoom - this.getTargetZoom()) <= ZOOM_EPSILON) return false;
+    this.camera.zoomTarget = clampedZoom;
+    return true;
+  }
+
+  setZoomFocusAtScreenPoint(screenX, screenY) {
+    const width = this.canvas.clientWidth;
+    const height = this.canvas.clientHeight;
+    if (!width || !height) {
+      this.zoomFocus = null;
+      return;
+    }
+
+    const focusX = clamp(Number(screenX), 0, width);
+    const focusY = clamp(Number(screenY), 0, height);
+    const world = this.screenToWorld(focusX, focusY);
+    this.zoomFocus = {
+      screenX: focusX,
+      screenY: focusY,
+      worldX: world.x,
+      worldY: world.y,
+    };
+  }
+
+  setZoomFocusFromWheelEvent(event) {
+    const rect = this.canvas.getBoundingClientRect();
+    const localX = event.clientX - rect.left;
+    const localY = event.clientY - rect.top;
+    const pointerInside =
+      localX >= 0 &&
+      localX <= rect.width &&
+      localY >= 0 &&
+      localY <= rect.height;
+    if (pointerInside) {
+      this.setZoomFocusAtScreenPoint(localX, localY);
+      return;
+    }
+
+    if (this.mouse.inside) {
+      this.setZoomFocusAtScreenPoint(this.mouse.x, this.mouse.y);
+      return;
+    }
+
+    this.setZoomFocusAtScreenPoint(rect.width / 2, rect.height / 2);
+  }
+
+  applyZoomFocusToCamera() {
+    if (!this.zoomFocus) return;
+    const width = this.canvas.clientWidth;
+    const height = this.canvas.clientHeight;
+    const zoom = this.getCameraZoom();
+    if (!width || !height || zoom <= 0) {
+      this.zoomFocus = null;
+      return;
+    }
+
+    this.camera.x = this.zoomFocus.worldX - (this.zoomFocus.screenX - width / 2) / zoom;
+    this.camera.y = this.zoomFocus.worldY - (this.zoomFocus.screenY - height / 2) / zoom;
+  }
+
+  normalizeWheelDelta(event) {
+    const rawDelta = Number(event.deltaY);
+    if (!Number.isFinite(rawDelta) || rawDelta === 0) return 0;
+    if (event.deltaMode === 1) return rawDelta * 16;
+    if (event.deltaMode === 2) return rawDelta * Math.max(this.canvas.clientHeight, 1);
+    return rawDelta;
+  }
+
+  updateZoom(dt) {
+    const targetZoom = this.getTargetZoom();
+    if (!Number.isFinite(targetZoom) || targetZoom <= 0) return;
+
+    const currentZoom = this.getCameraZoom();
+    const blend = 1 - Math.exp(-ZOOM_SMOOTHING_PER_SECOND * Math.max(0, dt));
+    const nextZoom = Math.abs(targetZoom - currentZoom) <= ZOOM_EPSILON
+      ? targetZoom
+      : lerp(currentZoom, targetZoom, blend);
+    this.camera.zoom = clamp(
+      nextZoom,
+      MIN_CAMERA_ZOOM,
+      MAX_CAMERA_ZOOM
+    );
+    this.applyZoomFocusToCamera();
+    this.clampCameraToMap();
+    if (Math.abs(targetZoom - this.camera.zoom) <= ZOOM_EPSILON) {
+      this.zoomFocus = null;
+    }
+  }
+
   onWheel(event) {
     event.preventDefault();
-    const delta = Math.sign(event.deltaY);
-    this.camera.zoomIndex = clamp(this.camera.zoomIndex - delta, 0, this.zoomLevels.length - 1);
-    this.clampCameraToMap();
+    const normalizedDelta = this.normalizeWheelDelta(event);
+    if (normalizedDelta === 0) return;
+    const currentTargetZoom = this.getTargetZoom();
+    const scale = Math.exp(-normalizedDelta * ZOOM_WHEEL_SENSITIVITY);
+    if (!Number.isFinite(scale) || scale <= 0) return;
+    const nextTargetZoom = currentTargetZoom * scale;
+    const targetAdjusted = this.setZoomTarget(nextTargetZoom);
+    if (targetAdjusted) {
+      this.setZoomFocusFromWheelEvent(event);
+    }
   }
 
   onKeyDown(event) {
@@ -1062,28 +1277,51 @@ export class GameRuntime {
     }
 
     if (event.code === "Digit1") {
+      const currentPlantType = this.normalizePlantType(this.buildPlantType);
+      const alreadyWindPlantBuildTool =
+        this.tool === TOOL_BUILD &&
+        this.buildAssetType === "plant" &&
+        currentPlantType === "wind";
       this.tool = TOOL_BUILD;
       this.buildAssetType = "plant";
-      this.buildPlantType = DEFAULT_PLANT_TYPE;
+      this.buildPlantType = alreadyWindPlantBuildTool
+        ? this.getNextBuildPlantType(this.buildPlantType)
+        : DEFAULT_PLANT_TYPE;
       this.pushHudUpdate();
       return;
     }
 
     if (event.code === "Digit2") {
       this.tool = TOOL_BUILD;
-      this.buildAssetType = "substation";
+      this.buildAssetType = "plant";
+      this.buildPlantType = "sun";
       this.pushHudUpdate();
       return;
     }
 
     if (event.code === "Digit3") {
       this.tool = TOOL_BUILD;
+      this.buildAssetType = "plant";
+      this.buildPlantType = "natural_gas";
+      this.pushHudUpdate();
+      return;
+    }
+
+    if (event.code === "Digit4") {
+      this.tool = TOOL_BUILD;
+      this.buildAssetType = "substation";
+      this.pushHudUpdate();
+      return;
+    }
+
+    if (event.code === "Digit5") {
+      this.tool = TOOL_BUILD;
       this.buildAssetType = "storage";
       this.pushHudUpdate();
       return;
     }
 
-    if (event.code === "Digit4" || event.code === "KeyL") {
+    if (event.code === "Digit6" || event.code === "KeyL") {
       this.tool = TOOL_LINE;
       this.pushHudUpdate();
       return;
@@ -1096,11 +1334,13 @@ export class GameRuntime {
     }
 
     if (event.code === "KeyR") {
-      if (!this.resourceRevealHeld) {
-        this.resourceRevealHeld = true;
+      if (event.repeat) return;
+      this.resourceRevealHeld = !this.resourceRevealHeld;
+      if (this.resourceRevealHeld) {
         this.recordTutorialAction("resource_reveal");
-        this.render();
       }
+      this.pushHudUpdate();
+      this.render();
       return;
     }
 
@@ -1122,8 +1362,11 @@ export class GameRuntime {
     }
 
     if (event.code === "Escape") {
+      event.preventDefault();
+      this.tool = TOOL_PAN;
       this.selectedRegionId = null;
       this.clearLineSelection();
+      this.callbacks.onDismissDemolishConfirm?.();
       this.pushHudUpdate();
       return;
     }
@@ -1150,12 +1393,6 @@ export class GameRuntime {
       this.keyPan.right = false;
       return;
     }
-    if (event.code === "KeyR") {
-      if (this.resourceRevealHeld) {
-        this.resourceRevealHeld = false;
-        this.render();
-      }
-    }
   }
 
   onWindowBlur() {
@@ -1163,7 +1400,6 @@ export class GameRuntime {
     this.keyPan.down = false;
     this.keyPan.left = false;
     this.keyPan.right = false;
-    this.resourceRevealHeld = false;
     this.clearLineSelection();
     this.pointerDown.active = false;
     this.pointerDown.dragging = false;
@@ -1211,7 +1447,7 @@ export class GameRuntime {
   screenToWorld(screenX, screenY) {
     const width = this.canvas.clientWidth;
     const height = this.canvas.clientHeight;
-    const zoom = this.zoomLevels[this.camera.zoomIndex];
+    const zoom = this.getCameraZoom();
     const wx = this.camera.x + (screenX - width / 2) / zoom;
     const wy = this.camera.y + (screenY - height / 2) / zoom;
     return { x: wx, y: wy };
@@ -1220,36 +1456,29 @@ export class GameRuntime {
   worldToScreen(worldX, worldY) {
     const width = this.canvas.clientWidth;
     const height = this.canvas.clientHeight;
-    const zoom = this.zoomLevels[this.camera.zoomIndex];
+    const zoom = this.getCameraZoom();
     const sx = (worldX - this.camera.x) * zoom + width / 2;
     const sy = (worldY - this.camera.y) * zoom + height / 2;
     return { x: sx, y: sy };
   }
 
   clampCameraToMap(viewWidth = this.canvas.clientWidth, viewHeight = this.canvas.clientHeight) {
-    const zoom = this.zoomLevels[this.camera.zoomIndex] || 1;
+    const zoom = this.getCameraZoom();
     if (!viewWidth || !viewHeight || zoom <= 0) return;
 
+    const viewportWorldWidth = viewWidth / zoom;
+    const viewportWorldHeight = viewHeight / zoom;
     const halfViewWorldWidth = viewWidth / (2 * zoom);
     const halfViewWorldHeight = viewHeight / (2 * zoom);
-    const mapMidX = BASE_MAP.width / 2;
-    const mapMidY = BASE_MAP.height / 2;
+    const overscrollX = viewportWorldWidth * CAMERA_PAN_OVERSCROLL_VIEWPORTS;
+    const overscrollY = viewportWorldHeight * CAMERA_PAN_OVERSCROLL_VIEWPORTS;
+    const minX = halfViewWorldWidth - overscrollX;
+    const maxX = BASE_MAP.width - halfViewWorldWidth + overscrollX;
+    const minY = halfViewWorldHeight - overscrollY;
+    const maxY = BASE_MAP.height - halfViewWorldHeight + overscrollY;
 
-    if (halfViewWorldWidth >= mapMidX) {
-      this.camera.x = mapMidX;
-    } else {
-      this.camera.x = clamp(this.camera.x, halfViewWorldWidth, BASE_MAP.width - halfViewWorldWidth);
-    }
-
-    if (halfViewWorldHeight >= mapMidY) {
-      this.camera.y = mapMidY;
-    } else {
-      this.camera.y = clamp(
-        this.camera.y,
-        halfViewWorldHeight,
-        BASE_MAP.height - halfViewWorldHeight
-      );
-    }
+    this.camera.x = clamp(this.camera.x, Math.min(minX, maxX), Math.max(minX, maxX));
+    this.camera.y = clamp(this.camera.y, Math.min(minY, maxY), Math.max(minY, maxY));
   }
 
   isTownEntity(entity) {
@@ -1311,6 +1540,7 @@ export class GameRuntime {
       coverageSourceId: null,
       coverageDistance: 0,
       assets: { plant: 0, substation: 0, storage: 0 },
+      assetBuildCosts: this.createEmptyAssetBuildCosts(),
       plantType: DEFAULT_PLANT_TYPE,
       resourceProfile: this.createEmptyResourceProfile(),
       demand: 0,
@@ -1381,7 +1611,128 @@ export class GameRuntime {
       terrainFactor *
       this.config.infraCostMultiplier *
       this.getModifierValue("build_cost", 1);
-    return Math.ceil(rawCost);
+    const baseCost = Math.ceil(rawCost);
+    const blueOrWhitePixelsCrossed = this.countBlueOrWhitePixelsAlongLine(a, b);
+    const terrainSurcharge = blueOrWhitePixelsCrossed * LINE_WATER_OR_SNOW_PIXEL_SURCHARGE;
+    return baseCost + terrainSurcharge;
+  }
+
+  worldPointToMapPixel(point) {
+    if (!point || !this.mapPixelWidth || !this.mapPixelHeight) return null;
+    const x = clamp(
+      Math.round((clamp(Number(point.x || 0), 0, BASE_MAP.width) / Math.max(1, BASE_MAP.width)) * (this.mapPixelWidth - 1)),
+      0,
+      this.mapPixelWidth - 1
+    );
+    const y = clamp(
+      Math.round((clamp(Number(point.y || 0), 0, BASE_MAP.height) / Math.max(1, BASE_MAP.height)) * (this.mapPixelHeight - 1)),
+      0,
+      this.mapPixelHeight - 1
+    );
+    return { x, y };
+  }
+
+  isBlueOrWhiteMapPixelAt(x, y) {
+    if (!this.mapPixelData || !this.mapPixelWidth || !this.mapPixelHeight) return false;
+    const px = clamp(Math.round(x), 0, this.mapPixelWidth - 1);
+    const py = clamp(Math.round(y), 0, this.mapPixelHeight - 1);
+    const index = (py * this.mapPixelWidth + px) * 4;
+    const r = this.mapPixelData[index];
+    const g = this.mapPixelData[index + 1];
+    const b = this.mapPixelData[index + 2];
+    const a = this.mapPixelData[index + 3];
+    if (a < 8) return false;
+    const isSnow = r >= 220 && g >= 220 && b >= 220;
+    const isWater = b >= 150 && b >= g + 20 && b >= r + 40;
+    return isSnow || isWater;
+  }
+
+  countBlueOrWhitePixelsAlongLine(a, b) {
+    const start = this.worldPointToMapPixel(a);
+    const end = this.worldPointToMapPixel(b);
+    if (!start || !end) return 0;
+
+    let x0 = start.x;
+    let y0 = start.y;
+    const x1 = end.x;
+    const y1 = end.y;
+    const dx = Math.abs(x1 - x0);
+    const dy = Math.abs(y1 - y0);
+    const sx = x0 < x1 ? 1 : -1;
+    const sy = y0 < y1 ? 1 : -1;
+    let err = dx - dy;
+    let crossed = 0;
+
+    while (true) {
+      if (this.isBlueOrWhiteMapPixelAt(x0, y0)) {
+        crossed += 1;
+      }
+      if (x0 === x1 && y0 === y1) break;
+      const err2 = err * 2;
+      if (err2 > -dy) {
+        err -= dy;
+        x0 += sx;
+      }
+      if (err2 < dx) {
+        err += dx;
+        y0 += sy;
+      }
+    }
+
+    return crossed;
+  }
+
+  getConnectedBuiltLines(regionId) {
+    return this.state.links.filter(
+      (link) => link.built && (link.a === regionId || link.b === regionId)
+    );
+  }
+
+  willLoseLineEndpointAfterDemolition(region, assetType) {
+    let remainingAssets = 0;
+    for (const type of ASSET_ORDER) {
+      const count = Math.max(0, Number(region?.assets?.[type] || 0));
+      remainingAssets += type === assetType ? Math.max(0, count - 1) : count;
+    }
+    return remainingAssets <= 0;
+  }
+
+  estimateDemolishRefund(region, assetType, buildingValue = this.peekDemolishAssetValue(region, assetType)) {
+    const buildingRefund = Math.max(
+      0,
+      Math.floor(Math.max(0, Number(buildingValue || 0)) * DEMOLITION_BUILDING_REFUND_RATIO)
+    );
+    if (!this.willLoseLineEndpointAfterDemolition(region, assetType)) {
+      return buildingRefund;
+    }
+    const lineRefund = this.getConnectedBuiltLines(region.id).reduce((total, line) => {
+      const lineValue = Math.max(0, Number(line.lineBuildCost || 0));
+      return total + Math.floor(lineValue * DEMOLITION_LINE_REFUND_RATIO);
+    }, 0);
+    return buildingRefund + lineRefund;
+  }
+
+  demolishConnectedLinesForRegion(regionId) {
+    const lines = this.getConnectedBuiltLines(regionId);
+    if (!lines.length) {
+      return { count: 0, refund: 0 };
+    }
+    let refund = 0;
+    for (const line of lines) {
+      const lineValue = Math.max(0, Number(line.lineBuildCost || 0));
+      refund += Math.floor(lineValue * DEMOLITION_LINE_REFUND_RATIO);
+      line.built = false;
+      line.used = 0;
+      line.safeCapacity = 0;
+      line.hardCapacity = 0;
+      line.stress = 0;
+      line.overload = false;
+    }
+    return { count: lines.length, refund };
+  }
+
+  getMaxLineRange() {
+    return LONG_RANGE_LINE_MAX_DISTANCE;
   }
 
   canEndpointHostLine(region) {
@@ -1441,12 +1792,13 @@ export class GameRuntime {
     }
 
     const existing = this.findLineBetween(startRegion.id, region.id);
+    const lineLength = this.calculateLineLength(startRegion, region);
     const buildCost = this.estimateLineBuildCost(startRegion, region);
     this.lineCostPreview = {
       from: startRegion.id,
       to: region.id,
       cost: buildCost,
-      capacity: this.estimateLineCapacity(this.calculateLineLength(startRegion, region)),
+      capacity: this.estimateLineCapacity(lineLength),
     };
 
     if (existing && existing.built) {
@@ -1464,6 +1816,16 @@ export class GameRuntime {
       return;
     }
 
+    const maxRange = this.getMaxLineRange();
+    if (lineLength > maxRange) {
+      this.pushAlert(
+        `Endpoint out of range. Maximum ${Math.round(maxRange)} (current ${Math.round(lineLength)}).`,
+        "warning",
+        5
+      );
+      return;
+    }
+
     if (!this.isDevModeEnabled() && this.state.budget < buildCost) {
       this.pushAlert(`Insufficient budget for Line (${buildCost}).`, "warning", 5);
       return;
@@ -1471,7 +1833,7 @@ export class GameRuntime {
 
     let line = existing;
     if (!line) {
-      const length = this.calculateLineLength(startRegion, region);
+      const length = lineLength;
       line = {
         id: `line-${this.state.nextLineId++}`,
         a: startRegion.id,
@@ -1573,6 +1935,8 @@ export class GameRuntime {
     }
 
     target.assets[this.buildAssetType] += 1;
+    const assetBuildCosts = this.ensureRegionAssetBuildCosts(target);
+    assetBuildCosts[this.buildAssetType].push(cost);
     if (this.buildAssetType === "plant") {
       target.plantType = this.normalizePlantType(this.buildPlantType);
     }
@@ -1615,7 +1979,8 @@ export class GameRuntime {
       regionName: region.name,
       assetType,
       assetLabel,
-      refund: 0,
+      refund: candidate.refund,
+      buildingValue: candidate.buildingValue,
       startedAt,
       completesAt,
     });
@@ -1642,9 +2007,11 @@ export class GameRuntime {
       const count = Number(region.assets[assetType] || 0);
       const rule = ASSET_RULES[assetType];
       if (rule && count > 0) {
+        const buildingValue = this.peekDemolishAssetValue(region, assetType);
         return {
           assetType,
-          refund: 0,
+          refund: this.estimateDemolishRefund(region, assetType, buildingValue),
+          buildingValue,
         };
       }
     }
@@ -1689,11 +2056,54 @@ export class GameRuntime {
       const count = Number(region.assets[item.assetType] || 0);
       if (count > 0) {
         region.assets[item.assetType] = Math.max(0, count - 1);
+        const assetBuildCosts = this.ensureRegionAssetBuildCosts(region);
+        const buildHistory = assetBuildCosts[item.assetType];
+        let buildingValue = Math.max(0, Number(item.buildingValue || 0));
+        if (buildHistory.length) {
+          const removedValue = Math.max(0, Number(buildHistory.pop() || 0));
+          if (buildingValue <= 0) {
+            buildingValue = removedValue;
+          }
+        }
+        if (buildingValue <= 0) {
+          buildingValue = this.estimateAssetBuildCost(region, item.assetType);
+        }
+        const buildingRefund = Math.max(
+          0,
+          Math.floor(buildingValue * DEMOLITION_BUILDING_REFUND_RATIO)
+        );
+        let lineRefund = 0;
+        let lineCount = 0;
+        if (!this.canEndpointHostLine(region)) {
+          const lineDemolition = this.demolishConnectedLinesForRegion(region.id);
+          lineRefund = lineDemolition.refund;
+          lineCount = lineDemolition.count;
+        }
+        const totalRefund = buildingRefund + lineRefund;
+        if (totalRefund > 0) {
+          this.state.budget += totalRefund;
+        }
         if (item.assetType === "plant" && region.assets.plant <= 0) {
           region.plantType = DEFAULT_PLANT_TYPE;
         }
-        this.logTimeline(`Demolished ${item.assetLabel} in ${region.name}.`);
-        this.pushAlert(`${item.assetLabel} demolished in ${region.name}.`, "warning", 4);
+        const refundSuffix = totalRefund > 0 ? ` (+${totalRefund} budget)` : "";
+        if (lineCount > 0) {
+          this.logTimeline(
+            `Demolished ${item.assetLabel} in ${region.name}; decommissioned ${lineCount} connected line${lineCount === 1 ? "" : "s"}${refundSuffix}.`
+          );
+          this.pushAlert(
+            `${item.assetLabel} demolished in ${region.name}. ${lineCount} connected line${lineCount === 1 ? "" : "s"} removed${refundSuffix}.`,
+            "warning",
+            4
+          );
+        } else {
+          this.logTimeline(`Demolished ${item.assetLabel} in ${region.name}${refundSuffix}.`);
+          this.pushAlert(
+            `${item.assetLabel} demolished in ${region.name}${refundSuffix}.`,
+            "warning",
+            4
+          );
+        }
       }
     }
     this.state.pendingDemolitions = remaining;
@@ -1778,8 +2188,9 @@ export class GameRuntime {
     const panY = (this.keyPan.down ? 1 : 0) - (this.keyPan.up ? 1 : 0);
     if (!panX && !panY) return;
 
+    this.zoomFocus = null;
     const speed = 520;
-    const zoom = this.zoomLevels[this.camera.zoomIndex];
+    const zoom = this.getCameraZoom();
     const magnitude = Math.hypot(panX, panY) || 1;
     const nx = panX / magnitude;
     const ny = panY / magnitude;
@@ -1804,7 +2215,8 @@ export class GameRuntime {
     if (this.mouse.y >= height - edge) panY += 1;
 
     if (!panX && !panY) return;
-    const zoom = this.zoomLevels[this.camera.zoomIndex];
+    this.zoomFocus = null;
+    const zoom = this.getCameraZoom();
     this.camera.x += (panX * speed * dt) / zoom;
     this.camera.y += (panY * speed * dt) / zoom;
     this.clampCameraToMap();
@@ -2026,6 +2438,15 @@ export class GameRuntime {
       entity.assets.plant * ASSET_RULES.plant.generation * plantBoostMultiplier +
       entity.assets.storage * ASSET_RULES.storage.generation * storageBoostMultiplier
     );
+  }
+
+  calculateStoredPowerMWh() {
+    const storageReservePerUnitMWh = Math.max(0, Number(ASSET_RULES.storage?.generation || 0));
+    if (storageReservePerUnitMWh <= 0) return 0;
+    return this.state.regions.reduce((total, region) => {
+      const storageUnits = Math.max(0, Number(region?.assets?.storage || 0));
+      return total + storageUnits * storageReservePerUnitMWh;
+    }, 0);
   }
 
   buildTownComponents() {
@@ -2368,6 +2789,7 @@ export class GameRuntime {
       coverageSourceId: null,
       coverageDistance: 0,
       assets: { plant: 0, substation: 0, storage: 0 },
+      assetBuildCosts: this.createEmptyAssetBuildCosts(),
       plantType: DEFAULT_PLANT_TYPE,
       resourceProfile: this.createEmptyResourceProfile(),
       demand: initialDemand,
@@ -2958,7 +3380,7 @@ export class GameRuntime {
     const height = this.canvas.clientHeight;
     if (!width || !height) return;
 
-    const zoom = this.zoomLevels[this.camera.zoomIndex] || 1;
+    const zoom = this.getCameraZoom();
     const pixelZoomedIn = zoom > 1;
     ctx.imageSmoothingEnabled = !pixelZoomedIn;
     if ("imageSmoothingQuality" in ctx) {
@@ -2977,7 +3399,7 @@ export class GameRuntime {
   drawMapBackdrop(ctx, width, height) {
     const topLeft = this.worldToScreen(0, 0);
     const bottomRight = this.worldToScreen(BASE_MAP.width, BASE_MAP.height);
-    const zoom = this.zoomLevels[this.camera.zoomIndex] || 1;
+    const zoom = this.getCameraZoom();
     const drawPixelCrisp = zoom > 1;
     const drawX = drawPixelCrisp ? Math.round(topLeft.x) : topLeft.x;
     const drawY = drawPixelCrisp ? Math.round(topLeft.y) : topLeft.y;
@@ -3018,7 +3440,7 @@ export class GameRuntime {
         ctx.stroke();
       }
 
-      const zoom = this.zoomLevels[this.camera.zoomIndex] || 1;
+      const zoom = this.getCameraZoom();
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       ctx.font = `600 ${clamp(13 * zoom, 10, 16)}px "IBM Plex Mono", monospace`;
@@ -3052,7 +3474,7 @@ export class GameRuntime {
   }
 
   drawLinks(ctx) {
-    const zoom = this.zoomLevels[this.camera.zoomIndex] || 1;
+    const zoom = this.getCameraZoom();
     for (const link of this.state.links) {
       if (!link.built) continue;
       const a = this.findRegion(link.a);
@@ -3084,10 +3506,23 @@ export class GameRuntime {
     const corridorThickness = clamp(64 * tileScale, 10, 30);
     return {
       corridorThickness,
-      horizontalTileWidth: 128 * tileScale,
-      horizontalTileHeight: 64 * tileScale,
-      verticalTileWidth: 64 * tileScale,
-      verticalTileHeight: 128 * tileScale,
+      shieldOffset: -corridorThickness * 0.42,
+      conductorOffsets: [
+        -corridorThickness * 0.22,
+        -corridorThickness * 0.04,
+        corridorThickness * 0.14,
+        corridorThickness * 0.3,
+      ],
+      shieldStroke: clamp(0.45 + zoom * 0.18, 0.65, 1.35),
+      conductorStroke: clamp(0.62 + zoom * 0.2, 0.86, 1.9),
+      towerHeight: clamp(112 * tileScale, 15, 44),
+      towerHalfBaseWidth: clamp(22 * tileScale, 3.5, 12),
+      towerHalfNeckWidth: clamp(10 * tileScale, 1.8, 6.4),
+      towerHalfCrossarmWidth: clamp(34 * tileScale, 6, 20),
+      towerMainStroke: clamp(0.75 + zoom * 0.24, 0.86, 2.05),
+      towerDetailStroke: clamp(0.44 + zoom * 0.11, 0.58, 1.2),
+      insulatorRadius: clamp(0.65 + zoom * 0.18, 0.8, 2.2),
+      towerSpacing: clamp(128 * tileScale, 22, 64),
     };
   }
 
@@ -3102,78 +3537,48 @@ export class GameRuntime {
     ctx.restore();
   }
 
-  drawLongDistancePowerline(ctx, from, to, zoom, stressColor) {
+  drawLongDistanceWireBundle(ctx, from, to, metrics, stressColor) {
     const dx = to.x - from.x;
     const dy = to.y - from.y;
     const length = Math.hypot(dx, dy);
     if (length <= 0.6) return;
+    const ux = dx / length;
+    const uy = dy / length;
+    const nx = -uy;
+    const ny = ux;
 
-    const metrics = this.getLongDistancePowerlineRenderMetrics(zoom);
-    const useVerticalTemplate = Math.abs(dy) > Math.abs(dx) * 1.15;
-    const tile = useVerticalTemplate
-      ? this.iconSet.powerline.longVertical
-      : this.iconSet.powerline.longHorizontal;
-    if (!tile) {
-      this.drawLongDistancePowerlineFallback(ctx, from, to, zoom, stressColor);
-      return;
-    }
-
-    const angle = Math.atan2(dy, dx);
-    const halfThickness = metrics.corridorThickness / 2;
-
-    ctx.save();
-    ctx.translate(from.x, from.y);
-    ctx.rotate(angle);
-    ctx.beginPath();
-    ctx.rect(0, -halfThickness, length, metrics.corridorThickness);
-    ctx.clip();
-    ctx.globalAlpha = 0.96;
-
-    if (useVerticalTemplate) {
-      ctx.save();
-      ctx.rotate(-Math.PI / 2);
-      for (
-        let y = 0;
-        y < length + metrics.verticalTileHeight;
-        y += metrics.verticalTileHeight
-      ) {
-        ctx.drawImage(
-          tile,
-          -metrics.verticalTileWidth / 2,
-          y,
-          metrics.verticalTileWidth,
-          metrics.verticalTileHeight
-        );
-      }
-      ctx.restore();
-    } else {
-      for (
-        let x = 0;
-        x < length + metrics.horizontalTileWidth;
-        x += metrics.horizontalTileWidth
-      ) {
-        ctx.drawImage(
-          tile,
-          x,
-          -metrics.horizontalTileHeight / 2,
-          metrics.horizontalTileWidth,
-          metrics.horizontalTileHeight
-        );
-      }
-    }
+    const drawOffsetWire = (offset, strokeStyle, lineWidth, alpha) => {
+      const ox = nx * offset;
+      const oy = ny * offset;
+      ctx.globalAlpha = alpha;
+      ctx.strokeStyle = strokeStyle;
+      ctx.lineWidth = lineWidth;
+      ctx.beginPath();
+      ctx.moveTo(from.x + ox, from.y + oy);
+      ctx.lineTo(to.x + ox, to.y + oy);
+      ctx.stroke();
+    };
 
     ctx.save();
-    ctx.globalCompositeOperation = "source-atop";
-    ctx.globalAlpha = 0.18;
-    ctx.fillStyle = stressColor;
-    ctx.fillRect(0, -halfThickness, length, metrics.corridorThickness);
-    ctx.restore();
-    ctx.restore();
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
 
-    ctx.save();
+    ctx.globalAlpha = 0.12;
     ctx.strokeStyle = stressColor;
-    ctx.globalAlpha = 0.44;
-    ctx.lineWidth = clamp(0.9 * zoom, 0.8, 2.2);
+    ctx.lineWidth = metrics.corridorThickness;
+    ctx.beginPath();
+    ctx.moveTo(from.x, from.y);
+    ctx.lineTo(to.x, to.y);
+    ctx.stroke();
+
+    drawOffsetWire(metrics.shieldOffset, "#3b627f", metrics.shieldStroke, 0.92);
+    for (const offset of metrics.conductorOffsets) {
+      drawOffsetWire(offset, "#2d4e66", metrics.conductorStroke, 0.96);
+    }
+
+    ctx.globalAlpha = 0.42;
+    ctx.strokeStyle = stressColor;
+    ctx.lineWidth = clamp(metrics.conductorStroke * 0.92, 0.75, 1.9);
     ctx.beginPath();
     ctx.moveTo(from.x, from.y);
     ctx.lineTo(to.x, to.y);
@@ -3181,8 +3586,128 @@ export class GameRuntime {
     ctx.restore();
   }
 
+  drawLongDistanceTowerUpright(ctx, x, y, metrics, stressColor) {
+    const topY = y - metrics.towerHeight * 0.48;
+    const capY = topY + metrics.towerHeight * 0.06;
+    const crownY = topY + metrics.towerHeight * 0.13;
+    const crossarmY = topY + metrics.towerHeight * 0.24;
+    const braceY = y + metrics.towerHeight * 0.02;
+    const lowerBraceY = y + metrics.towerHeight * 0.22;
+    const baseY = y + metrics.towerHeight * 0.48;
+
+    ctx.save();
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+
+    ctx.strokeStyle = "#5b718a";
+    ctx.lineWidth = metrics.towerMainStroke;
+    ctx.beginPath();
+    ctx.moveTo(x - metrics.towerHalfCrossarmWidth * 0.82, crownY);
+    ctx.lineTo(x - metrics.towerHalfCrossarmWidth, crossarmY);
+    ctx.moveTo(x + metrics.towerHalfCrossarmWidth * 0.82, crownY);
+    ctx.lineTo(x + metrics.towerHalfCrossarmWidth, crossarmY);
+    ctx.moveTo(x - metrics.towerHalfBaseWidth, baseY);
+    ctx.lineTo(x - metrics.towerHalfNeckWidth, braceY);
+    ctx.moveTo(x + metrics.towerHalfBaseWidth, baseY);
+    ctx.lineTo(x + metrics.towerHalfNeckWidth, braceY);
+    ctx.moveTo(x, capY);
+    ctx.lineTo(x, baseY);
+    ctx.moveTo(x - metrics.towerHalfCrossarmWidth, crossarmY);
+    ctx.lineTo(x + metrics.towerHalfCrossarmWidth, crossarmY);
+    ctx.moveTo(x - metrics.towerHalfCrossarmWidth * 0.72, crownY);
+    ctx.lineTo(x + metrics.towerHalfCrossarmWidth * 0.72, crownY);
+    ctx.moveTo(x - metrics.towerHalfBaseWidth, baseY);
+    ctx.lineTo(x + metrics.towerHalfBaseWidth, baseY);
+    ctx.stroke();
+
+    ctx.strokeStyle = "#4b6078";
+    ctx.lineWidth = metrics.towerDetailStroke;
+    ctx.beginPath();
+    ctx.moveTo(x - metrics.towerHalfNeckWidth, braceY);
+    ctx.lineTo(x + metrics.towerHalfBaseWidth * 0.96, baseY);
+    ctx.moveTo(x + metrics.towerHalfNeckWidth, braceY);
+    ctx.lineTo(x - metrics.towerHalfBaseWidth * 0.96, baseY);
+    ctx.moveTo(x - metrics.towerHalfBaseWidth * 0.82, lowerBraceY);
+    ctx.lineTo(x + metrics.towerHalfBaseWidth * 0.82, lowerBraceY);
+    ctx.moveTo(x - metrics.towerHalfBaseWidth * 0.74, y + metrics.towerHeight * 0.34);
+    ctx.lineTo(x + metrics.towerHalfBaseWidth * 0.74, y + metrics.towerHeight * 0.34);
+    ctx.stroke();
+
+    ctx.fillStyle = "#b8d3e2";
+    ctx.strokeStyle = "#2d4e66";
+    ctx.lineWidth = metrics.towerDetailStroke;
+    const capPoints = [
+      [x - metrics.towerHalfCrossarmWidth, crossarmY],
+      [x, crossarmY],
+      [x + metrics.towerHalfCrossarmWidth, crossarmY],
+      [x - metrics.towerHalfCrossarmWidth * 0.82, crownY],
+      [x + metrics.towerHalfCrossarmWidth * 0.82, crownY],
+    ];
+    for (const [capX, capPointY] of capPoints) {
+      ctx.beginPath();
+      ctx.arc(capX, capPointY, metrics.insulatorRadius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
+
+    ctx.strokeStyle = stressColor;
+    ctx.globalAlpha = 0.15;
+    ctx.lineWidth = metrics.towerMainStroke * 1.35;
+    ctx.beginPath();
+    ctx.moveTo(x - metrics.towerHalfBaseWidth, baseY);
+    ctx.lineTo(x - metrics.towerHalfNeckWidth, braceY);
+    ctx.moveTo(x + metrics.towerHalfBaseWidth, baseY);
+    ctx.lineTo(x + metrics.towerHalfNeckWidth, braceY);
+    ctx.moveTo(x - metrics.towerHalfCrossarmWidth, crossarmY);
+    ctx.lineTo(x + metrics.towerHalfCrossarmWidth, crossarmY);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  drawLongDistanceTowerSeries(ctx, from, to, metrics, stressColor) {
+    const dx = to.x - from.x;
+    const dy = to.y - from.y;
+    const length = Math.hypot(dx, dy);
+    if (length <= 0.6) return;
+    const ux = dx / length;
+    const uy = dy / length;
+
+    if (length < metrics.towerSpacing * 0.95) {
+      this.drawLongDistanceTowerUpright(
+        ctx,
+        (from.x + to.x) * 0.5,
+        (from.y + to.y) * 0.5,
+        metrics,
+        stressColor
+      );
+      return;
+    }
+
+    const startOffset = Math.min(metrics.towerSpacing * 0.65, length * 0.3);
+    for (
+      let distance = startOffset;
+      distance < length - startOffset * 0.42;
+      distance += metrics.towerSpacing
+    ) {
+      const x = from.x + ux * distance;
+      const y = from.y + uy * distance;
+      this.drawLongDistanceTowerUpright(ctx, x, y, metrics, stressColor);
+    }
+  }
+
+  drawLongDistancePowerline(ctx, from, to, zoom, stressColor) {
+    const dx = to.x - from.x;
+    const dy = to.y - from.y;
+    const length = Math.hypot(dx, dy);
+    if (length <= 0.6) return;
+
+    const metrics = this.getLongDistancePowerlineRenderMetrics(zoom);
+    this.drawLongDistanceWireBundle(ctx, from, to, metrics, stressColor);
+    this.drawLongDistanceTowerSeries(ctx, from, to, metrics, stressColor);
+  }
+
   drawTownServiceLinks(ctx) {
-    const zoom = this.zoomLevels[this.camera.zoomIndex];
+    const zoom = this.getCameraZoom();
     if (zoom <= 0.62) return;
 
     for (const town of this.state.regions) {
@@ -3314,7 +3839,7 @@ export class GameRuntime {
   }
 
   getMapObjectIconScreenSize() {
-    return MAP_OBJECT_ICON_WORLD_SIZE * (this.zoomLevels[this.camera.zoomIndex] || 1);
+    return MAP_OBJECT_ICON_WORLD_SIZE * this.getCameraZoom();
   }
 
   getTownRenderRadius() {
@@ -3559,7 +4084,7 @@ export class GameRuntime {
     const selectedId = this.selectedRegionId;
     const iconSize = this.getMapObjectIconScreenSize();
     const iconRadius = iconSize / 2;
-    const zoom = this.zoomLevels[this.camera.zoomIndex] || 1;
+    const zoom = this.getCameraZoom();
 
     for (const region of this.state.regions) {
       const point = this.worldToScreen(region.x, region.y);
@@ -3577,7 +4102,8 @@ export class GameRuntime {
       this.drawRegionAssets(ctx, point, iconSize, region);
 
       if ((region.assets.substation || 0) > 0 && zoom >= 0.9) {
-        const coverageRadius = (this.config.substationRadius || 300) * zoom;
+        const coverageRadius =
+          (this.config.substationRadius || SUBSTATION_RADIUS_BY_PROFILE.standard) * zoom;
         ctx.strokeStyle = region.coveredBySubstation
           ? "rgba(173, 236, 200, 0.33)"
           : "rgba(241, 188, 128, 0.26)";
@@ -3608,12 +4134,114 @@ export class GameRuntime {
     return null;
   }
 
+  drawLineToolPreview(ctx) {
+    if (this.tool !== TOOL_LINE) return;
+    if (!this.lineBuildStartRegionId) return;
+    if (!this.mouse.inside) return;
+    if (this.camera.dragActive || this.pointerDown.dragging) return;
+
+    const startRegion = this.findRegion(this.lineBuildStartRegionId);
+    if (!startRegion) return;
+
+    const start = this.worldToScreen(startRegion.x, startRegion.y);
+    const end = { x: this.mouse.x, y: this.mouse.y };
+    const zoom = this.getCameraZoom();
+    const endWorld = this.screenToWorld(end.x, end.y);
+    const previewEndpointTerrain = this.inferLocalBiomeAtPoint(endWorld.x, endWorld.y).terrain;
+    const previewEndpoint = {
+      x: endWorld.x,
+      y: endWorld.y,
+      terrain: previewEndpointTerrain,
+    };
+    const previewCost = this.estimateLineBuildCost(startRegion, previewEndpoint);
+    const previewDistance = this.calculateLineLength(startRegion, previewEndpoint);
+    const outOfRange = previewDistance > this.getMaxLineRange();
+
+    ctx.save();
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.strokeStyle = "rgba(118, 205, 255, 0.42)";
+    ctx.lineWidth = clamp(1.8 + zoom * 0.3, 1.8, 3.2);
+    ctx.beginPath();
+    ctx.moveTo(start.x, start.y);
+    ctx.lineTo(end.x, end.y);
+    ctx.stroke();
+
+    const label = `Cost ${Math.max(0, Math.round(previewCost))}`;
+    ctx.font = '600 12px "IBM Plex Mono", monospace';
+    const textWidth = Math.ceil(ctx.measureText(label).width);
+    const padX = 8;
+    const boxWidth = textWidth + padX * 2;
+    const boxHeight = 20;
+    const x = clamp(end.x + 12, 6, Math.max(6, this.canvas.clientWidth - boxWidth - 6));
+    const y = clamp(end.y - boxHeight - 10, 6, Math.max(6, this.canvas.clientHeight - boxHeight - 6));
+
+    ctx.fillStyle = outOfRange ? "rgba(243, 130, 122, 0.24)" : "rgba(112, 188, 232, 0.24)";
+    ctx.strokeStyle = outOfRange ? "rgba(255, 175, 168, 0.62)" : "rgba(156, 223, 255, 0.62)";
+    ctx.lineWidth = 1;
+    ctx.fillRect(x, y, boxWidth, boxHeight);
+    ctx.strokeRect(x, y, boxWidth, boxHeight);
+    ctx.fillStyle = outOfRange ? "#ffe4df" : "#d8f2ff";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    ctx.fillText(label, x + padX, y + boxHeight / 2 + 0.5);
+    ctx.restore();
+  }
+
+  estimateBuildPreviewCost(worldPoint) {
+    if (this.buildAssetType !== "plant") return null;
+    if (!worldPoint) return null;
+
+    const rule = ASSET_RULES.plant;
+    if (!rule) return null;
+
+    const region = this.findRegionAt(worldPoint.x, worldPoint.y);
+    if (region && this.isTownEntity(region)) return null;
+
+    const terrain = region?.terrain || this.inferLocalBiomeAtPoint(worldPoint.x, worldPoint.y).terrain;
+    const terrainFactor = TERRAIN_COST_MULTIPLIERS[terrain] || 1;
+    const globalCostFactor = this.getModifierValue("build_cost", 1);
+    const rawCost = rule.cost * terrainFactor * this.config.infraCostMultiplier * globalCostFactor;
+    return Math.ceil(rawCost);
+  }
+
+  drawPlantBuildCostPreview(ctx, cost, iconSize) {
+    if (!Number.isFinite(cost)) return;
+
+    const label = `Cost ${Math.max(0, Math.round(cost))}`;
+    const width = this.canvas.clientWidth;
+    const height = this.canvas.clientHeight;
+
+    ctx.save();
+    ctx.font = '600 12px "IBM Plex Mono", monospace';
+    const textWidth = Math.ceil(ctx.measureText(label).width);
+    const boxHeight = 20;
+    const padX = 8;
+    const boxWidth = textWidth + padX * 2;
+    const anchorX = this.mouse.x - boxWidth / 2;
+    const anchorY = this.mouse.y - iconSize / 2 - boxHeight - 8;
+    const x = clamp(anchorX, 6, Math.max(6, width - boxWidth - 6));
+    const y = clamp(anchorY, 6, Math.max(6, height - boxHeight - 6));
+
+    ctx.fillStyle = "rgba(112, 188, 232, 0.24)";
+    ctx.strokeStyle = "rgba(156, 223, 255, 0.62)";
+    ctx.lineWidth = 1;
+    ctx.fillRect(x, y, boxWidth, boxHeight);
+    ctx.strokeRect(x, y, boxWidth, boxHeight);
+
+    ctx.fillStyle = "#d8f2ff";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    ctx.fillText(label, x + padX, y + boxHeight / 2 + 0.5);
+    ctx.restore();
+  }
+
   drawBuildCursorPreview(ctx) {
     if (this.tool !== TOOL_BUILD) return;
     if (!this.mouse.inside) return;
     if (this.camera.dragActive || this.pointerDown.dragging) return;
 
-    const zoom = this.zoomLevels[this.camera.zoomIndex] || 1;
+    const zoom = this.getCameraZoom();
     const world = this.screenToWorld(this.mouse.x, this.mouse.y);
     if (world.x < 0 || world.x > BASE_MAP.width || world.y < 0 || world.y > BASE_MAP.height) {
       return;
@@ -3632,6 +4260,7 @@ export class GameRuntime {
       ctx.restore();
     }
 
+    const previewCost = this.estimateBuildPreviewCost(world);
     const iconSize = this.getMapObjectIconScreenSize();
     const icon = this.getBuildPreviewIcon();
     if (icon) {
@@ -3645,6 +4274,7 @@ export class GameRuntime {
         iconSize
       );
       ctx.restore();
+      this.drawPlantBuildCostPreview(ctx, previewCost, iconSize);
       return;
     }
 
@@ -3668,9 +4298,11 @@ export class GameRuntime {
       fallbackRegion
     );
     ctx.restore();
+    this.drawPlantBuildCostPreview(ctx, previewCost, iconSize);
   }
 
   drawOverlay(ctx, width, height) {
+    this.drawLineToolPreview(ctx);
     this.drawBuildCursorPreview(ctx);
 
     if (this.paused) {
@@ -3700,6 +4332,7 @@ export class GameRuntime {
       servedDemand: this.state.totalServed,
       powerSupply: this.state.totalGeneration,
       powerDemand: this.state.totalDemand,
+      storedPowerMWh: this.calculateStoredPowerMWh(),
       timer: this.state.runtimeSeconds,
       season: this.state.seasonLabel,
       populationActive: this.config.populationEnabled,
@@ -3780,7 +4413,7 @@ export class GameRuntime {
         title: "Custom Objective",
         text: `Survive until ${formatTime(target)} with stable reliability.`,
         progress,
-        detail: `Reliability ${this.state.reliability.toFixed(1)}% | Budget ${Math.round(this.state.budget)}`,
+        detail: `Reliability ${this.state.reliability.toFixed(1)}% | Budget ${formatCompactMoney(this.state.budget)}`,
       };
     }
 
@@ -3822,11 +4455,33 @@ export class GameRuntime {
       ...(snapshotPayload.camera || {}),
       dragActive: false,
     };
-    this.camera.zoomIndex = clamp(
-      Number(this.camera.zoomIndex) || 0,
-      0,
-      this.zoomLevels.length - 1
+    const legacyZoomIndex = Number(this.camera.zoomIndex);
+    const legacyZoom = Number.isFinite(legacyZoomIndex)
+      ? LEGACY_ZOOM_LEVELS[Math.round(clamp(legacyZoomIndex, 0, LEGACY_ZOOM_LEVELS.length - 1))]
+      : NaN;
+    const hydratedZoom = Number(this.camera.zoom);
+    if (Number.isFinite(hydratedZoom) && hydratedZoom > 0) {
+      this.camera.zoom = clamp(
+        hydratedZoom,
+        MIN_CAMERA_ZOOM,
+        MAX_CAMERA_ZOOM
+      );
+    } else {
+      this.camera.zoom = clamp(
+        Number.isFinite(legacyZoom) && legacyZoom > 0 ? legacyZoom : DEFAULT_CAMERA_ZOOM,
+        MIN_CAMERA_ZOOM,
+        MAX_CAMERA_ZOOM
+      );
+    }
+    const hydratedZoomTarget = Number(this.camera.zoomTarget);
+    this.camera.zoomTarget = clamp(
+      Number.isFinite(hydratedZoomTarget) && hydratedZoomTarget > 0
+        ? hydratedZoomTarget
+        : this.camera.zoom,
+      MIN_CAMERA_ZOOM,
+      MAX_CAMERA_ZOOM
     );
+    delete this.camera.zoomIndex;
     this.clampCameraToMap();
     this.tool = snapshotPayload.tool ?? TOOL_PAN;
     this.buildAssetType = snapshotPayload.buildAssetType || "plant";
@@ -3897,7 +4552,7 @@ export class GameRuntime {
         camera: {
           x: Number(this.camera.x.toFixed(2)),
           y: Number(this.camera.y.toFixed(2)),
-          zoom: this.zoomLevels[this.camera.zoomIndex],
+          zoom: Number(this.getCameraZoom().toFixed(3)),
         },
       },
       timerSeconds: Number(this.state.runtimeSeconds.toFixed(2)),
@@ -3909,6 +4564,7 @@ export class GameRuntime {
       totalDemand: Number(this.state.totalDemand.toFixed(2)),
       totalServed: Number(this.state.totalServed.toFixed(2)),
       totalUnmet: Number(this.state.totalUnmet.toFixed(2)),
+      storedPowerMWh: Number(this.calculateStoredPowerMWh().toFixed(2)),
       selectedTool: this.tool,
       selectedBuildAsset: this.buildAssetType,
       selectedBuildPlantType: this.buildPlantType,

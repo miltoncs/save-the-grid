@@ -93,50 +93,51 @@ export const LINE_MAX_CAPACITY = 140;
 export const DEV_MODE_BUDGET_FLOOR = 1_000_000_000;
 export const TUTORIAL_STEP_DEFINITIONS = [
   {
+    id: "resource_reveal",
+    title: "Reveal Resources",
+    instruction: "Press R to toggle the resource layer.",
+  },
+  {
     id: "build_plant",
     title: "Build a Plant",
-    instruction: "Use Build and Plant (1), then place it on an open map point.",
+    instruction: "Press 1 to select Wind Plant, then click an open map point to place it.",
   },
   {
     id: "build_substation",
     title: "Build a Substation",
-    instruction: "Use Build and Sub (2), then place it on an open map point.",
+    instruction: "Press 4 to select Substation, then click an open map point to place it.",
   },
   {
     id: "build_line",
     title: "Build a Line",
-    instruction: "Use Line (4) to connect two valid infrastructure endpoints.",
+    instruction:
+      "Press 6 (or L), click an infrastructure point with assets to set the start, then click another valid endpoint.",
   },
   {
     id: "service_town",
     title: "Serve a Town",
-    instruction: "Deliver active power service to at least one town.",
-  },
-  {
-    id: "resource_reveal",
-    title: "Reveal Resources",
-    instruction: "Hold R to reveal the Resource Layer.",
+    instruction: "Provide active power service to at least one town.",
   },
   {
     id: "reroute",
     title: "Use Reroute",
-    instruction: "Use Reroute on a town point at least once.",
+    instruction: "Press E (or B), then use Reroute on a town point at least once.",
   },
   {
     id: "demolish",
     title: "Use Demolish",
-    instruction: "Demolish at least one asset.",
+    instruction: "Press X and demolish at least one asset.",
   },
   {
     id: "pause_resume",
     title: "Pause and Resume",
-    instruction: "Press Space or Pause button to pause, then resume simulation.",
+    instruction: "Press Space or click the pause/play button to pause, then resume simulation.",
   },
 ];
 export const SUBSTATION_RADIUS_BY_PROFILE = {
-  wide: 370,
-  standard: 300,
-  tight: 245,
+  wide: 100,
+  standard: 100,
+  tight: 100,
 };
 export const LINE_MAINTENANCE_BY_PROFILE = {
   low: 0.82,
@@ -175,6 +176,29 @@ export function formatTime(seconds) {
   const mm = String(Math.floor(clamped / 60)).padStart(2, "0");
   const ss = String(clamped % 60).padStart(2, "0");
   return `${mm}:${ss}`;
+}
+
+export function formatCompactMoney(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return "0";
+
+  const sign = numeric < 0 ? "-" : "";
+  const abs = Math.abs(numeric);
+
+  const formatWithUnit = (base, unit) => {
+    const scaled = abs / base;
+    const rounded = scaled >= 100 ? Math.round(scaled) : Math.round(scaled * 10) / 10;
+    const text = Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1).replace(/\.0$/, "");
+    return `${sign}${text}${unit}`;
+  };
+
+  if (abs >= 999_500) {
+    return formatWithUnit(1_000_000, "M");
+  }
+  if (abs >= 1_000) {
+    return formatWithUnit(1_000, "k");
+  }
+  return `${sign}${Math.round(abs)}`;
 }
 
 export function randomRange(min, max) {

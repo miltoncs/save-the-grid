@@ -40,11 +40,11 @@ Tutorial is step-based. Only one step is "current" at a time.
 
 Required step set (covers all core mechanics):
 
-1. Build a `Wind`, `Solar`, or `Natural Gas` powerplant on an open map point.
-2. Build a `Substation` on an open map point.
-3. Build a manual `Line` between valid infrastructure endpoints.
-4. Achieve active service to at least one town (covered and receiving power).
-5. Reveal the Resource Layer by holding `R`.
+1. Reveal the Resource Layer by toggling `R`.
+2. Build a `Wind`, `Solar`, or `Natural Gas` powerplant on an open map point.
+3. Build a `Substation` on an open map point.
+4. Build a manual `Line` between valid infrastructure endpoints.
+5. Achieve active service to at least one town (covered and receiving power).
 6. Use `Reroute` on a town point at least once.
 7. Use `Demolish` to remove an asset at least once.
 8. Pause and resume the simulation.

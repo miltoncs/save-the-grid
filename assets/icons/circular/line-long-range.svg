@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96" fill="none">
+  <defs>
+    <radialGradient id="core-line-long-range" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(38 32) rotate(50) scale(62)">
+      <stop offset="0" stop-color="#1b2a3a"/>
+      <stop offset="1" stop-color="#101821"/>
+    </radialGradient>
+  </defs>
+
+  <circle cx="48" cy="48" r="44" fill="#0b1118"/>
+  <circle cx="48" cy="48" r="39" fill="url(#core-line-long-range)" stroke="#8ea4ba" stroke-width="1.5"/>
+  <circle cx="48" cy="48" r="31" stroke="#7eaed8" stroke-opacity="0.5" stroke-width="1.5"/>
+
+  <g stroke="#e8f2ff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <!-- Crossarm / crown -->
+    <path d="M26 31L35 24L40 31"/>
+    <path d="M70 31L61 24L56 31"/>
+    <path d="M35 24H61"/>
+    <path d="M32 34H64"/>
+    <path d="M40 31H56"/>
+
+    <!-- Outer frame -->
+    <path d="M33 34L40 46L44 56L39 69L35 78"/>
+    <path d="M63 34L56 46L52 56L57 69L61 78"/>
+
+    <!-- Inner frame -->
+    <path d="M40 46L45 58L43 69L40 78"/>
+    <path d="M56 46L51 58L53 69L56 78"/>
+
+    <!-- Horizontal members -->
+    <path d="M40 46H56"/>
+    <path d="M44 56H52"/>
+    <path d="M39 69H57"/>
+    <path d="M35 78H61"/>
+
+    <!-- Lattice braces -->
+    <path d="M33 34L56 46"/>
+    <path d="M63 34L40 46"/>
+    <path d="M40 46L52 56"/>
+    <path d="M56 46L44 56"/>
+    <path d="M44 56L57 69"/>
+    <path d="M52 56L39 69"/>
+    <path d="M39 69L56 78"/>
+    <path d="M57 69L40 78"/>
+
+    <!-- Center hanger detail (no cables) -->
+    <path d="M46 37L48 40L50 37"/>
+
+    <!-- Arm tips -->
+    <path d="M30 33L27 35"/>
+    <path d="M66 33L69 35"/>
+  </g>
+</svg>
