@@ -1303,3 +1303,36 @@ Validation:
   - Right-clicked the line segment.
   - Confirm popover text included `Demolish Line ...`.
   - Accepting confirm produced alert: `Line removed between ...`.
+
+## 2026-02-27
+
+### Remove news blurbs from menu and run HUD
+
+- Removed menu bulletin panel content from `src/game/app.js` (`.menu-bulletin` block in `renderMainMenu`).
+- Removed in-run news ticker block from the Ops panel in `src/game/app.js`.
+- Simplified run markup builder signature:
+  - `buildRunScreenMarkup(newsTickerText)` -> `buildRunScreenMarkup()`.
+- Removed runtime news callback wiring from both run start paths in `src/game/app.js`:
+  - deleted `onNews` callback usage in `startRun(...)` and `startRunFromSnapshot(...)`.
+- Removed ambient news simulation from `src/game/runtime.js`:
+  - deleted `nextNewsAt` state seed/hydration fallback.
+  - deleted `emitNewsIfNeeded()` and its update-loop call.
+- Removed now-unused shared data export:
+  - deleted `NEWS_BLURBS` constant from `src/data.content.js`.
+  - removed `NEWS_BLURBS` re-export/import plumbing from `src/game/core.js`, `src/game/app.js`, and `src/game/runtime.js`.
+- Updated styles for removed UI blocks:
+  - `src/styles/base.css`: menu grid reduced from 3 columns to 2 columns; removed `.menu-bulletin` styling.
+  - `src/styles/run.css`: removed unused `.ticker` styling.
+
+Validation:
+
+- Syntax checks:
+  - `node --check src/game/app.js`
+  - `node --check src/game/runtime.js`
+  - `node --check src/game/core.js`
+  - `node --check src/data.content.js`
+- develop-web-game smoke:
+  - `node "$HOME/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js" --url http://127.0.0.1:5173 --actions-file "$HOME/.codex/skills/develop-web-game/references/action_payloads.json" --click-selector "#start-btn" --iterations 1 --pause-ms 220 --screenshot-dir output/web-game-remove-news-blurbs`
+  - artifacts:
+    - `output/web-game-remove-news-blurbs/shot-0.png`
+    - `output/web-game-remove-news-blurbs/state-0.json`

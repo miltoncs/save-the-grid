@@ -10,7 +10,6 @@ const {
   CUSTOM_OPTIONS,
   CUSTOM_PRESETS,
   DEFAULT_SETTINGS,
-  NEWS_BLURBS,
   SEASON_ORDER,
   STANDARD_PRESETS,
   STORAGE_KEYS,
@@ -307,16 +306,6 @@ export class SaveTheGridApp {
             <div class="grid-silhouette"></div>
             <div class="energy-rings"></div>
           </div>
-          <aside class="menu-bulletin">
-            <h3>National Bulletin</h3>
-            <ul>
-              <li>Early maps stay compact for fast readability.</li>
-              <li>Basic runs begin sparse: terrain-first with few seeded towns.</li>
-              <li>Population pressure activates in later missions.</li>
-              <li>Substations cover towns by radius; manual Lines handle long routes.</li>
-              <li>Completion unlocks progression, with no money carryover.</li>
-            </ul>
-          </aside>
         </div>
       </section>
     `;
@@ -736,7 +725,7 @@ export class SaveTheGridApp {
     });
   }
 
-  buildRunScreenMarkup(newsTickerText) {
+  buildRunScreenMarkup() {
     const plantCost = Math.ceil(ASSET_RULES.plant?.cost ?? 0);
     const substationCost = Math.ceil(ASSET_RULES.substation?.cost ?? 0);
     const storageCost = Math.ceil(ASSET_RULES.storage?.cost ?? 0);
@@ -856,11 +845,6 @@ export class SaveTheGridApp {
             <div class="ops-panel-block">
               <h4>Incident Rail</h4>
               <ul id="incident-list" class="incident-list"></ul>
-            </div>
-
-            <div class="ops-panel-block">
-              <h4>News</h4>
-              <div class="ticker floating-ticker" id="news-ticker">${newsTickerText}</div>
             </div>
           </section>
 
@@ -1108,7 +1092,7 @@ export class SaveTheGridApp {
     this.setRunMode(true);
     this.currentScreen = "run";
     this.cleanupRuntime();
-    this.root.innerHTML = this.buildRunScreenMarkup("National bulletin feed online.");
+    this.root.innerHTML = this.buildRunScreenMarkup();
 
     const canvas = this.root.querySelector("#game-canvas");
     const effectiveRunConfig = this.applyDevModeToRunConfig(runConfig);
@@ -1123,10 +1107,6 @@ export class SaveTheGridApp {
         onHighlightAlert: (alertId) => this.highlightAlert(alertId),
         onRequestDemolishConfirm: (payload) => this.showDemolishConfirm(payload),
         onDismissDemolishConfirm: () => this.clearDemolishConfirm(),
-        onNews: (text) => {
-          const ticker = this.root.querySelector("#news-ticker");
-          if (ticker) ticker.textContent = text;
-        },
       },
     });
 
@@ -1146,7 +1126,7 @@ export class SaveTheGridApp {
     this.setRunMode(true);
     this.currentScreen = "run";
     this.cleanupRuntime();
-    this.root.innerHTML = this.buildRunScreenMarkup("Resuming archived session...");
+    this.root.innerHTML = this.buildRunScreenMarkup();
 
     const canvas = this.root.querySelector("#game-canvas");
     const effectiveRunConfig = this.applyDevModeToRunConfig(snapshot.runConfig);
@@ -1166,10 +1146,6 @@ export class SaveTheGridApp {
         onHighlightAlert: (alertId) => this.highlightAlert(alertId),
         onRequestDemolishConfirm: (payload) => this.showDemolishConfirm(payload),
         onDismissDemolishConfirm: () => this.clearDemolishConfirm(),
-        onNews: (text) => {
-          const ticker = this.root.querySelector("#news-ticker");
-          if (ticker) ticker.textContent = text;
-        },
       },
     });
 

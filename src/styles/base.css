@@ -152,12 +152,11 @@ select {
 
 .menu-layout {
   display: grid;
-  grid-template-columns: minmax(240px, 320px) 1fr minmax(220px, 300px);
+  grid-template-columns: minmax(240px, 320px) 1fr;
   gap: clamp(14px, 2vw, 22px);
 }
 
-.menu-column,
-.menu-bulletin {
+.menu-column {
   border: 1px solid var(--line-faint);
   border-radius: var(--radius-lg);
   background: linear-gradient(160deg, rgba(15, 32, 41, 0.95), rgba(12, 23, 29, 0.9));
@@ -292,20 +291,5 @@ select {
   to {
     transform: rotate(360deg) scale(1);
   }
-}
-
-.menu-bulletin h3 {
-  margin: 0 0 10px;
-  font-family: "Rajdhani", sans-serif;
-  font-size: 1.45rem;
-  text-transform: uppercase;
-}
-
-.menu-bulletin ul {
-  margin: 0;
-  padding-left: 18px;
-  display: grid;
-  gap: 10px;
-  color: var(--text-soft);
 }
 

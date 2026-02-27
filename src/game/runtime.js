@@ -9,7 +9,6 @@ const {
   CUSTOM_OPTIONS,
   CUSTOM_PRESETS,
   DEFAULT_SETTINGS,
-  NEWS_BLURBS,
   SEASON_ORDER,
   STANDARD_PRESETS,
   STORAGE_KEYS,
@@ -894,7 +893,6 @@ export class GameRuntime {
       nextNodeId: 1,
       nextTownEmergenceAt: randomRange(44, 70),
       nextEventAt: randomRange(20, 34),
-      nextNewsAt: 7,
       nextLawsuitEligibleAt: 45,
       collapseSeconds: 0,
       tutorial: this.config.mode === "tutorial" ? this.createTutorialProgressState() : null,
@@ -994,7 +992,6 @@ export class GameRuntime {
       }
     }
     if (!safe.nextEventAt) safe.nextEventAt = safe.runtimeSeconds + randomRange(20, 34);
-    if (!safe.nextNewsAt) safe.nextNewsAt = safe.runtimeSeconds + 7;
     if (!safe.nextLawsuitEligibleAt) safe.nextLawsuitEligibleAt = safe.runtimeSeconds + 45;
     if (!safe.nextTownEmergenceAt) safe.nextTownEmergenceAt = safe.runtimeSeconds + randomRange(44, 70);
     if (!Number.isFinite(safe.townsEmerged)) safe.townsEmerged = 0;
@@ -2746,7 +2743,6 @@ export class GameRuntime {
     this.updateScoring(dt);
     this.applyDevModeState();
     this.evaluateObjectiveAndEndConditions(dt);
-    this.emitNewsIfNeeded();
 
     this.trimAlerts();
     this.pushHudUpdate();
@@ -3831,13 +3827,6 @@ export class GameRuntime {
         }
       }
     }
-  }
-
-  emitNewsIfNeeded() {
-    if (this.state.runtimeSeconds < this.state.nextNewsAt) return;
-    this.state.nextNewsAt = this.state.runtimeSeconds + randomRange(11, 18);
-    const blurb = pickRandom(NEWS_BLURBS);
-    this.callbacks.onNews(blurb);
   }
 
   finishRun(result, reason) {

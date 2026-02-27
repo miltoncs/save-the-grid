@@ -807,17 +807,6 @@
   box-shadow: 0 0 0 1px rgba(246, 245, 208, 0.72), 0 0 12px rgba(245, 230, 174, 0.4);
 }
 
-.ticker {
-  border: 1px solid rgba(203, 237, 220, 0.2);
-  border-radius: 12px;
-  background: rgba(8, 24, 31, 0.78);
-  color: #f0f6d3;
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 0.75rem;
-  line-height: 1.5;
-  padding: 8px 10px;
-}
-
 .records-layout {
   display: grid;
   gap: 14px;
