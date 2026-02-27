@@ -1303,3 +1303,15 @@ Validation:
   - Right-clicked the line segment.
   - Confirm popover text included `Demolish Line ...`.
   - Accepting confirm produced alert: `Line removed between ...`.
+
+## 2026-02-27
+
+### Remove "National Bulletin" from main menu
+
+- Updated `src/game/app.js` main menu template to remove the `aside.menu-bulletin` panel (including the "National Bulletin" heading and list content).
+- Updated `src/styles/base.css` menu layout to two columns so the main menu no longer reserves empty space for a third bulletin column.
+- Removed now-unused `.menu-bulletin` style rules.
+
+Validation:
+- `node --check src/game/app.js`
+- `rg -n "National Bulletin|menu-bulletin" src -S` (no matches)

@@ -307,16 +307,6 @@ export class SaveTheGridApp {
             <div class="grid-silhouette"></div>
             <div class="energy-rings"></div>
           </div>
-          <aside class="menu-bulletin">
-            <h3>National Bulletin</h3>
-            <ul>
-              <li>Early maps stay compact for fast readability.</li>
-              <li>Basic runs begin sparse: terrain-first with few seeded towns.</li>
-              <li>Population pressure activates in later missions.</li>
-              <li>Substations cover towns by radius; manual Lines handle long routes.</li>
-              <li>Completion unlocks progression, with no money carryover.</li>
-            </ul>
-          </aside>
         </div>
       </section>
     `;
