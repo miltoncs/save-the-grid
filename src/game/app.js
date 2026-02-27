@@ -1307,11 +1307,13 @@ export class SaveTheGridApp {
         const supplyDiffClass = popup.powerOutDiffMw > 0 ? "is-positive" : popup.powerOutDiffMw < 0 ? "is-negative" : "";
 
         if (popup.showDemand) {
-          rows.push(
-            `<div class="selected-entity-popup-row"><dt>Total Demand</dt><dd>${formatMw(
-              popup.totalDemandMw
-            )}</dd></div>`
-          );
+          if (!popup.isPowerplant) {
+            rows.push(
+              `<div class="selected-entity-popup-row"><dt>Total Demand</dt><dd>${formatMw(
+                popup.totalDemandMw
+              )}</dd></div>`
+            );
+          }
           rows.push(
             `<div class="selected-entity-popup-row"><dt>Power In</dt><dd>${formatMw(
               popup.powerInMw
