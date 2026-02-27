@@ -336,6 +336,26 @@
   white-space: nowrap;
 }
 
+#hud-power-supply {
+  display: inline-flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.hud-metric-diff {
+  color: #a6c9d8;
+  font-size: 0.76rem;
+}
+
+.hud-metric-diff.is-positive {
+  color: #7fd8a2;
+}
+
+.hud-metric-diff.is-negative {
+  color: #ff6b6b;
+}
+
 .floating-bottom-center {
   left: 50%;
   bottom: 16px;
@@ -661,6 +681,77 @@
   font-weight: 700;
 }
 
+.floating-selected-entity-popup {
+  width: min(280px, calc(100vw - 24px));
+  min-height: 120px;
+  z-index: 8;
+  pointer-events: none;
+  border: 1px solid rgba(208, 233, 220, 0.42);
+  border-radius: 12px;
+  background: linear-gradient(142deg, rgba(13, 37, 50, 0.97), rgba(7, 19, 28, 0.95));
+  box-shadow: 0 14px 30px rgba(2, 8, 14, 0.48);
+}
+
+.floating-selected-entity-popup h3 {
+  margin: 0;
+  font-size: 0.93rem;
+}
+
+#selected-entity-popup-kind {
+  margin: 2px 0 0;
+  color: #b6dbe8;
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.selected-entity-popup-metrics {
+  margin: 9px 0 0;
+  display: grid;
+  gap: 6px;
+}
+
+.selected-entity-popup-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 0.76rem;
+  border-top: 1px solid rgba(186, 219, 208, 0.16);
+  padding-top: 6px;
+}
+
+.selected-entity-popup-row dt {
+  margin: 0;
+  color: #bdd8e3;
+}
+
+.selected-entity-popup-row dd {
+  margin: 0;
+  color: #eff8d9;
+  font-family: "IBM Plex Mono", monospace;
+  text-align: right;
+}
+
+.selected-entity-popup-diff {
+  color: #9fc6d8;
+  font-size: 0.7rem;
+}
+
+.selected-entity-popup-diff.is-positive {
+  color: #8bd7ae;
+}
+
+.selected-entity-popup-diff.is-negative {
+  color: #f0b686;
+}
+
+.selected-entity-popup-empty {
+  margin-top: 4px;
+  color: #c5dbe6;
+  font-size: 0.75rem;
+}
+
 .floating-map-controls {
   right: 16px;
   bottom: 24px;
@@ -675,10 +766,6 @@
   color: #e9f6ff;
   font-size: 0.85rem;
   padding: 8px 10px;
-}
-
-.floating-region-context p {
-  margin: 4px 0;
 }
 
 .alert-list,

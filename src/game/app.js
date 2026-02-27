@@ -94,6 +94,12 @@ function formatSignedMw(value) {
   return `${sign}${normalized.toFixed(1)} MW`;
 }
 
+function formatSignedNumber(value) {
+  const normalized = normalizeSignedValue(value);
+  const sign = normalized > 0 ? "+" : "";
+  return `${sign}${normalized.toFixed(1)}`;
+}
+
 function formatMwh(value) {
   return `${normalizeSignedValue(value).toFixed(1)} MWh`;
 }
@@ -186,6 +192,12 @@ export class SaveTheGridApp {
     const y = clamp(Number(payload.y || 0), 20, Math.max(20, layerRect.height - 20));
     const placeBelow = y < 100;
     const estimatedRefund = Math.max(0, Math.round(Number(payload.refund || 0)));
+    const confirmDetail =
+      typeof payload.confirmDetail === "string" && payload.confirmDetail.trim()
+        ? payload.confirmDetail.trim()
+        : `Completes in ${DEMOLITION_DURATION_SECONDS}s. Estimated refund: ${formatCompactMoney(
+            estimatedRefund
+          )}.`;
 
     const popover = document.createElement("div");
     popover.id = "demolish-confirm-popover";
@@ -195,7 +207,7 @@ export class SaveTheGridApp {
     popover.innerHTML = `
       <p>Demolish ${payload.assetLabel}?</p>
       <p class="demolish-confirm-refund">
-        Completes in ${DEMOLITION_DURATION_SECONDS}s. Estimated refund: ${formatCompactMoney(estimatedRefund)}.
+        ${confirmDetail}
       </p>
       <div class="demolish-confirm-actions">
         <button class="demolish-confirm-btn demolish-confirm-cancel" type="button">Cancel</button>
@@ -213,7 +225,9 @@ export class SaveTheGridApp {
     popover.querySelector(".demolish-confirm-accept")?.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();
-      const demolished = this.runtime?.confirmDemolish(payload.regionId, payload.assetType);
+      const demolished = payload.lineId
+        ? this.runtime?.confirmDemolishLine(payload.lineId)
+        : this.runtime?.confirmDemolish(payload.regionId, payload.assetType);
       if (!demolished) {
         this.pushToast("Demolition request expired for that location.");
       }
@@ -1196,7 +1210,16 @@ export class SaveTheGridApp {
 
     if (runLabelNode) runLabelNode.textContent = payload.runLabel;
     budgetNode.textContent = payload.devMode ? "INF" : formatCompactMoney(payload.budget);
-    powerSupplyNode.textContent = `${payload.powerSupply.toFixed(1)} MW`;
+    const supplyDemandDelta = normalizeSignedValue(payload.powerSupply - payload.powerDemand);
+    const supplyDemandClass =
+      supplyDemandDelta > 0
+        ? "is-positive"
+        : supplyDemandDelta < 0
+          ? "is-negative"
+          : "";
+    powerSupplyNode.innerHTML = `<span class="hud-metric-diff ${supplyDemandClass}">(${formatSignedNumber(
+      supplyDemandDelta
+    )})</span><span class="hud-metric-value">${payload.powerSupply.toFixed(1)} MW</span>`;
     reliabilityNode.textContent = `${payload.reliability.toFixed(1)}%`;
     powerDemandNode.textContent = `${payload.powerDemand.toFixed(1)} MW`;
     storedPowerNode.textContent = `${(payload.storedPowerMWh || 0).toFixed(1)} MWh`;

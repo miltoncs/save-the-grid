@@ -131,6 +131,17 @@ The primary strategic question is always the same: what to build, when to build 
 - Exact build costs and generation values are intentionally TBD for tuning.
 - Actions: build, demolish, reroute priorities, and `Line` routing.
 
+### 8.2.1 Powerplant Tradeoff Strategy
+
+- `Natural Gas` powerplants provide stable, dispatchable output but carry recurring operating cost.
+- `Solar` powerplants have comparatively low output but low ongoing operating burden.
+- `Wind` powerplants require higher upfront capital but can provide strong long-run value in favorable wind conditions.
+- No powerplant type should be objectively best across all maps or run phases; each type must be situationally strong.
+- Resource-zone and condition effects should stay visible and interpretable, not hidden.
+- `Line` distance and capacity costs are part of powerplant choice: placement and routing overhead must affect effective value.
+- Balance policy disallows hidden anti-minmax debuffs (for example no hidden same-type clustering penalties).
+- Balance adjustments should use only visible knobs: upfront cost, recurring cost, output profile, and condition/resource multipliers.
+
 ### 8.3 Demand and Supply
 
 - Demand updates continuously in coarse ticks.

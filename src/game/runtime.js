@@ -97,6 +97,7 @@ const DEMOLISH_ASSET_LABELS = {
 };
 const LONG_RANGE_LINE_MAX_DISTANCE = 1000;
 const LONG_RANGE_TOWER_COUNT_RATIO = 0.25;
+const SIMPLIFIED_LINE_RENDER_ZOOM_THRESHOLD = 0.9;
 const STORAGE_UNIT_CAPACITY_MWH = 20;
 const STORAGE_CHARGE_DRAW_MW = 20;
 const IN_GAME_HOUR_REAL_SECONDS = 120;
@@ -211,6 +212,9 @@ export class GameRuntime {
         localVertical: null,
         longHorizontal: null,
         longVertical: null,
+      },
+      overlay: {
+        priorityElevated: null,
       },
     };
 
@@ -1737,6 +1741,37 @@ export class GameRuntime {
     return Math.hypot(a.x - b.x, a.y - b.y);
   }
 
+  pointToSegmentDistance(px, py, ax, ay, bx, by) {
+    const dx = bx - ax;
+    const dy = by - ay;
+    const lengthSq = dx * dx + dy * dy;
+    if (lengthSq <= 0.0001) {
+      return Math.hypot(px - ax, py - ay);
+    }
+    const t = clamp(((px - ax) * dx + (py - ay) * dy) / lengthSq, 0, 1);
+    const cx = ax + dx * t;
+    const cy = ay + dy * t;
+    return Math.hypot(px - cx, py - cy);
+  }
+
+  findBuiltLineAtScreen(screenX, screenY, maxDistancePx = 12) {
+    let bestLine = null;
+    let bestDistance = Infinity;
+    for (const line of this.state.links) {
+      if (!line?.built) continue;
+      const a = this.findRegion(line.a);
+      const b = this.findRegion(line.b);
+      if (!a || !b) continue;
+      const sa = this.worldToScreen(a.x, a.y);
+      const sb = this.worldToScreen(b.x, b.y);
+      const distance = this.pointToSegmentDistance(screenX, screenY, sa.x, sa.y, sb.x, sb.y);
+      if (distance > maxDistancePx || distance >= bestDistance) continue;
+      bestDistance = distance;
+      bestLine = line;
+    }
+    return bestLine;
+  }
+
   estimateLineCapacity(length) {
     return clamp(
       Math.round(LINE_MAX_CAPACITY - length * LINE_DISTANCE_CAPACITY_FACTOR),
@@ -1762,6 +1797,41 @@ export class GameRuntime {
     return baseCost + terrainSurcharge;
   }
 
+  getLineDemolishLabel(line) {
+    const a = this.findRegion(line?.a);
+    const b = this.findRegion(line?.b);
+    if (!a || !b) return "Long-Range Powerline";
+    return `Line ${a.name} -> ${b.name}`;
+  }
+
+  estimateLineDemolishRefund(line) {
+    const lineValue = Math.max(0, Number(line?.lineBuildCost || 0));
+    return Math.max(0, Math.floor(lineValue * DEMOLITION_LINE_REFUND_RATIO));
+  }
+
+  demolishBuiltLine(line) {
+    if (!line || !line.built) return false;
+    const startRegion = this.findRegion(line.a);
+    const endRegion = this.findRegion(line.b);
+    const startName = startRegion?.name || "Point A";
+    const endName = endRegion?.name || "Point B";
+    const refund = this.estimateLineDemolishRefund(line);
+    if (refund > 0) {
+      this.state.budget += refund;
+    }
+    line.built = false;
+    line.used = 0;
+    line.safeCapacity = 0;
+    line.hardCapacity = 0;
+    line.stress = 0;
+    line.overload = false;
+    this.state.score += 4;
+    const refundSuffix = refund > 0 ? ` (+${refund} budget)` : "";
+    this.logTimeline(`Demolished Line ${startName} -> ${endName}${refundSuffix}.`);
+    this.pushAlert(`Line removed between ${startName} and ${endName}${refundSuffix}.`, "warning", 4);
+    return true;
+  }
+
   worldPointToMapPixel(point) {
     if (!point || !this.mapPixelWidth || !this.mapPixelHeight) return null;
     const x = clamp(
@@ -1777,8 +1847,8 @@ export class GameRuntime {
     return { x, y };
   }
 
-  isBlueOrWhiteMapPixelAt(x, y) {
-    if (!this.mapPixelData || !this.mapPixelWidth || !this.mapPixelHeight) return false;
+  getMapPixelColorAt(x, y) {
+    if (!this.mapPixelData || !this.mapPixelWidth || !this.mapPixelHeight) return null;
     const px = clamp(Math.round(x), 0, this.mapPixelWidth - 1);
     const py = clamp(Math.round(y), 0, this.mapPixelHeight - 1);
     const index = (py * this.mapPixelWidth + px) * 4;
@@ -1786,10 +1856,29 @@ export class GameRuntime {
     const g = this.mapPixelData[index + 1];
     const b = this.mapPixelData[index + 2];
     const a = this.mapPixelData[index + 3];
-    if (a < 8) return false;
-    const isSnow = r >= 220 && g >= 220 && b >= 220;
-    const isWater = b >= 150 && b >= g + 20 && b >= r + 40;
-    return isSnow || isWater;
+    return { r, g, b, a };
+  }
+
+  isWaterMapPixelAt(x, y) {
+    const color = this.getMapPixelColorAt(x, y);
+    if (!color || color.a < 8) return false;
+    return color.b >= 150 && color.b >= color.g + 20 && color.b >= color.r + 40;
+  }
+
+  isSnowMapPixelAt(x, y) {
+    const color = this.getMapPixelColorAt(x, y);
+    if (!color || color.a < 8) return false;
+    return color.r >= 220 && color.g >= 220 && color.b >= 220;
+  }
+
+  isBlueOrWhiteMapPixelAt(x, y) {
+    return this.isWaterMapPixelAt(x, y) || this.isSnowMapPixelAt(x, y);
+  }
+
+  isWaterWorldPoint(point) {
+    const pixel = this.worldPointToMapPixel(point);
+    if (!pixel) return false;
+    return this.isWaterMapPixelAt(pixel.x, pixel.y);
   }
 
   countBlueOrWhitePixelsAlongLine(a, b) {
@@ -2308,6 +2397,14 @@ export class GameRuntime {
     return demolished;
   }
 
+  confirmDemolishLine(lineId) {
+    const line = this.findLink(lineId);
+    if (!line || !line.built) return false;
+    const demolished = this.demolishBuiltLine(line);
+    this.pushHudUpdate();
+    return demolished;
+  }
+
   findPendingDemolition(regionId, assetType = null) {
     const pending = this.state.pendingDemolitions || [];
     return (
@@ -2451,8 +2548,8 @@ export class GameRuntime {
 
   handleReroute(worldPoint, sourceRegion = null) {
     if (!worldPoint && !sourceRegion) return;
-    const centerX = sourceRegion ? sourceRegion.x : worldPoint.x;
-    const centerY = sourceRegion ? sourceRegion.y : worldPoint.y;
+    const centerX = worldPoint ? worldPoint.x : sourceRegion.x;
+    const centerY = worldPoint ? worldPoint.y : sourceRegion.y;
     const radiusWorld = this.getRerouteRadiusWorld();
     const targets = this.getRerouteTargetsInRange(centerX, centerY, radiusWorld);
     if (!targets.length) {
@@ -2520,6 +2617,7 @@ export class GameRuntime {
     if (this.tool === TOOL_REROUTE) {
       this.selectedRegionId = region ? region.id : null;
       this.handleReroute(worldPoint, region);
+      this.tool = TOOL_PAN;
       this.pushHudUpdate();
       return;
     }
@@ -2544,6 +2642,20 @@ export class GameRuntime {
     const worldPoint = this.screenToWorld(this.mouse.x, this.mouse.y);
     const region = this.findRegionAt(worldPoint.x, worldPoint.y);
     if (!region) {
+      const line = this.findBuiltLineAtScreen(this.mouse.x, this.mouse.y);
+      if (line) {
+        this.selectedRegionId = null;
+        this.callbacks.onRequestDemolishConfirm?.({
+          lineId: line.id,
+          assetLabel: this.getLineDemolishLabel(line),
+          refund: this.estimateLineDemolishRefund(line),
+          confirmDetail: "Line removal is immediate after confirmation.",
+          x: this.mouse.x,
+          y: this.mouse.y,
+        });
+        this.pushHudUpdate();
+        return;
+      }
       this.selectedRegionId = null;
       this.pushHudUpdate();
       return;
@@ -3129,6 +3241,7 @@ export class GameRuntime {
         (town) => Math.hypot(town.x - x, town.y - y) < minTownSpacing
       );
       if (tooClose) continue;
+      if (this.isWaterWorldPoint({ x, y })) continue;
 
       const nearest = this.getNearestTown(x, y) || sponsor;
       const archetypeSource = nearest || sponsor;
@@ -3153,6 +3266,7 @@ export class GameRuntime {
   }
 
   createEmergentTownFromAnchor(anchor) {
+    if (this.isWaterWorldPoint(anchor)) return null;
     const pendingTownIndex = Number(this.state.nextTownId || 1);
     const resolvedId = anchor.id || `town-${pendingTownIndex}`;
     const resolvedName = anchor.name || this.pickEmergentTownName(pendingTownIndex);
@@ -3230,6 +3344,7 @@ export class GameRuntime {
 
     const anchorCandidates = this.getUnspawnedTownAnchors()
       .filter((anchor) => this.isRegionLivableForTown(anchor))
+      .filter((anchor) => !this.isWaterWorldPoint(anchor))
       .map((anchor) => {
         const nearestStableTownDistance = sponsoringTowns.reduce((nearest, sponsor) => {
           const distance = Math.hypot(anchor.x - sponsor.x, anchor.y - sponsor.y);
@@ -3249,7 +3364,11 @@ export class GameRuntime {
       .sort((a, b) => b.score - a.score);
 
     const syntheticAnchor = this.generateEmergentTownAnchor(sponsoringTowns);
-    if (syntheticAnchor && this.isRegionLivableForTown(syntheticAnchor)) {
+    if (
+      syntheticAnchor &&
+      this.isRegionLivableForTown(syntheticAnchor) &&
+      !this.isWaterWorldPoint(syntheticAnchor)
+    ) {
       const nearestStableTownDistance = sponsoringTowns.reduce((nearest, sponsor) => {
         const distance = Math.hypot(syntheticAnchor.x - sponsor.x, syntheticAnchor.y - sponsor.y);
         return Math.min(nearest, distance);
@@ -3269,6 +3388,7 @@ export class GameRuntime {
 
     const selected = anchorCandidates[0];
     const town = this.createEmergentTownFromAnchor(selected.anchor);
+    if (!town) return;
     if (this.resourceZones.length) {
       const profileWeights = this.createEmptyResourceProfile();
       for (const zone of this.resourceZones) {
@@ -4236,11 +4356,56 @@ export class GameRuntime {
     }
   }
 
+  drawThinParallelLines(ctx, from, to, options = {}) {
+    const dx = to.x - from.x;
+    const dy = to.y - from.y;
+    const length = Math.hypot(dx, dy);
+    if (length <= 0.6) return;
+
+    const count = Math.max(1, Math.round(Number(options.count || 1)));
+    const spacing = Math.max(0, Number(options.spacing || 0));
+    const lineWidth = Math.max(0.2, Number(options.lineWidth || 0.8));
+    const alpha = clamp(Number(options.alpha == null ? 1 : options.alpha), 0, 1);
+    const strokeStyle = options.strokeStyle || "rgba(123, 173, 198, 0.82)";
+
+    const nx = -dy / length;
+    const ny = dx / length;
+    const midpoint = (count - 1) / 2;
+
+    ctx.save();
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.strokeStyle = strokeStyle;
+    ctx.globalAlpha = alpha;
+    ctx.lineWidth = lineWidth;
+    for (let i = 0; i < count; i += 1) {
+      const offset = (i - midpoint) * spacing;
+      const ox = nx * offset;
+      const oy = ny * offset;
+      ctx.beginPath();
+      ctx.moveTo(from.x + ox, from.y + oy);
+      ctx.lineTo(to.x + ox, to.y + oy);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
   drawLongDistancePowerline(ctx, from, to, zoom, stressColor) {
     const dx = to.x - from.x;
     const dy = to.y - from.y;
     const length = Math.hypot(dx, dy);
     if (length <= 0.6) return;
+
+    if (zoom <= SIMPLIFIED_LINE_RENDER_ZOOM_THRESHOLD) {
+      this.drawThinParallelLines(ctx, from, to, {
+        count: 3,
+        spacing: clamp(1.6 + zoom * 1.1, 1.6, 2.7),
+        lineWidth: clamp(0.32 + zoom * 0.34, 0.5, 0.9),
+        strokeStyle: stressColor || "rgba(114, 208, 142, 0.72)",
+        alpha: 0.9,
+      });
+      return;
+    }
 
     const metrics = this.getLongDistancePowerlineRenderMetrics(zoom);
     this.drawLongDistanceWireBundle(ctx, from, to, metrics, stressColor);
@@ -4260,6 +4425,18 @@ export class GameRuntime {
 
       const from = this.worldToScreen(source.x, source.y);
       const to = this.worldToScreen(town.x, town.y);
+
+      if (zoom <= SIMPLIFIED_LINE_RENDER_ZOOM_THRESHOLD) {
+        this.drawThinParallelLines(ctx, from, to, {
+          count: 2,
+          spacing: clamp(1.1 + zoom * 0.9, 1.1, 2.1),
+          lineWidth: clamp(0.26 + zoom * 0.3, 0.45, 0.82),
+          strokeStyle: "rgba(123, 173, 198, 0.84)",
+          alpha: 0.94,
+        });
+        continue;
+      }
+
       const elbowX = to.x;
       const elbowY = from.y;
       const elbow = { x: elbowX, y: elbowY };
@@ -4621,6 +4798,36 @@ export class GameRuntime {
     });
   }
 
+  drawPriorityOverlay(ctx, point, iconSize, region) {
+    if (this.normalizePriority(region?.priority) !== PRIORITY_ELEVATED) return;
+    const overlay = this.iconSet.overlay?.priorityElevated || null;
+    if (overlay) {
+      const size = Math.max(16, iconSize * 0.8);
+      ctx.save();
+      ctx.globalAlpha = 0.98;
+      ctx.drawImage(
+        overlay,
+        point.x - size / 2,
+        point.y - size / 2,
+        size,
+        size
+      );
+      ctx.restore();
+      return;
+    }
+
+    // Fallback if overlay icon is unavailable.
+    ctx.save();
+    ctx.strokeStyle = "rgba(126, 212, 255, 0.95)";
+    ctx.lineWidth = Math.max(1.2, iconSize * 0.08);
+    ctx.setLineDash([3, 4]);
+    ctx.beginPath();
+    ctx.arc(point.x, point.y, iconSize * 0.45, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.restore();
+  }
+
   drawRegions(ctx) {
     const selectedId = this.selectedRegionId;
     const iconSize = this.getMapObjectIconScreenSize();
@@ -4641,6 +4848,7 @@ export class GameRuntime {
       }
 
       this.drawRegionAssets(ctx, point, iconSize, region);
+      this.drawPriorityOverlay(ctx, point, iconSize, region);
 
       if ((region.assets.substation || 0) > 0 && zoom >= 0.9) {
         const coverageRadius =
@@ -4848,13 +5056,7 @@ export class GameRuntime {
     if (this.camera.dragActive || this.pointerDown.dragging) return;
 
     const zoom = this.getCameraZoom();
-    const world = this.screenToWorld(this.mouse.x, this.mouse.y);
-    const hoveredRegion = this.findRegionAt(world.x, world.y);
-    const centerWorldX = hoveredRegion ? hoveredRegion.x : world.x;
-    const centerWorldY = hoveredRegion ? hoveredRegion.y : world.y;
-    const center = hoveredRegion
-      ? this.worldToScreen(centerWorldX, centerWorldY)
-      : { x: this.mouse.x, y: this.mouse.y };
+    const center = { x: this.mouse.x, y: this.mouse.y };
     const radiusWorld = this.getRerouteRadiusWorld();
 
     ctx.save();
@@ -5238,6 +5440,9 @@ export class GameRuntime {
             localVertical: !!this.iconSet.powerline.localVertical,
             longHorizontal: !!this.iconSet.powerline.longHorizontal,
             longVertical: !!this.iconSet.powerline.longVertical,
+          },
+          overlay: {
+            priorityElevated: !!this.iconSet.overlay.priorityElevated,
           },
         },
         resourceZoneCounts: { ...this.resourceZoneSummary },

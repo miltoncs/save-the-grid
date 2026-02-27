@@ -110,6 +110,15 @@ Each mission defines:
 5. Strong winter/summer demand surges.
 6. Reduced substation radius forcing denser station planning.
 
+### Powerplant Balance Policy Across Modes
+
+1. Scenario tuning should preserve the same core tradeoff identities:
+   - `Natural Gas`: reliable output with recurring operating cost pressure.
+   - `Solar`: lower output with low ongoing operating burden.
+   - `Wind`: higher upfront capital cost with stronger long-run value in favorable wind conditions.
+2. Missions may shift map/resource/condition context, but should not introduce hidden debuffs to suppress minmax strategies.
+3. Rebalancing should use visible levers only (upfront cost, recurring cost, output profile, resource/condition multipliers, `Line` economics).
+
 ### Mission Completion and Rewards
 
 - Medal grades: bronze, silver, gold (performance classification only).

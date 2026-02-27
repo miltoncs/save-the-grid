@@ -22,6 +22,7 @@ Current emphasis:
 - There are no map-area unlock mechanics; challenge comes from terrain, distance, and powergrid stability.
 - Powerplant types are fixed to `Wind`, `Solar`, and `Natural Gas`.
 - Powerplants require one full powerplant-diameter spacing from each other.
+- Powerplant balance is situational and transparent: tradeoffs come from visible upfront/operating/output/resource values, not hidden anti-minmax penalties.
 - New towns can emerge during runs when livable terrain has stable nearby powergrid service.
 - Substations power nearby towns by radius and auto-generate short orthogonal town links.
 - Players build manual long-distance powerlines using the `Line` tool.

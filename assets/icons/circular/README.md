@@ -33,3 +33,8 @@ All icons in `/assets/icons/circular/` follow one system:
 - `substation.svg`
 - `line-long-range.svg`
 - `line-reroute.svg`
+
+## Status Icons
+
+- `status-warning.svg` (yellow accent)
+- `status-alert.svg` (red accent)

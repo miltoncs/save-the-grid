@@ -132,7 +132,7 @@ Let players tune scenario pressure for practice or challenge runs while preservi
 - Top bar: budget, reliability, unmet demand, run timer, population trend (when enabled), active season/condition.
 - Left tool rail: build, demolish, reroute categories.
 - Right event rail: active incidents, mission objectives, short briefings.
-- Bottom context panel: selected asset stats, `Line` path cost/capacity preview, substation coverage radius impact, and action confirmations.
+- Bottom context panel: selected asset stats, `Line` path cost/capacity preview, substation coverage radius impact, powerplant upfront/recurring cost and expected output preview, and action confirmations.
 - Center: 2D overhead map as dominant interactive surface.
 
 ### Interaction Pattern
@@ -145,6 +145,12 @@ Let players tune scenario pressure for practice or challenge runs while preservi
 6. Powerplant demolish actions must show a 20-second decommission timer before full removal.
 7. Commit action with one click/tap.
 8. Receive immediate visual and metric feedback.
+
+Powerplant transparency rules:
+
+1. Before placement, UI must show upfront cost, recurring operating cost, and expected output range for the selected powerplant type.
+2. When relevant, UI must show active local modifiers from resource zones or conditions that affect expected output.
+3. Balance pressure should come from visible values only; no hidden anti-minmax debuffs should be applied.
 
 No region-unlock or corridor-purchase action should exist in this flow.
 

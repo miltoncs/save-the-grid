@@ -66,6 +66,9 @@ export const ICON_SET_URLS = {
     longHorizontal: "/assets/patterns/powerlines/long-distance-powerline-tile.svg",
     longVertical: "/assets/patterns/powerlines/long-distance-powerline-tile-vertical.svg",
   },
+  overlay: {
+    priorityElevated: "/assets/icons/overlays/priority-elevated.svg",
+  },
 };
 export const LIVABLE_TERRAINS = new Set(["plains", "river", "coast"]);
 export const SPARSE_START_TOWN_IDS = new Set(["capital"]);

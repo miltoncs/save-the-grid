@@ -91,7 +91,7 @@ type TownRecord = {
   population: number;
   growthRate: number;
   starterAssets: {
-    plant: number;
+    powerplant: number;
     substation: number;
     storage: number;
   };
@@ -212,7 +212,7 @@ Validation is code-based normalization (no external schema library currently):
       "baseDemand": 95,
       "population": 120,
       "growthRate": 0.6,
-      "starterAssets": { "plant": 2, "substation": 2, "storage": 1 }
+      "starterAssets": { "powerplant": 2, "substation": 2, "storage": 1 }
     }
   ],
   "resourceZones": []

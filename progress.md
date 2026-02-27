@@ -1112,3 +1112,194 @@ Validation:
   - Bolt scaled to `115%` and shifted down-left via transform.
   - Crosshair scaled to `120%` and shifted down-left via transform.
 - Kept circular frame/rings unchanged.
+
+## 2026-02-27
+
+### Click popup for city/structure power metrics
+
+Feature path (`selectedEntityPopup` payload + popup rendering + dismissal on map click / `Escape`) was already present in current `HEAD` for:
+
+- `src/game/runtime.js`
+- `src/game/app.js`
+
+Net implementation change in this turn:
+
+- Added/updated popup visual styling in `src/styles/run.css`:
+  - `.floating-selected-entity-popup`
+  - `.selected-entity-popup-*` rows/diff/empty-state styles
+  - removed stale `.floating-region-context` style block
+
+Result:
+
+- Popup now renders as a readable floating panel with the requested metric formatting and signed diffs.
+- Existing runtime behavior remains:
+  - city/structure click shows popup
+  - empty-map click hides popup
+  - `Escape` hides popup
+
+Validation:
+
+- JS syntax checks:
+  - `node --check src/game/runtime.js`
+  - `node --check src/game/app.js`
+- develop-web-game smoke:
+  - `node /Users/mstafford/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js --url http://127.0.0.1:5173 --actions-file /Users/mstafford/.codex/skills/develop-web-game/references/action_payloads.json --click-selector "#start-btn" --iterations 1 --pause-ms 220 --screenshot-dir /Users/mstafford/Projects/local/energies-game/output/web-game-entity-popup-regression`
+- Targeted Playwright validation:
+  - structure click shows popup with supply/output rows.
+  - city click shows popup with demand/input rows.
+  - empty map click hides popup.
+  - `Escape` hides popup.
+  - assertion result: `pass: true`
+  - screenshot: `/Users/mstafford/Projects/local/energies-game/output/entity-popup-validation.png`
+
+### Docs: powerplant tradeoff strategy codified
+
+Codified explicit, situational tradeoff policy for the three powerplant types in design docs:
+
+- `Natural Gas`: reliable output + recurring operating cost pressure.
+- `Solar`: lower output + low ongoing operating burden.
+- `Wind`: higher upfront capital + stronger long-run value in favorable wind conditions.
+- No hidden anti-minmax debuffs; balancing must use visible levers only.
+- Map/resource context and `Line` economics are explicit parts of powerplant value.
+
+Documentation updates:
+
+- `/docs/design/GAME_DESIGN.md`
+  - Added `8.2.1 Powerplant Tradeoff Strategy`.
+- `/docs/design/MAP_DESIGN_2D.md`
+  - Added `4.1 Powerplant Resource and Network Tradeoffs`.
+  - Expanded placement preview requirements to include expected output, recurring cost, and local modifiers.
+- `/docs/design/FRONTEND_AND_UX.md`
+  - Added powerplant transparency rules for placement UI.
+  - Added powerplant cost/output preview requirement in bottom context panel.
+- `/docs/design/MISSION_AND_MODE_DESIGN.md`
+  - Added `Powerplant Balance Policy Across Modes`.
+- `/docs/design/README.md` and `/docs/README.md`
+  - Added summary bullets for transparent, situational powerplant tradeoffs.
+
+Terminology consistency updates:
+
+- Updated active implementation schema examples to use `powerplant` key naming:
+  - `/docs/implementation/MAP_STORAGE_AND_RESOURCE_ZONES.md`
+
+Validation:
+
+- `rg --line-number --ignore-case "\\bplant\\b|\\bplants\\b"` across active docs (design + top-level docs + active implementation spec): no matches.
+- Note: historical archive docs under `/docs/implementation/archive/` intentionally retain original wording.
+
+### New warning/alert status icons
+
+- Added circular status icons in `/assets/icons/circular/`:
+  - `status-warning.svg` (yellow-accent exclamation)
+  - `status-alert.svg` (red-accent exclamation)
+- Both follow the existing 96x96 circular icon system and dark-core style.
+- Updated `/assets/icons/circular/README.md` with a `Status Icons` section.
+
+### Reroute center no longer snaps + elevated-priority overlay icon
+
+Implemented two reroute UX updates:
+
+- Reroute radius center now stays at cursor world position (no snapping to city/structure centers).
+- Elevated-priority cities/structures now render overlay icon:
+  - `/assets/icons/overlays/priority-elevated.svg`
+
+Files updated:
+
+- `src/game/runtime.js`
+  - `drawRerouteRadiusPreview()` now centers directly on mouse cursor.
+  - `handleReroute()` now computes radius center from click world point, even when a region was clicked.
+  - Added `drawPriorityOverlay()` and integrated it into `drawRegions()` for all `priority === elevated` regions.
+  - Extended text-state icon load payload with overlay readiness (`terrainMap.iconSetLoaded.overlay.priorityElevated`).
+  - Added overlay slot in runtime `iconSet` initialization.
+- `src/game/core.js`
+  - Added overlay asset entry to `ICON_SET_URLS`:
+    - `overlay.priorityElevated: "/assets/icons/overlays/priority-elevated.svg"`
+
+Validation:
+
+- Syntax checks:
+  - `node --check src/game/runtime.js`
+  - `node --check src/game/core.js`
+  - `node --check src/game/app.js`
+- develop-web-game smoke:
+  - `node /Users/mstafford/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js --url http://127.0.0.1:5173 --actions-file /Users/mstafford/.codex/skills/develop-web-game/references/action_payloads.json --click-selector "#start-btn" --iterations 1 --pause-ms 220 --screenshot-dir /Users/mstafford/Projects/local/energies-game/output/web-game-reroute-overlay-regression`
+- Targeted Playwright no-snap + overlay verification:
+  - Scenario A (click centered at town.x-20): town elevated, test node at town.x+95 remained nominal.
+  - Scenario B (click centered at town.x): same node became elevated.
+  - This confirms reroute uses true click center rather than snapping to clicked region center.
+  - Assertions: `pass: true`
+  - Screenshots:
+    - `/Users/mstafford/Projects/local/energies-game/output/reroute-no-snap-offset.png`
+    - `/Users/mstafford/Projects/local/energies-game/output/reroute-no-snap-center.png`
+
+### Power Supply panel now shows (Supply - Demand) delta
+
+- Updated run HUD rendering in `src/game/app.js` so the `Power Supply` value includes a signed delta on the left:
+  - Display format: `(<signed diff>) <supply MW>` where diff is `(powerSupply - powerDemand)`.
+  - Added helper `formatSignedNumber()` for consistent signed decimal output.
+- Added styling in `src/styles/run.css`:
+  - `.hud-metric-diff.is-positive` renders green.
+  - `.hud-metric-diff.is-negative` renders red.
+  - `#hud-power-supply` now uses inline flex to align diff + supply value cleanly.
+
+Validation:
+
+- `node --check src/game/app.js`
+- `node --check src/game/runtime.js`
+- develop-web-game smoke run:
+  - `node "$HOME/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js" --url http://127.0.0.1:5173 --actions-file "$HOME/.codex/skills/develop-web-game/references/action_payloads.json" --click-selector "#start-btn" --iterations 1 --pause-ms 220 --screenshot-dir output/web-game-power-supply-delta`
+
+### Reroute tool now auto-returns to pan after one use
+
+- Updated `src/game/runtime.js` in `handlePrimaryClick()` so when `TOOL_REROUTE` is applied, the active tool immediately reverts to `TOOL_PAN` after processing the reroute click.
+- This makes reroute behavior one-shot, matching build-style cursor/tool fallback.
+
+Validation:
+- `node --check src/game/runtime.js`
+
+### Town emergence: prevent city/town spawns on water pixels
+
+- Added map pixel helpers in `src/game/runtime.js`:
+  - `getMapPixelColorAt(x, y)`
+  - `isWaterMapPixelAt(x, y)`
+  - `isSnowMapPixelAt(x, y)`
+  - `isWaterWorldPoint(point)`
+- Kept existing long-range line surcharge logic intact via `isBlueOrWhiteMapPixelAt` (now composed from water+snow helpers).
+- Enforced water rejection in all town emergence paths:
+  - Synthetic spawn candidate generation (`generateEmergentTownAnchor`) skips water points.
+  - Authored unspawned anchor candidates are filtered to exclude water points.
+  - Synthetic anchor acceptance also excludes water points.
+  - Final emergent-town creation (`createEmergentTownFromAnchor`) has a last-guard bailout if anchor lands on water.
+
+Validation:
+- `node --check src/game/runtime.js`
+- develop-web-game smoke:
+  - `node "$HOME/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js" --url http://127.0.0.1:5173 --actions-file "$HOME/.codex/skills/develop-web-game/references/action_payloads.json" --click-selector "#start-btn" --iterations 1 --pause-ms 220 --screenshot-dir output/web-game-town-water-spawn-guard`
+
+### Right-click demolition for long-range powerlines (with confirmation)
+
+- Added right-click hit-testing for built long-range lines in `src/game/runtime.js`:
+  - `pointToSegmentDistance(...)`
+  - `findBuiltLineAtScreen(...)`
+- Extended secondary-click behavior:
+  - If no structure/city is under cursor, right-click now checks for a nearby built long-range line.
+  - When found, it opens the existing demolish confirmation popover via `onRequestDemolishConfirm`.
+- Added line demolition runtime path:
+  - `getLineDemolishLabel(line)`
+  - `estimateLineDemolishRefund(line)` (uses `DEMOLITION_LINE_REFUND_RATIO`)
+  - `demolishBuiltLine(line)`
+  - `confirmDemolishLine(lineId)`
+- Updated confirmation popover handling in `src/game/app.js`:
+  - Supports optional `confirmDetail` text.
+  - Routes accept action to `confirmDemolishLine(...)` when `payload.lineId` is provided; otherwise keeps existing building demolition path.
+
+Validation:
+- `node --check src/game/runtime.js`
+- `node --check src/game/app.js`
+- develop-web-game smoke run:
+  - `node "$HOME/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js" --url http://127.0.0.1:5173 --actions-file "$HOME/.codex/skills/develop-web-game/references/action_payloads.json" --click-selector "#start-btn" --iterations 1 --pause-ms 220 --screenshot-dir output/web-game-line-rightclick-demolish-smoke`
+- Targeted Playwright validation:
+  - Built a line between two new grid points.
+  - Right-clicked the line segment.
+  - Confirm popover text included `Demolish Line ...`.
+  - Accepting confirm produced alert: `Line removed between ...`.

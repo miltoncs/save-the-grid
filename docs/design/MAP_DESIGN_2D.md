@@ -109,6 +109,22 @@ Examples:
 
 Terrain effects should be visible and explainable in tooltips.
 
+### 4.1 Powerplant Resource and Network Tradeoffs
+
+Map and routing context should drive powerplant value:
+
+1. `Natural Gas` powerplants:
+   - reliable baseline output across conditions,
+   - recurring operating cost pressure over time.
+2. `Solar` powerplants:
+   - lower output per site,
+   - strong economic value when low operating burden matters.
+3. `Wind` powerplants:
+   - higher upfront build cost,
+   - stronger long-run value in favorable wind zones.
+4. `Line` routing distance/capacity cost must materially influence effective powerplant ROI.
+5. Avoid hidden balancing penalties; powerplant performance differences must come from visible map/resource/economy factors.
+
 ## 5. Infrastructure Placement and Line Rules
 
 1. Powerplants and substations place directly on valid map points.
@@ -129,6 +145,7 @@ Placement preview should always show:
 3. Local reliability impact.
 4. For substations: service radius and expected town coverage count.
 5. For powerplants: exclusion-zone warning when the one-powerplant-diameter spacing rule blocks placement.
+6. For powerplants: expected output band, recurring cost (if any), and current local resource/condition modifiers.
 
 ## 6. Routing and Flow Visualization
 

@@ -44,6 +44,7 @@ Current gameplay direction highlights:
 - There are no pre-authored major transmission corridors in play.
 - Powerplant types are fixed to `Wind`, `Solar`, and `Natural Gas`.
 - Powerplants require one full powerplant-diameter spacing from each other.
+- Powerplant tradeoffs are transparent and situational (visible upfront/operating/output/resource values; no hidden anti-minmax penalties).
 - Substations power towns by radius with auto-generated orthogonal town service links.
 - Players build manual long-distance powerlines with the in-game `Line` tool.
 - Campaign victory emphasizes full-map management on advanced maps through reliable town service.
