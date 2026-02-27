@@ -1471,3 +1471,37 @@ Validation:
   - Built an infrastructure structure, switched back to long-range line tool, clicked the structure; popup remained hidden.
   - Assertion output: `townPopupHidden: true`, `structurePopupHidden: true`, `consoleErrorCount: 0`.
   - Screenshot: `output/line-popup-assert/line-tool-no-info-panel.png`
+
+## 2026-02-27
+
+### Main menu map preview now uses generated terrain image
+
+- Replaced the animated main-menu preview layers with a generated terrain image in `src/game/app.js`:
+  - `renderMainMenu()` now renders a single `<img id="menu-map-preview-image">`.
+  - Added `refreshMenuMapPreview()` which generates a fresh map preview every time the menu screen is rendered.
+- Added `src/game/menu-terrain-preview.js`:
+  - Reuses terrain-generator math helpers from `tools/terrain/interactive/lib/math.js`.
+  - Builds a seeded topology-style height field, derives terrain classes (water/plains/mountain/snowcap), and returns a PNG data URL for menu display.
+- Updated `src/styles/base.css`:
+  - Removed `.grid-silhouette`, `.energy-rings`, and `@keyframes ring-scan`.
+  - Added `.menu-map-preview-image` styles for full-bleed static map rendering.
+
+Validation:
+
+- Syntax checks:
+  - `node --check src/game/app.js`
+  - `node --check src/game/menu-terrain-preview.js`
+- develop-web-game Playwright smoke (menu-focused):
+  - `node "$HOME/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js" --url http://127.0.0.1:5173 --actions-json '{"steps":[{"buttons":["enter"],"frames":2},{"buttons":[],"frames":24}]}' --iterations 1 --pause-ms 250 --screenshot-dir output/web-game-menu-random-bg`
+  - Captured screenshot: `output/web-game-menu-random-bg/shot-0.png`
+  - `state-0.json` reported `{"mode":"menu","message":"No active run"}` and no `errors-0.json` was produced.
+
+Follow-up suggestion:
+
+- If desired, expose menu-preview generator knobs (smoothness/sea level/snowcaps) in settings for stylistic control without touching runtime map generation.
+- Additional randomization verification:
+  - Ran two independent menu captures with identical scripted inputs.
+  - Screenshot hashes differed:
+    - `output/web-game-menu-random-bg-run1/shot-0.png`: `7ab3ff45c2b264993de9e8882914bd22a910a757`
+    - `output/web-game-menu-random-bg-run2/shot-0.png`: `9582dfa75e169e64b176f3191f3f2dfe172971fb`
+  - Confirms a new random preview image is generated per main-menu load.

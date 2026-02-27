@@ -1,5 +1,6 @@
 import * as GameCore from "./core.js";
 import { GameRuntime } from "./runtime.js";
+import { generateMenuTerrainPreviewDataUrl } from "./menu-terrain-preview.js";
 
 const {
   ALERT_LEVELS,
@@ -303,12 +304,13 @@ export class SaveTheGridApp {
             <p class="menu-footer">Local best score: ${this.bestScoreOverall()}</p>
           </aside>
           <div class="menu-map-preview" aria-hidden="true">
-            <div class="grid-silhouette"></div>
-            <div class="energy-rings"></div>
+            <img id="menu-map-preview-image" class="menu-map-preview-image" alt="">
           </div>
         </div>
       </section>
     `;
+
+    this.refreshMenuMapPreview();
 
     if (hasContinue) {
       this.root.querySelector("#menu-continue")?.addEventListener("click", () => {
@@ -339,6 +341,22 @@ export class SaveTheGridApp {
           : "Dev Mode disabled."
       );
     });
+  }
+
+  refreshMenuMapPreview() {
+    const previewImage = this.root.querySelector("#menu-map-preview-image");
+    if (!(previewImage instanceof HTMLImageElement)) return;
+
+    try {
+      const { dataUrl } = generateMenuTerrainPreviewDataUrl({
+        width: 480,
+        height: 760,
+      });
+      previewImage.src = dataUrl || DEFAULT_TERRAIN_MAP_IMAGE_URL;
+    } catch (error) {
+      console.error("Menu terrain preview generation failed:", error);
+      previewImage.src = DEFAULT_TERRAIN_MAP_IMAGE_URL;
+    }
   }
 
   cleanupSplashListeners() {

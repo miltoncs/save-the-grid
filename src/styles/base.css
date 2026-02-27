@@ -244,51 +244,14 @@ select {
   border-radius: 22px;
   position: relative;
   overflow: hidden;
-  background: radial-gradient(circle at 25% 25%, #194657, #0a1c2a 70%);
+  background: #0a1c2a;
   min-height: clamp(320px, 58vh, 680px);
   box-shadow: var(--shadow-heavy);
 }
 
-.grid-silhouette {
-  position: absolute;
-  inset: 12% 9% 10%;
-  border-radius: 30% 38% 34% 41% / 36% 31% 44% 35%;
-  border: 1px solid rgba(191, 240, 210, 0.24);
-  background: radial-gradient(circle at 42% 37%, rgba(108, 170, 124, 0.34), rgba(15, 39, 48, 0.25));
-}
-
-.energy-rings {
-  position: absolute;
-  inset: 16%;
-  border-radius: 50%;
-  border: 2px dashed rgba(229, 244, 220, 0.28);
-  animation: ring-scan 6s linear infinite;
-}
-
-.energy-rings::before,
-.energy-rings::after {
-  content: "";
-  position: absolute;
-  border-radius: 50%;
-  border: 1px solid rgba(117, 201, 164, 0.4);
-}
-
-.energy-rings::before {
-  inset: 16%;
-}
-
-.energy-rings::after {
-  inset: 34%;
-}
-
-@keyframes ring-scan {
-  from {
-    transform: rotate(0deg) scale(1);
-  }
-  50% {
-    transform: rotate(180deg) scale(1.06);
-  }
-  to {
-    transform: rotate(360deg) scale(1);
-  }
+.menu-map-preview-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
