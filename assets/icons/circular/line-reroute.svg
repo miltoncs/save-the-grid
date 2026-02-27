@@ -11,14 +11,21 @@
 
   <g stroke="#e8f2ff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
     <!-- Bolt -->
-    <path d="M50 29L39.8 47.4H47.3L43.8 62.7L56.2 44.6H48.6L52.6 29Z" fill="#e8f2ff" stroke="none"/>
+    <path
+      d="M50 29L39.8 47.4H47.3L43.8 62.7L56.2 44.6H48.6L52.6 29Z"
+      fill="#e8f2ff"
+      stroke="none"
+      transform="translate(-5 3) translate(48 46) scale(1.15) translate(-48 -46)"
+    />
 
     <!-- Crosshair -->
-    <circle cx="62" cy="33" r="8.5" fill="none" stroke-width="2"/>
-    <path d="M62 22V27"/>
-    <path d="M62 39V44"/>
-    <path d="M51 33H56"/>
-    <path d="M68 33H73"/>
-    <circle cx="62" cy="33" r="2.1" fill="#e8f2ff" stroke="none"/>
+    <g transform="translate(-4 4) translate(62 33) scale(1.2) translate(-62 -33)">
+      <circle cx="62" cy="33" r="8.5" fill="none" stroke-width="2"/>
+      <path d="M62 22V27"/>
+      <path d="M62 39V44"/>
+      <path d="M51 33H56"/>
+      <path d="M68 33H73"/>
+      <circle cx="62" cy="33" r="2.1" fill="#e8f2ff" stroke="none"/>
+    </g>
   </g>
 </svg>

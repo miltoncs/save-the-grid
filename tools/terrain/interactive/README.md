@@ -1,6 +1,6 @@
 # Interactive Terrain Lab
 
-Fullscreen browser app for tuning topology-based map generation.
+Fullscreen browser app for tuning procedural terrain generation.
 
 ## Controls
 
@@ -19,7 +19,8 @@ Fullscreen browser app for tuning topology-based map generation.
 - `River Relief Colors` (visual effects mode): toggles river and riverbank tinting using the same coastline tint colors/logic.
 - `Shadow Effect` (visual effects mode): enables directional per-pixel light/shadow nudging using surface normals + local prominence.
 - `Shadow Amount` (visual effects mode): controls the strength of the shadow nudges when `Shadow Effect` is enabled.
-- `Algorithm`: switch between `Topology` and `Midpoint`.
+- `Algorithm`: switch between `Topology`, `Midpoint`, and `4-step`.
+- `4-step` algorithm pipeline: ridged multifractal + domain warp, then thermal erosion, then hydraulic erosion-lite, then river-channel carving.
 - `Smoothness`: controls how rough vs smooth the terrain appears.
 - `Continent Scale`: controls low-frequency continent shaping (continent mask + macro noise) for both `Topology` and `Midpoint`. Higher values create more fragmented large-scale landmasses.
 - `Sea Level`: controls waterline percentile (higher = more water).

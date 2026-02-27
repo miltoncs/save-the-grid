@@ -386,6 +386,26 @@
   box-shadow: 0 0 0 1px rgba(244, 245, 210, 0.35);
 }
 
+.dock-shortcut-chip {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  min-width: 13px;
+  height: 13px;
+  padding: 0 3px;
+  border-radius: 999px;
+  border: 1px solid rgba(196, 236, 252, 0.72);
+  background: rgba(6, 21, 31, 0.9);
+  color: #dff3ff;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.55rem;
+  font-weight: 700;
+  line-height: 11px;
+  text-align: center;
+  pointer-events: none;
+  z-index: 3;
+}
+
 .dock-tooltip {
   position: absolute;
   left: 50%;
@@ -554,6 +574,31 @@
   border-top: 4px solid transparent;
   border-bottom: 4px solid transparent;
   transform: rotate(22deg);
+}
+
+.asset-icon-glyph-priority-clear::before,
+.asset-icon-glyph-priority-clear::after {
+  content: "";
+  position: absolute;
+}
+
+.asset-icon-glyph-priority-clear::before {
+  left: 8px;
+  right: 8px;
+  top: 8px;
+  bottom: 8px;
+  border-radius: 50%;
+  border: 2px solid #98d7ff;
+}
+
+.asset-icon-glyph-priority-clear::after {
+  left: 10px;
+  right: 10px;
+  top: 17px;
+  height: 2px;
+  border-radius: 1px;
+  background: #98d7ff;
+  transform: rotate(-34deg);
 }
 
 .dock-separator {

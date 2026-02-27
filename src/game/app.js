@@ -78,6 +78,26 @@ const {
 
 const DEMOLITION_DURATION_SECONDS = 20;
 
+function normalizeSignedValue(value, epsilon = 0.05) {
+  const numeric = Number(value || 0);
+  if (!Number.isFinite(numeric)) return 0;
+  return Math.abs(numeric) < epsilon ? 0 : numeric;
+}
+
+function formatMw(value) {
+  return `${normalizeSignedValue(value).toFixed(1)} MW`;
+}
+
+function formatSignedMw(value) {
+  const normalized = normalizeSignedValue(value);
+  const sign = normalized > 0 ? "+" : "";
+  return `${sign}${normalized.toFixed(1)} MW`;
+}
+
+function formatMwh(value) {
+  return `${normalizeSignedValue(value).toFixed(1)} MWh`;
+}
+
 export class SaveTheGridApp {
   constructor(root) {
     this.root = root;
@@ -733,7 +753,6 @@ export class SaveTheGridApp {
               ?
             </button>
             <button class="ghost-btn floating-btn" id="run-pause-btn" aria-label="Pause simulation">❚❚</button>
-            <button class="ghost-btn floating-btn" id="run-exit-tutorial-btn" hidden>Exit Tutorial</button>
             <button class="ghost-btn floating-btn" id="run-save-exit-btn">Save &amp; Exit</button>
           </div>
 
@@ -806,6 +825,12 @@ export class SaveTheGridApp {
             <p id="objective-detail" class="objective-detail"></p>
           </section>
 
+          <section class="floating-group floating-selected-entity-popup floating-card" id="selected-entity-popup" hidden>
+            <h3 id="selected-entity-popup-title">Location</h3>
+            <p id="selected-entity-popup-kind"></p>
+            <dl id="selected-entity-popup-metrics" class="selected-entity-popup-metrics"></dl>
+          </section>
+
           <section class="floating-group floating-ops-panel floating-card">
             <h3>Operations Feed</h3>
 
@@ -851,6 +876,7 @@ export class SaveTheGridApp {
                   alt=""
                   aria-hidden="true"
                 />
+                <span class="dock-shortcut-chip" aria-hidden="true">1</span>
                 <span class="dock-tooltip" aria-hidden="true">
                   <span class="dock-tooltip-title">Wind Plant</span>
                   <span class="dock-tooltip-price">Price ${plantCost}</span>
@@ -869,6 +895,7 @@ export class SaveTheGridApp {
                   alt=""
                   aria-hidden="true"
                 />
+                <span class="dock-shortcut-chip" aria-hidden="true">2</span>
                 <span class="dock-tooltip" aria-hidden="true">
                   <span class="dock-tooltip-title">Solar Plant</span>
                   <span class="dock-tooltip-price">Price ${plantCost}</span>
@@ -887,6 +914,7 @@ export class SaveTheGridApp {
                   alt=""
                   aria-hidden="true"
                 />
+                <span class="dock-shortcut-chip" aria-hidden="true">3</span>
                 <span class="dock-tooltip" aria-hidden="true">
                   <span class="dock-tooltip-title">Gas Plant</span>
                   <span class="dock-tooltip-price">Price ${plantCost}</span>
@@ -904,6 +932,7 @@ export class SaveTheGridApp {
                   alt=""
                   aria-hidden="true"
                 />
+                <span class="dock-shortcut-chip" aria-hidden="true">4</span>
                 <span class="dock-tooltip" aria-hidden="true">
                   <span class="dock-tooltip-title">Substation</span>
                   <span class="dock-tooltip-price">Price ${substationCost}</span>
@@ -916,6 +945,7 @@ export class SaveTheGridApp {
                 aria-label="Build storage (5)"
               >
                 <span class="asset-icon-glyph asset-icon-glyph-storage" aria-hidden="true"></span>
+                <span class="dock-shortcut-chip" aria-hidden="true">5</span>
                 <span class="dock-tooltip" aria-hidden="true">
                   <span class="dock-tooltip-title">Storage</span>
                   <span class="dock-tooltip-price">Price ${storageCost}</span>
@@ -933,6 +963,7 @@ export class SaveTheGridApp {
                   alt=""
                   aria-hidden="true"
                 />
+                <span class="dock-shortcut-chip" aria-hidden="true">6</span>
                 <span class="dock-tooltip" aria-hidden="true">
                   <span class="dock-tooltip-title">Long-Range Powerline</span>
                   <span class="dock-tooltip-price">Price ${lineCostPer100px} / 100px (+10 / blue|white px)</span>
@@ -951,6 +982,19 @@ export class SaveTheGridApp {
                   alt=""
                   aria-hidden="true"
                 />
+              </button>
+              <button
+                class="action-btn floating-dock-btn asset-icon-btn"
+                id="run-clear-priority-btn"
+                data-testid="action-clear-priority"
+                aria-label="Clear all priority modifiers"
+                title="Clear all priority modifiers"
+              >
+                <span class="asset-icon-glyph asset-icon-glyph-priority-clear" aria-hidden="true"></span>
+                <span class="dock-tooltip" aria-hidden="true">
+                  <span class="dock-tooltip-title">Clear Priority</span>
+                  <span class="dock-tooltip-price">Reset all to nominal</span>
+                </span>
               </button>
             </div>
           </div>
@@ -1039,10 +1083,9 @@ export class SaveTheGridApp {
       this.renderMainMenu();
     });
 
-    this.root.querySelector("#run-exit-tutorial-btn")?.addEventListener("click", () => {
+    this.root.querySelector("#run-clear-priority-btn")?.addEventListener("click", () => {
       if (!this.runtime) return;
-      if (this.runtime.config.mode !== "tutorial" || !this.runtime.state.tutorial?.completed) return;
-      this.runtime.finishRun("victory", "Tutorial complete: core controls verified.");
+      this.runtime.clearAllPriorityModifiers();
     });
 
   }
@@ -1134,7 +1177,10 @@ export class SaveTheGridApp {
     const timerNode = $("#hud-timer");
     const scoreNode = $("#hud-score");
     const pauseNode = $("#run-pause-btn");
-    const exitTutorialNode = $("#run-exit-tutorial-btn");
+    const selectedPopupNode = $("#selected-entity-popup");
+    const selectedPopupTitleNode = $("#selected-entity-popup-title");
+    const selectedPopupKindNode = $("#selected-entity-popup-kind");
+    const selectedPopupMetricsNode = $("#selected-entity-popup-metrics");
 
     if (
       !budgetNode ||
@@ -1160,9 +1206,6 @@ export class SaveTheGridApp {
       const isPaused = !!payload.paused;
       pauseNode.textContent = isPaused ? "▶" : "❚❚";
       pauseNode.setAttribute("aria-label", isPaused ? "Resume simulation" : "Pause simulation");
-    }
-    if (exitTutorialNode) {
-      exitTutorialNode.hidden = !payload.tutorialCompleted;
     }
 
     const assetButtons = this.root.querySelectorAll(".asset-btn");
@@ -1219,6 +1262,83 @@ export class SaveTheGridApp {
             })
             .join("")
         : "<li><span>No active alerts.</span></li>";
+    }
+
+    if (
+      selectedPopupNode &&
+      selectedPopupTitleNode &&
+      selectedPopupKindNode &&
+      selectedPopupMetricsNode
+    ) {
+      const popup = payload.selectedEntityPopup;
+      if (!popup) {
+        selectedPopupNode.hidden = true;
+      } else {
+        selectedPopupNode.hidden = false;
+        selectedPopupTitleNode.textContent = popup.name || "Location";
+        selectedPopupKindNode.textContent = popup.kindLabel || "Structure";
+
+        const popupWidth = 280;
+        const popupHeight = 230;
+        const targetX = clamp(Number(popup.anchorX || 0) + 26, 12, window.innerWidth - popupWidth - 12);
+        const targetY = clamp(
+          Number(popup.anchorY || 0) - popupHeight * 0.5,
+          12,
+          window.innerHeight - popupHeight - 12
+        );
+        selectedPopupNode.style.left = `${targetX}px`;
+        selectedPopupNode.style.top = `${targetY}px`;
+
+        const rows = [];
+        const demandDiffClass = popup.powerInDiffMw > 0 ? "is-positive" : popup.powerInDiffMw < 0 ? "is-negative" : "";
+        const supplyDiffClass = popup.powerOutDiffMw > 0 ? "is-positive" : popup.powerOutDiffMw < 0 ? "is-negative" : "";
+
+        if (popup.showDemand) {
+          rows.push(
+            `<div class="selected-entity-popup-row"><dt>Total Demand</dt><dd>${formatMw(
+              popup.totalDemandMw
+            )}</dd></div>`
+          );
+          rows.push(
+            `<div class="selected-entity-popup-row"><dt>Power In</dt><dd>${formatMw(
+              popup.powerInMw
+            )} <span class="selected-entity-popup-diff ${demandDiffClass}">(${formatSignedMw(
+              popup.powerInDiffMw
+            )})</span></dd></div>`
+          );
+        }
+
+        if (popup.showSupply) {
+          rows.push(
+            `<div class="selected-entity-popup-row"><dt>Total Supply</dt><dd>${formatMw(
+              popup.totalSupplyMw
+            )}</dd></div>`
+          );
+          rows.push(
+            `<div class="selected-entity-popup-row"><dt>Power Out</dt><dd>${formatMw(
+              popup.powerOutMw
+            )} <span class="selected-entity-popup-diff ${supplyDiffClass}">(${formatSignedMw(
+              popup.powerOutDiffMw
+            )})</span></dd></div>`
+          );
+        }
+
+        if (popup.showStored) {
+          const capacityText = popup.storedCapacityMWh > 0 ? ` / ${formatMwh(popup.storedCapacityMWh)}` : "";
+          rows.push(
+            `<div class="selected-entity-popup-row"><dt>Power Stored</dt><dd>${formatMwh(
+              popup.powerStoredMWh
+            )}${capacityText}</dd></div>`
+          );
+        }
+
+        if (!rows.length) {
+          rows.push(
+            '<div class="selected-entity-popup-empty">No active demand, supply, or storage at this location.</div>'
+          );
+        }
+        selectedPopupMetricsNode.innerHTML = rows.join("");
+      }
     }
   }
 

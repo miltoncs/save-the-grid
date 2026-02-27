@@ -1,14 +1,14 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96" fill="none">
   <defs>
     <radialGradient id="core-town-capital" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(38 32) rotate(50) scale(62)">
-      <stop offset="0" stop-color="#1b2a3a"/>
-      <stop offset="1" stop-color="#101821"/>
+      <stop offset="0" stop-color="#1d3a2b"/>
+      <stop offset="1" stop-color="#111d16"/>
     </radialGradient>
   </defs>
-  <circle cx="48" cy="48" r="44" fill="#0b1118"/>
-  <circle cx="48" cy="48" r="39" fill="url(#core-town-capital)" stroke="#8ea4ba" stroke-width="1.5"/>
-  <circle cx="48" cy="48" r="31" stroke="#ffd27d" stroke-opacity="0.45" stroke-width="1.5"/>
-  <g stroke="#e8f2ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none">
+  <circle cx="48" cy="48" r="44" fill="#0d1511"/>
+  <circle cx="48" cy="48" r="39" fill="url(#core-town-capital)" stroke="#96b79f" stroke-width="1.5"/>
+  <circle cx="48" cy="48" r="31" stroke="#d7f2a6" stroke-opacity="0.48" stroke-width="1.5"/>
+  <g stroke="#eaf7ee" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none">
     <!-- Base and wings -->
     <path d="M28 60H68"/>
     <path d="M31 60V52H39V60"/>
@@ -28,6 +28,6 @@
     <path d="M42 45H54"/>
     <path d="M44 38C44 34 52 34 52 38"/>
     <path d="M46 34V31H50V34"/>
-    <circle cx="48" cy="29.5" r="1.5" fill="#e8f2ff" stroke="none"/>
+    <circle cx="48" cy="29.5" r="1.5" fill="#eaf7ee" stroke="none"/>
   </g>
 </svg>

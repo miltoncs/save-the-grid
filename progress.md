@@ -772,3 +772,343 @@ Validation:
 - Targeted Playwright scenario:
   - built 2 infrastructure points with plants, connected a diagonal long-range line, verified line commissioning alert and visual tower orientation.
   - visual capture: `output/upright-diagonal-longline-fullpage.png`
+
+### Removed dark map vignette overlay
+
+- Removed the dark linear gradient vignette pass at the end of `drawMapBackdrop` in `src/game/runtime.js` so the raw map colors render unshaded.
+
+Validation:
+
+- Syntax check:
+  - `node --check src/game/runtime.js`
+- develop-web-game regression loop:
+  - `node /Users/mstafford/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js --url http://127.0.0.1:5173 --actions-file /Users/mstafford/.codex/skills/develop-web-game/references/action_payloads.json --click-selector "#start-btn" --iterations 1 --pause-ms 220 --screenshot-dir output/web-game-remove-vignette-regression`
+- Visual confirmation:
+  - `output/web-game-remove-vignette-regression/shot-0.png`
+
+### Centered "Simulation Paused" overlay
+
+- Updated paused overlay positioning in `drawOverlay` (`src/game/runtime.js`) to center the pause box vertically and horizontally from viewport dimensions.
+- Kept existing box size and style; only position and text vertical alignment were adjusted.
+
+Validation:
+
+- Syntax check:
+  - `node --check src/game/runtime.js`
+- develop-web-game regression loop:
+  - `node /Users/mstafford/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js --url http://127.0.0.1:5173 --actions-file /Users/mstafford/.codex/skills/develop-web-game/references/action_payloads.json --click-selector "#start-btn" --iterations 1 --pause-ms 220 --screenshot-dir output/web-game-centered-pause-box`
+- Visual confirmation:
+  - `output/web-game-centered-pause-box/shot-0.png`
+
+### Building placement collision + spacing guardrails
+
+- Enforced one-building-per-point behavior for infrastructure nodes:
+  - if a node already has any asset, new builds on that same point are rejected.
+- Added minimum spacing for new builds:
+  - new infrastructure cannot be built within `1.5x` node radius of another occupied infrastructure point.
+- Refactored node radius magic number into `INFRASTRUCTURE_NODE_RADIUS` and reused it in spacing checks.
+- Added helpers in `src/game/runtime.js`:
+  - `getRegionTotalAssets(region)`
+  - `getInfrastructureNodeRadius(region)`
+  - `findInfrastructureBuildSpacingConflict(worldX, worldY, ignoreRegionId)`
+- Updated line endpoint eligibility helper to use total-asset helper for consistency.
+- Deferred insertion of newly created nodes until after validation and budget checks, preventing failed builds from leaving empty orphan nodes.
+
+Validation:
+
+- Syntax check:
+  - `node --check src/game/runtime.js`
+- develop-web-game regression loop:
+  - `node /Users/mstafford/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js --url http://127.0.0.1:5173 --actions-file /Users/mstafford/.codex/skills/develop-web-game/references/action_payloads.json --click-selector "#start-btn" --iterations 1 --pause-ms 220 --screenshot-dir output/web-game-building-spacing-regression`
+- Targeted Playwright checks (manual script using skill-local Playwright):
+  - same-point second build rejected with warning.
+  - too-close build (< 1.5x radius) rejected with warning.
+  - farther build accepted as a new node.
+  - visual capture: `output/building-spacing-targeted.png`
+
+### Removed "Exit Tutorial" button from run HUD
+
+- Removed `#run-exit-tutorial-btn` from run-screen top-right controls in `src/game/app.js`.
+- Removed the corresponding click handler and HUD visibility toggle logic from `attachRunUiListeners`/`updateRunHud`.
+- Updated tutorial completion alert copy in `src/game/runtime.js` to avoid referencing the removed button.
+
+Validation:
+
+- Syntax checks:
+  - `node --check src/game/app.js`
+  - `node --check src/game/runtime.js`
+- Confirmed no remaining `Exit Tutorial` references in runtime/app source.
+- develop-web-game smoke run:
+  - `node /Users/mstafford/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js --url http://127.0.0.1:5173 --actions-file /Users/mstafford/.codex/skills/develop-web-game/references/action_payloads.json --click-selector "#start-btn" --iterations 1 --pause-ms 220 --screenshot-dir output/web-game-remove-exit-tutorial-btn`
+
+### Long-range powerline tower density reduced to 25%
+
+- Updated long-range renderer metrics in `src/game/runtime.js`:
+  - introduced `LONG_RANGE_TOWER_COUNT_RATIO = 0.25`
+  - scaled `towerSpacing` by `1 / LONG_RANGE_TOWER_COUNT_RATIO` so line depictions place roughly 25% as many towers as before.
+- Wire bundle rendering and tower style remain unchanged; only tower frequency changed.
+
+Validation:
+
+- Syntax check:
+  - `node --check src/game/runtime.js`
+- develop-web-game regression loop:
+  - `node /Users/mstafford/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js --url http://127.0.0.1:5173 --actions-file /Users/mstafford/.codex/skills/develop-web-game/references/action_payloads.json --click-selector "#start-btn" --iterations 1 --pause-ms 220 --screenshot-dir output/web-game-longline-tower-density-regression`
+- Targeted Playwright scenario:
+  - built 2 points, commissioned one long-range line, verified line exists and visually confirmed reduced tower count.
+  - visual capture: `output/longline-tower-density-25pct.png`
+
+### Reroute radius visualization + area priority model + clear priority action
+
+- Reworked priority model to two levels only:
+  - `nominal` (default)
+  - `elevated`
+- Updated `PRIORITY_ORDER` in `src/game/core.js` to `["nominal", "elevated"]`.
+- Added runtime priority normalization with backward compatibility for old saves:
+  - legacy `low`/`normal` map to `nominal`
+  - legacy `high` maps to `elevated`
+- Updated new/rehydrated region defaults in `src/game/runtime.js` to use normalized priority values.
+- Changed reroute behavior from single-point cycle to area effect:
+  - reroute now elevates all eligible cities/infrastructure-with-assets within reroute radius.
+  - reroute can be issued from any clicked map point (not only directly on a region), using the hovered region center when present.
+- Added reroute radius overlay:
+  - transparent blue filled + dashed-stroke circle shown while reroute tool is active.
+- Added clear-priority action button to bottom palette:
+  - new button `#run-clear-priority-btn` with tooltip “Clear Priority / Reset all to nominal”
+  - wired to `runtime.clearAllPriorityModifiers()`
+- Added node priority in `render_game_to_text` output (`infrastructureNodes[].priority`) and normalized town priority output.
+
+Files updated:
+
+- `src/game/core.js`
+- `src/game/runtime.js`
+- `src/game/app.js`
+- `src/styles/run.css`
+
+Validation:
+
+- Syntax checks:
+  - `node --check src/game/core.js`
+  - `node --check src/game/runtime.js`
+  - `node --check src/game/app.js`
+- develop-web-game regression loop:
+  - `node /Users/mstafford/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js --url http://127.0.0.1:5173 --actions-file /Users/mstafford/.codex/skills/develop-web-game/references/action_payloads.json --click-selector "#start-btn" --iterations 1 --pause-ms 220 --screenshot-dir output/web-game-reroute-radius-priority-regression`
+- Targeted Playwright scenario:
+  - confirmed reroute radius circle rendering (`output/reroute-radius-preview.png`)
+  - confirmed area elevation alert and normalized priority states in `render_game_to_text`
+  - confirmed multiple infrastructure points inside radius are all elevated in one reroute action
+  - confirmed clear-priority button resets elevated priorities to nominal (`output/reroute-priority-cleared.png`)
+
+### Bottom palette shortcut numbers shown on icons
+
+- Added visible numeric shortcut badges directly on the bottom palette icon buttons for:
+  - Wind Plant `1`
+  - Solar Plant `2`
+  - Gas Plant `3`
+  - Substation `4`
+  - Storage `5`
+  - Long-Range Powerline `6`
+- Kept tooltip shortcuts unchanged; this adds always-visible numeric affordance on-icon.
+
+Files updated:
+
+- `src/game/app.js`
+- `src/styles/run.css`
+
+Validation:
+
+- Syntax check:
+  - `node --check src/game/app.js`
+- develop-web-game regression loop:
+  - `node /Users/mstafford/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js --url http://127.0.0.1:5173 --actions-file /Users/mstafford/.codex/skills/develop-web-game/references/action_payloads.json --click-selector "#start-btn" --iterations 1 --pause-ms 220 --screenshot-dir output/web-game-icon-shortcut-badges`
+- Targeted full-page Playwright verification:
+  - confirmed `.dock-shortcut-chip` values: `1,2,3,4,5,6`
+  - visual capture: `output/icon-shortcut-badges-fullpage.png`
+
+## 2026-02-26
+
+### Terrain Lab: Added `4-step` generation algorithm
+
+Implemented a new terrain algorithm option in the interactive terrain tool:
+
+- Added algorithm selector option in UI: `4-step`.
+- Added `4-step` pipeline in `tools/terrain/interactive/app.js`:
+  1. Ridged multifractal base with domain warp.
+  2. Thermal erosion pass.
+  3. Hydraulic erosion-lite pass.
+  4. River-channel carving pass.
+- Wired algorithm label/status formatting so the panel and stats recognize `4-step` (`4S` short code).
+- Updated terrain generation dispatch so `4-step` is selectable from the same algorithm toggle.
+- Updated docs (`tools/terrain/interactive/README.md`) to include the new algorithm and pipeline description.
+- Updated algorithm toggle layout (`tools/terrain/interactive/styles.css`) from 2 to 3 columns.
+
+Validation:
+
+- Syntax checks:
+  - `node --check tools/terrain/interactive/app.js`
+  - `node --check tools/terrain/interactive/lib/dom.js`
+  - `node --check tools/terrain/interactive/lib/exporter.js`
+- Browser verification (Playwright):
+  - Confirmed `[data-algo="4-step"]` exists and can be selected.
+  - Confirmed `#algorithm-value` updates to `4-step`.
+  - Confirmed no console/page errors in check run.
+  - Screenshot: `output/terrain-lab-4step/algorithm-4-step-ui-v2.png`
+
+### Battery charging model: starts empty, charges at 20 MW to 20 MWh cap
+
+Implemented battery state as explicit stored energy rather than static implied reserve:
+
+- Added per-region `storageChargeMWh` state and normalized migration behavior.
+  - New builds start at `0 MWh`.
+  - Legacy snapshots without `storageChargeMWh` hydrate storage as full (`20 MWh` per unit) for backward compatibility.
+- Added charging constants in runtime:
+  - `STORAGE_CHARGE_DRAW_MW = 20`
+  - `STORAGE_UNIT_CAPACITY_MWH = 20`
+  - `IN_GAME_HOUR_REAL_SECONDS = 120` (`1 in-game hour = 2 real minutes`)
+- Updated grid resolution:
+  - storage no longer contributes direct generation.
+  - batteries draw available grid power up to `20 MW` per unit while not full.
+  - energy accrual uses `MW * dt * (1 / 120)` so a battery fills in `120s` real time.
+- Updated storage accounting:
+  - `calculateStoredPowerMWh()` now sums live `storageChargeMWh`.
+  - storage charge is clamped on demolition/rehydration/build changes.
+- Extended `render_game_to_text` payload for validation:
+  - `storageChargingMw`
+  - per-entity `storageChargeMWh` and `storageCapacityMWh`.
+
+Files updated:
+
+- `src/game/runtime.js`
+
+Validation:
+
+- Syntax checks:
+  - `node --check src/game/runtime.js`
+  - `node --check src/game/app.js`
+  - `node --check src/game/core.js`
+- develop-web-game regression loop:
+  - `node /Users/mstafford/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js --url http://127.0.0.1:5173 --actions-file /Users/mstafford/.codex/skills/develop-web-game/references/action_payloads.json --click-selector "#start-btn" --iterations 1 --pause-ms 250 --screenshot-dir output/web-game-battery-charge-regression`
+- Targeted Playwright battery validation (tutorial run):
+  - Built plant + storage + connecting long-range line.
+  - Observed from `render_game_to_text`:
+    - `t0`: `~0.05 / 20 MWh`, `storageChargingMw: 20`
+    - `t60s`: `~10.08 / 20 MWh`, `storageChargingMw: 20`
+    - `t130s`: `20 / 20 MWh`, `storageChargingMw: 0`
+  - Screenshot: `output/battery-charge-validation.png`
+
+### Demolition lifecycle + occupancy invariants
+
+Implemented stricter infrastructure occupancy rules so line endpoints always map to an actual built location and demolished points are removed:
+
+- Demolishing the final asset on an infrastructure point now removes the point entirely.
+  - Connected line references are removed with the point.
+  - Selection/line-build start references are cleared if they referenced removed points.
+  - Alerts/timeline now include `Location cleared.` when point removal occurs.
+- Added cleanup pass for orphan points:
+  - empty infrastructure nodes are pruned on runtime boot and snapshot hydration.
+- Added occupancy normalization for loaded saves:
+  - infrastructure points are normalized to at most one asset (`plant`, `substation`, or `storage`).
+  - stale extra assets are collapsed to one asset, with ledger cleanup.
+- Placement collision rules now include towns:
+  - build placement spacing check now treats towns and occupied infrastructure points as collision candidates, preventing city/building overlap.
+
+Files updated:
+
+- `src/game/runtime.js`
+
+Validation:
+
+- Syntax checks:
+  - `node --check src/game/runtime.js`
+  - `node --check src/game/app.js`
+  - `node --check src/game/core.js`
+- develop-web-game regression loop:
+  - `node /Users/mstafford/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js --url http://127.0.0.1:5173 --actions-file /Users/mstafford/.codex/skills/develop-web-game/references/action_payloads.json --click-selector "#start-btn" --iterations 1 --pause-ms 220 --screenshot-dir output/web-game-demolition-node-lifecycle-regression`
+- Targeted Playwright lifecycle check:
+  - Built two infrastructure points and one line between them.
+  - Demolished one endpoint asset and advanced simulation beyond demolition duration.
+  - Confirmed:
+    - endpoint node removed (`afterNodeExists: false`)
+    - no line references to removed endpoint (`afterNodeLinks: 0`)
+    - no empty infrastructure nodes remain (`anyEmptyNode: false`)
+  - Screenshot: `output/demolish-endpoint-removed-with-lines.png`
+
+### Right-click cancel for active demolitions
+
+Implemented immediate cancellation of active demolition via right click on the same location:
+
+- Added runtime helpers:
+  - `recomputeRegionDemolitionCooldown(regionId)`
+  - `cancelPendingDemolition(regionId, assetType?)`
+- Updated right-click flow (`handleSecondaryClick`) so it now:
+  - checks for pending demolition at clicked region first,
+  - cancels it immediately if found,
+  - skips demolish confirm popover in cancel path.
+- Cancellation logs timeline + advisory alert and preserves the building in place.
+
+Files updated:
+
+- `src/game/runtime.js`
+
+Validation:
+
+- Syntax checks:
+  - `node --check src/game/runtime.js`
+  - `node --check src/game/app.js`
+- Targeted Playwright validation:
+  - Build plant.
+  - Start demolition via right-click confirm.
+  - Right-click same building while demolition is active.
+  - Confirmed:
+    - pending demolitions `1 -> 0` immediately
+    - building asset remains present
+    - after advancing >20s, node still exists (no delayed demolition)
+    - alert emitted: `Wind Powerplant demolition canceled in Grid Point 1.`
+  - Screenshot: `output/right-click-cancel-demolition-validation.png`
+
+## 2026-02-26
+
+### Long-range powerline flow direction follows commissioning order
+
+Fixed long-range line pulse direction so animation always travels from the first selected endpoint to the second selected endpoint.
+
+Changes in `src/game/runtime.js`:
+
+- Added explicit flow direction on links:
+  - `flowFrom`
+  - `flowTo`
+- Fresh state link normalization now initializes flow to `a -> b`.
+- Snapshot hydration now validates `flowFrom/flowTo` against endpoints and repairs invalid/missing values to `a -> b`.
+- Commissioning logic now always stamps direction from the live click order:
+  - new link: `flowFrom = startRegion.id`, `flowTo = region.id`
+  - recommissioning existing line between same endpoints updates `flowFrom/flowTo` again.
+- Pulse rendering now lerps along `flowFrom -> flowTo` (with fallback to `a -> b` when needed).
+- `render_game_to_text` link payload now includes `flowFrom` and `flowTo` for deterministic validation.
+
+Validation:
+
+- Syntax checks:
+  - `node --check src/game/runtime.js`
+  - `node --check src/game/app.js`
+  - `node --check src/game/core.js`
+- develop-web-game client smoke:
+  - `node /Users/mstafford/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js --url http://127.0.0.1:5173 --actions-file /Users/mstafford/.codex/skills/develop-web-game/references/action_payloads.json --click-selector "#start-btn" --iterations 1 --pause-ms 220 --screenshot-dir /Users/mstafford/Projects/local/energies-game/output/web-game-line-flow-direction-regression`
+- Targeted Playwright direction check (forward + reverse commissioning on same endpoints, with dev mode enabled to avoid budget noise):
+  - First build result: `flowFrom=node-1`, `flowTo=node-2`
+  - Rebuild in reverse result: `flowFrom=node-2`, `flowTo=node-1`
+  - Assertion result: `pass: true`
+  - Screenshot: `/Users/mstafford/Projects/local/energies-game/output/line-flow-direction-validation.png`
+
+### Priority overlay icon: tight crop
+
+- Updated `/assets/icons/overlays/priority-elevated.svg` to tightly wrap the glyph geometry for accurate overlay anchoring.
+- Changed SVG root from fixed `width="96" height="96" viewBox="0 0 96 96"` to a tight bounds viewBox:
+  - `viewBox="28.75 36.75 38.5 36.5"`
+- Kept all internal paths unchanged.
+
+### Reroute icon composition update
+
+- Updated `/assets/icons/circular/line-reroute.svg`:
+  - Bolt scaled to `115%` and shifted down-left via transform.
+  - Crosshair scaled to `120%` and shifted down-left via transform.
+- Kept circular frame/rings unchanged.

@@ -132,6 +132,18 @@ const SNOWCAP_BORDER_BLEND_RATIO = 0.5;
 const SNOWCAP_BORDER_DITHER_FRACTION = 0.5;
 const SNOWCAP_BORDER_BLEND_WIDTH = 2;
 
+function getAlgorithmLabel(algorithm) {
+  if (algorithm === "midpoint") return "Midpoint";
+  if (algorithm === "4-step") return "4-step";
+  return "Topology";
+}
+
+function getAlgorithmShort(algorithm) {
+  if (algorithm === "midpoint") return "M";
+  if (algorithm === "4-step") return "4S";
+  return "T";
+}
+
 const state = {
   seed: randomSeed(),
   riverSeed: randomSeed(),
@@ -660,9 +672,445 @@ function buildHeightFieldMidpoint(width, height, seed, smoothness, continentScal
   return normalizeHeightField(filteredHeights);
 }
 
-function buildHeightField(width, height, seed, smoothness, algorithm, continentScalePercent = 100) {
+function sampleRidgedMultifractal(nx, ny, seed, baseFrequency, octaves = 5) {
+  let amplitude = 0.94;
+  let frequency = Math.max(0.001, baseFrequency);
+  let weight = 1;
+  let sum = 0;
+  let normalizer = 0;
+
+  for (let octave = 0; octave < octaves; octave += 1) {
+    const octaveSeed = (seed + (octave * 1319)) >>> 0;
+    const noise = fractalNoise(
+      (nx * frequency) + (octave * 13.37),
+      (ny * frequency) - (octave * 17.11),
+      octaveSeed,
+      1
+    );
+    let signal = 1 - Math.abs(noise);
+    signal *= signal;
+    signal *= weight;
+    weight = clamp(signal * 2.1, 0, 1);
+    sum += signal * amplitude;
+    normalizer += amplitude;
+    frequency *= 2.03;
+    amplitude *= 0.54;
+  }
+
+  return normalizer > 0 ? sum / normalizer : 0;
+}
+
+function getLowestNeighborIndex(heights, width, height, x, y, idx) {
+  let lowestIdx = idx;
+  let lowestHeight = heights[idx];
+  const y0 = Math.max(0, y - 1);
+  const y1 = Math.min(height - 1, y + 1);
+  const x0 = Math.max(0, x - 1);
+  const x1 = Math.min(width - 1, x + 1);
+
+  for (let yy = y0; yy <= y1; yy += 1) {
+    const row = yy * width;
+    for (let xx = x0; xx <= x1; xx += 1) {
+      if (xx === x && yy === y) continue;
+      const nIdx = row + xx;
+      const nHeight = heights[nIdx];
+      if (nHeight < lowestHeight) {
+        lowestHeight = nHeight;
+        lowestIdx = nIdx;
+      }
+    }
+  }
+
+  return lowestIdx;
+}
+
+function buildRidgedDomainWarpBase(width, height, seed, smoothnessNorm, continentScalePercent = 100) {
+  const continentScale = clamp(continentScalePercent / 100, 0.5, 2);
+  const heights = new Float32Array(width * height);
+
+  const warpAmp = lerp(0.08, 0.03, smoothnessNorm);
+  const warpFreq = lerp(2.3, 1.5, smoothnessNorm);
+  const macroFreq = lerp(3.2, 1.9, smoothnessNorm);
+  const ridgeFreq = lerp(2.7, 1.7, smoothnessNorm);
+  const ridgeDetailFreq = lerp(5.4, 2.8, smoothnessNorm);
+
+  for (let y = 0; y < height; y += 1) {
+    const ny = y / Math.max(1, height - 1);
+    for (let x = 0; x < width; x += 1) {
+      const nx = x / Math.max(1, width - 1);
+      const idx = (y * width) + x;
+
+      const warpX = fractalNoise(
+        (nx * warpFreq) + 12.47,
+        (ny * warpFreq) - 9.31,
+        seed ^ 0x91e10da5,
+        3
+      ) * warpAmp;
+      const warpY = fractalNoise(
+        (nx * warpFreq) - 14.03,
+        (ny * warpFreq) + 7.41,
+        seed ^ 0x4f1bbcdc,
+        3
+      ) * warpAmp;
+
+      const wx = nx + warpX;
+      const wy = ny + warpY;
+      const lowWx = ((wx - 0.52) * continentScale) + 0.52;
+      const lowWy = ((wy - 0.53) * continentScale) + 0.53;
+
+      const dx = (lowWx - 0.52) / 0.84;
+      const dy = (lowWy - 0.53) / 0.68;
+      const radial = Math.sqrt((dx * dx) + (dy * dy));
+
+      let continent = 1 - radial;
+      continent += 0.18 * Math.sin((lowWx * 4.35) + (lowWy * 2.42));
+      continent += 0.13 * Math.sin((lowWx * 2.07) - (lowWy * 3.57));
+      continent += 0.1 * fractalNoise(lowWx * 1.6, lowWy * 1.6, seed ^ 0x13579bdf, 3);
+      continent = clamp(continent, -1, 1);
+
+      const macro = fractalNoise(lowWx * macroFreq, lowWy * macroFreq, seed ^ 0x2468ace0, 4);
+      const ridgePrimary = sampleRidgedMultifractal(wx, wy, seed ^ 0x7f4a7c15, ridgeFreq, 5);
+      const ridgeDetail = sampleRidgedMultifractal(
+        wx + 31.9,
+        wy - 24.6,
+        seed ^ 0xa5b35707,
+        ridgeDetailFreq,
+        4
+      );
+
+      let value = 0.48;
+      value += continent * 0.31;
+      value += macro * 0.16;
+      value += (ridgePrimary - 0.5) * 0.37;
+      value += (ridgeDetail - 0.5) * 0.17;
+      heights[idx] = value;
+    }
+  }
+
+  return heights;
+}
+
+function applyThermalErosion(heights, width, height, smoothnessNorm) {
+  const iterations = Math.round(lerp(9, 4, smoothnessNorm));
+  const talus = lerp(0.036, 0.016, smoothnessNorm);
+  const erosionRate = lerp(0.38, 0.2, smoothnessNorm);
+  let field = new Float32Array(heights);
+  const delta = new Float32Array(field.length);
+
+  for (let iteration = 0; iteration < iterations; iteration += 1) {
+    delta.fill(0);
+
+    for (let y = 0; y < height; y += 1) {
+      for (let x = 0; x < width; x += 1) {
+        const idx = (y * width) + x;
+        const h = field[idx];
+
+        let d0 = 0;
+        let d1 = 0;
+        let d2 = 0;
+        let d3 = 0;
+        let i0 = -1;
+        let i1 = -1;
+        let i2 = -1;
+        let i3 = -1;
+        let total = 0;
+
+        if (x > 0) {
+          i0 = idx - 1;
+          d0 = h - field[i0] - talus;
+          if (d0 > 0) total += d0;
+        }
+        if (x < width - 1) {
+          i1 = idx + 1;
+          d1 = h - field[i1] - talus;
+          if (d1 > 0) total += d1;
+        }
+        if (y > 0) {
+          i2 = idx - width;
+          d2 = h - field[i2] - talus;
+          if (d2 > 0) total += d2;
+        }
+        if (y < height - 1) {
+          i3 = idx + width;
+          d3 = h - field[i3] - talus;
+          if (d3 > 0) total += d3;
+        }
+
+        if (total <= 1e-8) continue;
+
+        const moveBudget = total * erosionRate;
+        const invTotal = 1 / total;
+
+        if (d0 > 0) {
+          const move = d0 * invTotal * moveBudget;
+          delta[idx] -= move;
+          delta[i0] += move;
+        }
+        if (d1 > 0) {
+          const move = d1 * invTotal * moveBudget;
+          delta[idx] -= move;
+          delta[i1] += move;
+        }
+        if (d2 > 0) {
+          const move = d2 * invTotal * moveBudget;
+          delta[idx] -= move;
+          delta[i2] += move;
+        }
+        if (d3 > 0) {
+          const move = d3 * invTotal * moveBudget;
+          delta[idx] -= move;
+          delta[i3] += move;
+        }
+      }
+    }
+
+    for (let i = 0; i < field.length; i += 1) {
+      field[i] += delta[i];
+    }
+  }
+
+  return field;
+}
+
+function applyHydraulicErosionLite(heights, width, height, seed, smoothnessNorm) {
+  const iterations = Math.round(lerp(15, 7, smoothnessNorm));
+  const rainfall = lerp(0.0065, 0.003, smoothnessNorm);
+  const flowRate = lerp(0.5, 0.35, smoothnessNorm);
+  const evaporation = lerp(0.22, 0.12, smoothnessNorm);
+  const erosionRate = lerp(0.2, 0.09, smoothnessNorm);
+  const depositRate = lerp(0.24, 0.12, smoothnessNorm);
+
+  const field = new Float32Array(heights);
+  const water = new Float32Array(field.length);
+  const sediment = new Float32Array(field.length);
+  const waterNext = new Float32Array(field.length);
+  const sedimentNext = new Float32Array(field.length);
+  const rand = createMulberry32(seed ^ 0x5a17f1c3);
+
+  for (let iteration = 0; iteration < iterations; iteration += 1) {
+    waterNext.fill(0);
+    sedimentNext.fill(0);
+
+    for (let y = 0; y < height; y += 1) {
+      for (let x = 0; x < width; x += 1) {
+        const idx = (y * width) + x;
+
+        let w = water[idx] + (rainfall * lerp(0.8, 1.2, rand()));
+        let s = sediment[idx];
+        const downhillIdx = getLowestNeighborIndex(field, width, height, x, y, idx);
+
+        if (downhillIdx !== idx) {
+          const drop = Math.max(0, field[idx] - field[downhillIdx]);
+          const capacity = Math.max(1e-6, w * (0.32 + (drop * 6.2)));
+          if (s > capacity) {
+            const deposit = (s - capacity) * depositRate;
+            s -= deposit;
+            field[idx] += deposit;
+          } else {
+            const erodeMax = Math.max(0, drop * 0.42);
+            const erode = Math.min((capacity - s) * erosionRate, erodeMax);
+            s += erode;
+            field[idx] -= erode;
+          }
+
+          const flow = w * flowRate;
+          const sedimentFlow = s * flowRate;
+          w -= flow;
+          s -= sedimentFlow;
+          waterNext[downhillIdx] += flow;
+          sedimentNext[downhillIdx] += sedimentFlow;
+        } else {
+          const deposit = s * (depositRate * 0.7);
+          s -= deposit;
+          field[idx] += deposit;
+        }
+
+        w *= (1 - evaporation);
+        waterNext[idx] += w;
+        sedimentNext[idx] += s;
+      }
+    }
+
+    water.set(waterNext);
+    sediment.set(sedimentNext);
+  }
+
+  return field;
+}
+
+function carveRiverChannels(
+  heights,
+  width,
+  height,
+  seed,
+  smoothnessNorm,
+  seaLevelPercent
+) {
+  const field = new Float32Array(heights);
+  const normalized = normalizeHeightField(field);
+  const seaQuantile = clamp(seaLevelPercent / 100, 0.05, 0.95);
+  const provisionalSeaLevel = quantileFromArray(normalized, seaQuantile);
+  const sourceThreshold = quantileFromArray(normalized, clamp(seaQuantile + 0.24, 0.72, 0.95));
+  const rand = createMulberry32(seed ^ 0x3e9f2a6d);
+
+  const sourceMask = new Uint8Array(width * height);
+  const visitStamp = new Uint32Array(width * height);
+  const sourceCount = clamp(Math.round((width * height) / 50000) + 6, 8, 34);
+  const minSourceSpacing = Math.max(12, Math.round(Math.min(width, height) * 0.04));
+  const maxSourceAttempts = sourceCount * 80;
+  const maxSteps = Math.max(160, Math.round((width + height) * 2.2));
+  const carveDepth = lerp(0.01, 0.006, smoothnessNorm);
+  const carveNeighborDepth = carveDepth * 0.28;
+  const carveDiagonalDepth = carveDepth * 0.16;
+  const carvedMask = new Uint8Array(width * height);
+  const acceptedSources = [];
+
+  for (let attempt = 0; attempt < maxSourceAttempts && acceptedSources.length < sourceCount; attempt += 1) {
+    const x = Math.floor(rand() * width);
+    const y = Math.floor(rand() * height);
+    const idx = (y * width) + x;
+    const h = normalized[idx];
+
+    if (h <= sourceThreshold || h <= provisionalSeaLevel + 0.04) continue;
+    if (x < 2 || x > width - 3 || y < 2 || y > height - 3) continue;
+    if (hasNearbySource(sourceMask, width, height, x, y, minSourceSpacing)) continue;
+    sourceMask[idx] = 1;
+    acceptedSources.push(idx);
+  }
+
+  const carvePoint = (idx, amount) => {
+    field[idx] -= amount;
+    carvedMask[idx] = 1;
+    const x = idx % width;
+    const y = (idx - x) / width;
+    if (x > 0) {
+      field[idx - 1] -= carveNeighborDepth;
+      carvedMask[idx - 1] = 1;
+    }
+    if (x < width - 1) {
+      field[idx + 1] -= carveNeighborDepth;
+      carvedMask[idx + 1] = 1;
+    }
+    if (y > 0) {
+      field[idx - width] -= carveNeighborDepth;
+      carvedMask[idx - width] = 1;
+    }
+    if (y < height - 1) {
+      field[idx + width] -= carveNeighborDepth;
+      carvedMask[idx + width] = 1;
+    }
+    if (x > 0 && y > 0) {
+      field[idx - width - 1] -= carveDiagonalDepth;
+      carvedMask[idx - width - 1] = 1;
+    }
+    if (x < width - 1 && y > 0) {
+      field[idx - width + 1] -= carveDiagonalDepth;
+      carvedMask[idx - width + 1] = 1;
+    }
+    if (x > 0 && y < height - 1) {
+      field[idx + width - 1] -= carveDiagonalDepth;
+      carvedMask[idx + width - 1] = 1;
+    }
+    if (x < width - 1 && y < height - 1) {
+      field[idx + width + 1] -= carveDiagonalDepth;
+      carvedMask[idx + width + 1] = 1;
+    }
+  };
+
+  for (let sourceIndex = 0; sourceIndex < acceptedSources.length; sourceIndex += 1) {
+    const branchId = sourceIndex + 1;
+    let current = acceptedSources[sourceIndex];
+
+    for (let step = 0; step < maxSteps; step += 1) {
+      const x = current % width;
+      const y = (current - x) / width;
+      const h = field[current];
+
+      const taper = 1 - ((step / maxSteps) * 0.7);
+      carvePoint(current, carveDepth * taper);
+      visitStamp[current] = branchId;
+
+      if (h <= provisionalSeaLevel + 0.01) break;
+
+      const targets = findNeighborFlowTargets(
+        field,
+        width,
+        height,
+        x,
+        y,
+        h,
+        visitStamp,
+        branchId
+      );
+      const next = targets.lowestIdx;
+      if (next < 0 || next === current) break;
+      current = next;
+    }
+  }
+
+  return blurHeightFieldMasked(field, carvedMask, width, height, 1);
+}
+
+function buildHeightFieldFourStep(
+  width,
+  height,
+  seed,
+  smoothness,
+  continentScalePercent = 100,
+  seaLevelPercent = 58
+) {
+  const smoothnessNorm = clamp(smoothness / 100, 0, 1);
+  const baseField = buildRidgedDomainWarpBase(
+    width,
+    height,
+    seed,
+    smoothnessNorm,
+    continentScalePercent
+  );
+  const thermalField = applyThermalErosion(baseField, width, height, smoothnessNorm);
+  const hydraulicField = applyHydraulicErosionLite(
+    thermalField,
+    width,
+    height,
+    seed,
+    smoothnessNorm
+  );
+  const carvedField = carveRiverChannels(
+    hydraulicField,
+    width,
+    height,
+    seed,
+    smoothnessNorm,
+    seaLevelPercent
+  );
+  const blurPasses = Math.round(lerp(0, 2, smoothnessNorm));
+  const filtered = blurPasses > 0
+    ? blurHeightField(carvedField, width, height, blurPasses)
+    : carvedField;
+  return normalizeHeightField(filtered);
+}
+
+function buildHeightField(
+  width,
+  height,
+  seed,
+  smoothness,
+  algorithm,
+  continentScalePercent = 100,
+  seaLevelPercent = 58
+) {
   if (algorithm === "midpoint") {
     return buildHeightFieldMidpoint(width, height, seed, smoothness, continentScalePercent);
+  }
+  if (algorithm === "4-step") {
+    return buildHeightFieldFourStep(
+      width,
+      height,
+      seed,
+      smoothness,
+      continentScalePercent,
+      seaLevelPercent
+    );
   }
   return buildHeightFieldTopology(width, height, seed, smoothness, continentScalePercent);
 }
@@ -1039,14 +1487,16 @@ function applyProminenceCastShadows(
   height,
   casters,
   shadowLengthPx,
-  strengthNorm
+  strengthNorm,
+  peakLightNorm
 ) {
   if (!casters.length || strengthNorm <= 0) return;
 
   const maxSteps = Math.max(1, Math.round(shadowLengthPx));
   const lengthNorm = clamp((shadowLengthPx - 20) / 240, 0, 1);
   const dropPerStep = lerp(0.0105, 0.0015, lengthNorm);
-  const maxDarkNudge = SHADOW_CAST_MAX * strengthNorm;
+  const peakBoostNorm = lerp(0.45, 1.45, peakLightNorm);
+  const maxDarkNudge = SHADOW_CAST_MAX * strengthNorm * peakBoostNorm;
 
   for (let i = 0; i < casters.length; i += 1) {
     const caster = casters[i];
@@ -1054,8 +1504,9 @@ function applyProminenceCastShadows(
     const castStrength = (
       0.25 +
       (caster.prominenceWeight * 0.5) +
-      ((caster.ridgeWeight || 0) * 0.25)
-    ) * strengthNorm;
+      ((caster.ridgeWeight || 0) * 0.25) +
+      ((caster.darksideWeight || 0) * 0.35)
+    ) * strengthNorm * peakBoostNorm;
     let fx = caster.x + 0.5;
     let fy = caster.y + 0.5;
 
@@ -1077,8 +1528,9 @@ function applyProminenceCastShadows(
       if (depth <= 0) continue;
 
       const distFade = 1 - (step / (maxSteps + 1));
+      const lengthStretch = lerp(0.9, 1.35, lengthNorm);
       const darkNudge = clamp(
-        depth * (2.4 + (caster.prominenceWeight * 1.6)) * distFade * castStrength,
+        depth * (2.4 + (caster.prominenceWeight * 1.6)) * distFade * castStrength * lengthStretch,
         0,
         maxDarkNudge
       );
@@ -1124,6 +1576,8 @@ function buildShadowNudgeField(
   );
   const nudges = new Float32Array(width * height);
   const prominenceRatioField = new Float32Array(width * height);
+  const qualifiedProminentMask = new Uint8Array(width * height);
+  const directionalNudgeField = new Float32Array(width * height);
   const peakCandidates = [];
 
   let landCount = 0;
@@ -1160,6 +1614,7 @@ function buildShadowNudgeField(
       const slopeMag = Math.sqrt((gx * gx) + (gy * gy));
 
       const slopeWeight = smoothstep01((slopeMag - slopeDeadzone) / slopeRange);
+      let directionalNudge = 0;
       if (slopeWeight > 0) {
         let nx = -gx * SHADOW_NORMAL_SCALE;
         let ny = -gy * SHADOW_NORMAL_SCALE;
@@ -1180,18 +1635,21 @@ function buildShadowNudgeField(
           1
         );
         const directional = ndotl - flatDot;
-        const directionalNudge = clamp(
+        directionalNudge = clamp(
           directional * slopeWeight * (strengthNorm * 1.6),
           -directionalCap,
           directionalCap
         );
-        nudges[idx] += directionalNudge;
       }
 
       const localHeight = Math.max(0.05, localBase[idx]);
       const prominenceRatio = Math.max(0, (heights[idx] - localBase[idx]) / localHeight);
       prominenceRatioField[idx] = prominenceRatio;
-      if (prominenceRatio <= prominenceThreshold) continue;
+      if (prominenceRatio <= prominenceThreshold) {
+        directionalNudgeField[idx] = directionalNudge;
+        nudges[idx] += directionalNudge;
+        continue;
+      }
 
       const prominenceWeight = smoothstep01(
         (prominenceRatio - prominenceThreshold) / Math.max(1e-5, 1 - prominenceThreshold)
@@ -1199,13 +1657,24 @@ function buildShadowNudgeField(
       const ridgeWeight = smoothstep01(
         (slopeMag - slopeDeadzone) / Math.max(1e-5, slopeRange)
       );
+      qualifiedProminentMask[idx] = ridgeWeight > 0 ? 1 : 0;
       if (ridgeWeight > 0) {
-        // Peak lightening is controlled directly by the peak slider:
-        // at 100%, strong prominent ridges can reach full white.
-        const peakHighlight = smoothstep01(((prominenceWeight * ridgeWeight) - 0.15) / 0.6);
-        const peakNudge = clamp(peakLightNorm * peakHighlight, 0, 1);
-        nudges[idx] = Math.max(nudges[idx], peakNudge);
+        const peakInfluence = smoothstep01(((prominenceWeight * ridgeWeight) - 0.1) / 0.7);
+        // Prominent peaks get boosted hillshade (both light and dark) based on peak slider.
+        const boostScale = 1 + (peakLightNorm * peakInfluence * 1.8);
+        directionalNudge *= boostScale;
+
+        // At 100% peak lightening, strongly lit prominent peaks can reach full white.
+        if (directionalNudge > 0) {
+          const litStrength = smoothstep01(
+            directionalNudge / Math.max(1e-5, directionalCap * Math.max(1, boostScale))
+          );
+          const peakNudge = clamp(peakLightNorm * peakInfluence * litStrength, 0, 1);
+          nudges[idx] = Math.max(nudges[idx], peakNudge);
+        }
       }
+      directionalNudgeField[idx] = directionalNudge;
+      nudges[idx] += directionalNudge;
 
       peakCandidates.push({
         idx,
@@ -1219,7 +1688,7 @@ function buildShadowNudgeField(
   }
 
   if (peakCandidates.length > 0) {
-    const casters = [];
+    const peakCores = [];
     for (let i = 0; i < peakCandidates.length; i += 1) {
       const candidate = peakCandidates[i];
       if (!isProminentLocalMaximum(
@@ -1233,7 +1702,51 @@ function buildShadowNudgeField(
         continue;
       }
       if (candidate.ridgeWeight <= 0.08) continue;
-      casters.push(candidate);
+      peakCores.push(candidate);
+    }
+
+    const casters = [];
+    const usedCasterIdx = new Set();
+    for (let i = 0; i < peakCores.length; i += 1) {
+      const core = peakCores[i];
+      const x0 = Math.max(0, core.x - 3);
+      const x1 = Math.min(width - 1, core.x + 3);
+      const y0 = Math.max(0, core.y - 3);
+      const y1 = Math.min(height - 1, core.y + 3);
+
+      let bestIdx = -1;
+      let bestDarkScore = 0;
+      for (let yy = y0; yy <= y1; yy += 1) {
+        const row = yy * width;
+        for (let xx = x0; xx <= x1; xx += 1) {
+          const nIdx = row + xx;
+          if (qualifiedProminentMask[nIdx] === 0) continue;
+          const directionalNudge = directionalNudgeField[nIdx];
+          if (directionalNudge >= -1e-4) continue;
+
+          const dx = xx - core.x;
+          const dy = yy - core.y;
+          const dist = Math.max(1, Math.sqrt((dx * dx) + (dy * dy)));
+          const nearCoreWeight = 1 / dist;
+          const darkScore = (-directionalNudge) * nearCoreWeight;
+          if (darkScore <= bestDarkScore) continue;
+
+          bestDarkScore = darkScore;
+          bestIdx = nIdx;
+        }
+      }
+
+      if (bestIdx < 0 || usedCasterIdx.has(bestIdx)) continue;
+      usedCasterIdx.add(bestIdx);
+      casters.push({
+        idx: bestIdx,
+        x: bestIdx % width,
+        y: Math.floor(bestIdx / width),
+        prominenceRatio: core.prominenceRatio,
+        prominenceWeight: core.prominenceWeight,
+        ridgeWeight: core.ridgeWeight,
+        darksideWeight: clamp(bestDarkScore / Math.max(1e-5, directionalCap), 0, 1),
+      });
     }
 
     casters.sort((a, b) => b.prominenceRatio - a.prominenceRatio);
@@ -1250,7 +1763,8 @@ function buildShadowNudgeField(
       height,
       casters,
       clamp(Number(shadowLengthPx) || 0, 20, 260),
-      strengthNorm
+      strengthNorm,
+      peakLightNorm
     );
   }
 
@@ -1272,10 +1786,14 @@ function buildShadowNudgeField(
     }
   }
 
+  const peakBoostNorm = lerp(0.45, 1.45, peakLightNorm);
+  const prominentDirectionalCap = SHADOW_DIRECTIONAL_MAX * strengthNorm * (1 + (peakLightNorm * 1.8));
+  const peakShadowCap = SHADOW_CAST_MAX * strengthNorm * peakBoostNorm;
   const maxAbsNudge = Math.max(SHADOW_CAST_MAX, SHADOW_PEAK_MAX, SHADOW_DIRECTIONAL_MAX) * strengthNorm;
-  const maxPositiveNudge = Math.max(maxAbsNudge, peakLightNorm);
+  const maxNegativeNudge = Math.max(maxAbsNudge, prominentDirectionalCap, peakShadowCap);
+  const maxPositiveNudge = Math.max(maxAbsNudge, prominentDirectionalCap, peakLightNorm);
   for (let idx = 0; idx < nudges.length; idx += 1) {
-    nudges[idx] = clamp(nudges[idx], -maxAbsNudge, maxPositiveNudge);
+    nudges[idx] = clamp(nudges[idx], -maxNegativeNudge, maxPositiveNudge);
   }
   return nudges;
 }
@@ -1428,7 +1946,7 @@ function updateLabels() {
   mountaintopValue.textContent = `${mountaintopSlider.value}%`;
   const visibleRiverCount = state.currentOutput ? state.currentOutput.river.sourceCount : state.riverCount;
   riversCountValue.textContent = `${visibleRiverCount}`;
-  algorithmValue.textContent = state.algorithm === "midpoint" ? "Midpoint" : "Topology";
+  algorithmValue.textContent = getAlgorithmLabel(state.algorithm);
   resourceTypeValue.textContent = resourceTypeLabel(resourceTypeSelect.value);
   resourceSnapValue.textContent = `${RESOURCE_VERTEX_SNAP_PX} px`;
   resourceStrengthValue.textContent = `${resourceStrengthSlider.value}%`;
@@ -1544,7 +2062,7 @@ function updateStats(stats) {
   const snowPct = Math.round(stats.mountaintopFraction * 100);
   const riverPct = Math.round(stats.riverFraction * 100);
   const snowcapsTargetPct = Number(mountaintopSlider.value);
-  const algoShort = state.algorithm === "midpoint" ? "M" : "T";
+  const algoShort = getAlgorithmShort(state.algorithm);
   const baseStats =
     `Land ${landPct}% | Mountain ${mountainPct}% | Snow ${snowPct}% (target ${snowcapsTargetPct}%) | Rivers ${riverPct}% (${stats.riverSourceCount}) | ${algoShort}`;
   if (state.editorMode === "visual-effects") {
@@ -1596,7 +2114,8 @@ function buildTerrainImage(
     seed,
     smoothness,
     algorithm,
-    continentScalePercent
+    continentScalePercent,
+    seaLevelPercent
   );
   const slopes = buildSlopeField(heights, width, height);
 

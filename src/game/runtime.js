@@ -81,6 +81,8 @@ const DEMOLITION_DURATION_SECONDS = 20;
 const DEMOLITION_BUILDING_REFUND_RATIO = 0.5;
 const DEMOLITION_LINE_REFUND_RATIO = 0.5;
 const LINE_WATER_OR_SNOW_PIXEL_SURCHARGE = 10;
+const INFRASTRUCTURE_NODE_RADIUS = 22;
+const BUILDING_MIN_SPACING_MULTIPLIER = 1.5;
 const PLANT_TYPE_ORDER = ["wind", "sun", "natural_gas"];
 const PLANT_TYPE_VALUES = new Set(PLANT_TYPE_ORDER);
 const DEFAULT_PLANT_TYPE = "wind";
@@ -94,6 +96,20 @@ const DEMOLISH_ASSET_LABELS = {
   storage: "Battery",
 };
 const LONG_RANGE_LINE_MAX_DISTANCE = 1000;
+const LONG_RANGE_TOWER_COUNT_RATIO = 0.25;
+const STORAGE_UNIT_CAPACITY_MWH = 20;
+const STORAGE_CHARGE_DRAW_MW = 20;
+const IN_GAME_HOUR_REAL_SECONDS = 120;
+const IN_GAME_HOURS_PER_REAL_SECOND = 1 / IN_GAME_HOUR_REAL_SECONDS;
+const PRIORITY_DEFAULT = "nominal";
+const PRIORITY_ELEVATED = "elevated";
+const LEGACY_PRIORITY_MAP = {
+  low: PRIORITY_DEFAULT,
+  normal: PRIORITY_DEFAULT,
+  high: PRIORITY_ELEVATED,
+  nominal: PRIORITY_DEFAULT,
+  elevated: PRIORITY_ELEVATED,
+};
 const LEGACY_ZOOM_LEVELS = [0.55, 0.72, 0.9, 1.1, 1.32, 1.64, 1.98, 2.32, 2.64, 3.08, 3.52, 3.96, 4.4, 4.84, 5.28];
 const MIN_CAMERA_ZOOM = 0.55;
 const MAX_CAMERA_ZOOM = 8;
@@ -199,6 +215,8 @@ export class GameRuntime {
     };
 
     this.state = this.snapshot ? this.rehydrateSnapshot(this.snapshot) : this.createFreshState();
+    this.enforceInfrastructureOccupancyRules();
+    this.pruneEmptyInfrastructureNodes();
     this.ensureRegionResourceProfiles();
     this.applyDevModeState();
     if (this.config.mode === "tutorial") {
@@ -277,6 +295,11 @@ export class GameRuntime {
     return PLANT_TYPE_VALUES.has(value) ? value : DEFAULT_PLANT_TYPE;
   }
 
+  normalizePriority(value) {
+    const normalized = LEGACY_PRIORITY_MAP[String(value || "").toLowerCase()];
+    return PRIORITY_ORDER.includes(normalized) ? normalized : PRIORITY_DEFAULT;
+  }
+
   getNextBuildPlantType(currentType = this.buildPlantType) {
     const normalizedType = this.normalizePlantType(currentType);
     const currentIndex = PLANT_TYPE_ORDER.indexOf(normalizedType);
@@ -339,6 +362,54 @@ export class GameRuntime {
     }
     region.assetBuildCosts = normalized;
     return normalized;
+  }
+
+  enforceSingleAssetOccupancyForInfrastructure(region) {
+    if (!region || this.isTownEntity(region)) return;
+    const normalizedAssets = { plant: 0, substation: 0, storage: 0 };
+    for (const assetType of ASSET_ORDER) {
+      normalizedAssets[assetType] = Math.max(0, Number(region.assets?.[assetType] || 0));
+    }
+    region.assets = normalizedAssets;
+
+    const activeAssetTypes = ASSET_ORDER.filter((assetType) => normalizedAssets[assetType] > 0);
+    if (!activeAssetTypes.length) {
+      region.storageChargeMWh = 0;
+      this.ensureRegionAssetBuildCosts(region);
+      return;
+    }
+
+    const keepAssetType = activeAssetTypes[0];
+    region.assets = { plant: 0, substation: 0, storage: 0 };
+    region.assets[keepAssetType] = 1;
+
+    const ledger = this.ensureRegionAssetBuildCosts(region);
+    for (const assetType of ASSET_ORDER) {
+      if (assetType === keepAssetType) {
+        const history = this.normalizeAssetBuildCostHistory(ledger[assetType]);
+        const keepValue = history.length
+          ? history[history.length - 1]
+          : this.estimateAssetBuildCost(region, assetType);
+        ledger[assetType] = keepValue > 0 ? [keepValue] : [];
+      } else {
+        ledger[assetType] = [];
+      }
+    }
+
+    if (keepAssetType !== "plant") {
+      region.plantType = DEFAULT_PLANT_TYPE;
+    }
+    if (keepAssetType !== "storage") {
+      region.storageChargeMWh = 0;
+    } else {
+      this.normalizeRegionStorageCharge(region, { legacyDefaultToFull: true });
+    }
+  }
+
+  enforceInfrastructureOccupancyRules() {
+    for (const region of this.state.regions) {
+      this.enforceSingleAssetOccupancyForInfrastructure(region);
+    }
   }
 
   estimateAssetBuildCost(region, assetType) {
@@ -411,6 +482,55 @@ export class GameRuntime {
     }
   }
 
+  getStorageUnitCount(region) {
+    return Math.max(0, Number(region?.assets?.storage || 0));
+  }
+
+  getStorageCapacityMWhForUnits(storageUnits) {
+    return Math.max(0, storageUnits) * STORAGE_UNIT_CAPACITY_MWH;
+  }
+
+  getRegionStorageCapacityMWh(region) {
+    return this.getStorageCapacityMWhForUnits(this.getStorageUnitCount(region));
+  }
+
+  normalizeRegionStorageCharge(region, { legacyDefaultToFull = false } = {}) {
+    if (!region) return 0;
+    const storageUnits = this.getStorageUnitCount(region);
+    const capacityMWh = this.getStorageCapacityMWhForUnits(storageUnits);
+    const serializedCharge = Number(region.storageChargeMWh);
+    const fallbackCharge = legacyDefaultToFull ? capacityMWh : 0;
+    const normalizedCharge = Number.isFinite(serializedCharge) ? serializedCharge : fallbackCharge;
+    region.storageChargeMWh = clamp(normalizedCharge, 0, capacityMWh);
+    return region.storageChargeMWh;
+  }
+
+  getStorageChargeDemandMW(region, dt) {
+    const storageUnits = this.getStorageUnitCount(region);
+    if (storageUnits <= 0 || dt <= 0) return 0;
+    const capacityMWh = this.getStorageCapacityMWhForUnits(storageUnits);
+    if (capacityMWh <= 0) return 0;
+    const currentStoredMWh = this.normalizeRegionStorageCharge(region);
+    const remainingMWh = Math.max(0, capacityMWh - currentStoredMWh);
+    if (remainingMWh <= 1e-6) return 0;
+    const maxDrawByRate = storageUnits * STORAGE_CHARGE_DRAW_MW;
+    const maxDrawByCapacity = remainingMWh / (dt * IN_GAME_HOURS_PER_REAL_SECOND);
+    return Math.max(0, Math.min(maxDrawByRate, maxDrawByCapacity));
+  }
+
+  addStorageChargeFromGrid(region, drawMW, dt) {
+    if (!region || drawMW <= 0 || dt <= 0) return 0;
+    const capacityMWh = this.getRegionStorageCapacityMWh(region);
+    if (capacityMWh <= 0) {
+      region.storageChargeMWh = 0;
+      return 0;
+    }
+    const currentStoredMWh = this.normalizeRegionStorageCharge(region);
+    const addedMWh = Math.max(0, drawMW * dt * IN_GAME_HOURS_PER_REAL_SECOND);
+    region.storageChargeMWh = clamp(currentStoredMWh + addedMWh, 0, capacityMWh);
+    return region.storageChargeMWh - currentStoredMWh;
+  }
+
   createTutorialProgressState(existing = null) {
     const safe = existing && typeof existing === "object" ? existing : {};
     const totalSteps = TUTORIAL_STEP_DEFINITIONS.length;
@@ -456,11 +576,11 @@ export class GameRuntime {
     if (this.state.tutorial.currentStep >= this.state.tutorial.totalSteps) {
       this.state.tutorial.completed = true;
       this.pushAlert(
-        "Tutorial complete. Use Exit Tutorial to finish the run.",
+        "Tutorial complete. Continue practicing or use Save & Exit from the top bar.",
         "advisory",
         8
       );
-      this.logTimeline("Tutorial complete. Awaiting explicit exit command.");
+      this.logTimeline("Tutorial complete. Core controls verified.");
       this.pushHudUpdate();
       return;
     }
@@ -693,7 +813,7 @@ export class GameRuntime {
       return {
         ...deepClone(region),
         entityType: "town",
-        priority: "normal",
+        priority: PRIORITY_DEFAULT,
         townCount,
         townCap: 1,
         nominalBaseDemand: region.baseDemand,
@@ -703,6 +823,8 @@ export class GameRuntime {
         coverageSourceId: null,
         coverageDistance: 0,
         assets,
+        storageChargeMWh: 0,
+        storageChargingMw: 0,
         assetBuildCosts: this.createEmptyAssetBuildCosts(),
         plantType: DEFAULT_PLANT_TYPE,
         resourceProfile: this.createEmptyResourceProfile(),
@@ -722,6 +844,8 @@ export class GameRuntime {
       return {
         ...deepClone(link),
         built: false,
+        flowFrom: link.a,
+        flowTo: link.b,
         length: Math.hypot(
           (findBaseRegion(link.a)?.x || 0) - (findBaseRegion(link.b)?.x || 0),
           (findBaseRegion(link.a)?.y || 0) - (findBaseRegion(link.b)?.y || 0)
@@ -746,6 +870,7 @@ export class GameRuntime {
       totalServed: 0,
       totalUnmet: 0,
       totalGeneration: 0,
+      storageChargingMw: 0,
       seasonIndex: 0,
       seasonTimer: 0,
       seasonLabel: "neutral",
@@ -817,6 +942,8 @@ export class GameRuntime {
       region.coveredBySubstation = !!region.coveredBySubstation;
       region.coverageSourceId = region.coverageSourceId || null;
       region.coverageDistance = Math.max(0, Number(region.coverageDistance || 0));
+      region.storageChargingMw = 0;
+      region.priority = this.normalizePriority(region.priority);
       region.baseDemand = region.entityType === "town" ? Number(region.baseDemand || 0) : 0;
       region.population = region.entityType === "town" ? Number(region.population || 0) : 0;
       region.growthRate = region.entityType === "town" ? Number(region.growthRate || 0) : 0;
@@ -826,6 +953,7 @@ export class GameRuntime {
       region.assets.plant = Math.max(0, Number(region.assets.plant || 0));
       region.assets.substation = Math.max(0, Number(region.assets.substation || 0));
       region.assets.storage = Math.max(0, Number(region.assets.storage || 0));
+      this.normalizeRegionStorageCharge(region, { legacyDefaultToFull: true });
       this.ensureRegionAssetBuildCosts(region);
       const serializedPlantType = region.plantType;
       if (PLANT_TYPE_VALUES.has(serializedPlantType)) {
@@ -837,6 +965,20 @@ export class GameRuntime {
       }
     }
     for (const link of safe.links) {
+      link.a = String(link.a || "");
+      link.b = String(link.b || "");
+      const flowFrom = String(link.flowFrom || "");
+      const flowTo = String(link.flowTo || "");
+      const flowMatchesEndpoints =
+        (flowFrom === link.a && flowTo === link.b) ||
+        (flowFrom === link.b && flowTo === link.a);
+      if (flowMatchesEndpoints) {
+        link.flowFrom = flowFrom;
+        link.flowTo = flowTo;
+      } else {
+        link.flowFrom = link.a;
+        link.flowTo = link.b;
+      }
       link.built = !!link.built;
       if (!Number.isFinite(link.length) || link.length <= 0) {
         const a = findBaseRegion(link.a);
@@ -873,6 +1015,7 @@ export class GameRuntime {
     safe.totalServed = safe.totalServed || 0;
     safe.totalUnmet = safe.totalUnmet || 0;
     safe.totalGeneration = safe.totalGeneration || 0;
+    safe.storageChargingMw = Math.max(0, Number(safe.storageChargingMw || 0));
     if (this.config.mode === "tutorial") {
       safe.tutorial = this.createTutorialProgressState(safe.tutorial);
     } else {
@@ -1521,7 +1664,7 @@ export class GameRuntime {
       entityType: "node",
       x: clamp(worldX, 0, BASE_MAP.width),
       y: clamp(worldY, 0, BASE_MAP.height),
-      radius: 22,
+      radius: INFRASTRUCTURE_NODE_RADIUS,
       districtType: localBiome.districtType,
       terrain: localBiome.terrain,
       climate: localBiome.climate,
@@ -1530,7 +1673,7 @@ export class GameRuntime {
       growthRate: 0,
       starterAssets: { plant: 0, substation: 0, storage: 0 },
       strategicValue: "Player-placed infrastructure anchor",
-      priority: "normal",
+      priority: PRIORITY_DEFAULT,
       townCount: 0,
       townCap: 0,
       nominalBaseDemand: 0,
@@ -1540,6 +1683,8 @@ export class GameRuntime {
       coverageSourceId: null,
       coverageDistance: 0,
       assets: { plant: 0, substation: 0, storage: 0 },
+      storageChargeMWh: 0,
+      storageChargingMw: 0,
       assetBuildCosts: this.createEmptyAssetBuildCosts(),
       plantType: DEFAULT_PLANT_TYPE,
       resourceProfile: this.createEmptyResourceProfile(),
@@ -1688,6 +1833,112 @@ export class GameRuntime {
     );
   }
 
+  removeInfrastructureRegion(regionId) {
+    if (!regionId) return false;
+    const region = this.findRegion(regionId);
+    if (!region || this.isTownEntity(region)) return false;
+
+    this.state.regions = this.state.regions.filter((entry) => entry.id !== regionId);
+    this.state.links = this.state.links.filter(
+      (link) => link.a !== regionId && link.b !== regionId
+    );
+    if (this.selectedRegionId === regionId) {
+      this.selectedRegionId = null;
+    }
+    if (this.lineBuildStartRegionId === regionId) {
+      this.clearLineSelection();
+    }
+    return true;
+  }
+
+  pruneEmptyInfrastructureNodes() {
+    const orphanIds = new Set(
+      this.state.regions
+        .filter(
+          (region) => !this.isTownEntity(region) && this.getRegionTotalAssets(region) <= 0
+        )
+        .map((region) => region.id)
+    );
+    if (!orphanIds.size) return 0;
+
+    this.state.regions = this.state.regions.filter((region) => !orphanIds.has(region.id));
+    this.state.links = this.state.links.filter(
+      (link) => !orphanIds.has(link.a) && !orphanIds.has(link.b)
+    );
+    if (this.selectedRegionId && orphanIds.has(this.selectedRegionId)) {
+      this.selectedRegionId = null;
+    }
+    if (this.lineBuildStartRegionId && orphanIds.has(this.lineBuildStartRegionId)) {
+      this.clearLineSelection();
+    }
+    if (Array.isArray(this.state.pendingDemolitions)) {
+      this.state.pendingDemolitions = this.state.pendingDemolitions.filter(
+        (item) => !orphanIds.has(item.regionId)
+      );
+    }
+    return orphanIds.size;
+  }
+
+  getRegionTotalAssets(region) {
+    if (!region?.assets) return 0;
+    let total = 0;
+    for (const assetType of ASSET_ORDER) {
+      total += Math.max(0, Number(region.assets[assetType] || 0));
+    }
+    return total;
+  }
+
+  getInfrastructureNodeRadius(region) {
+    return Math.max(1, Number(region?.radius || INFRASTRUCTURE_NODE_RADIUS));
+  }
+
+  getBuildPlacementRadius(region) {
+    if (!region) return INFRASTRUCTURE_NODE_RADIUS;
+    if (this.isTownEntity(region)) {
+      return MAP_OBJECT_INTERACTION_RADIUS_WORLD;
+    }
+    return this.getInfrastructureNodeRadius(region);
+  }
+
+  getRerouteRadiusWorld() {
+    return Math.max(
+      1,
+      Number(this.config.substationRadius || SUBSTATION_RADIUS_BY_PROFILE.standard || 100)
+    );
+  }
+
+  isPriorityTargetRegion(region) {
+    if (!region) return false;
+    if (this.isTownEntity(region)) return true;
+    return this.getRegionTotalAssets(region) > 0;
+  }
+
+  getRerouteTargetsInRange(centerX, centerY, radiusWorld = this.getRerouteRadiusWorld()) {
+    const radius = Math.max(1, Number(radiusWorld || 0));
+    return this.state.regions.filter((region) => {
+      if (!this.isPriorityTargetRegion(region)) return false;
+      return Math.hypot(region.x - centerX, region.y - centerY) <= radius;
+    });
+  }
+
+  findInfrastructureBuildSpacingConflict(worldX, worldY, ignoreRegionId = null) {
+    const newBuildRadius = INFRASTRUCTURE_NODE_RADIUS;
+    for (const candidate of this.state.regions) {
+      if (!candidate || candidate.id === ignoreRegionId) continue;
+      const candidateOccupied =
+        this.isTownEntity(candidate) || this.getRegionTotalAssets(candidate) > 0;
+      if (!candidateOccupied) continue;
+      const minSpacing =
+        BUILDING_MIN_SPACING_MULTIPLIER *
+        Math.max(newBuildRadius, this.getBuildPlacementRadius(candidate));
+      const distance = Math.hypot(candidate.x - worldX, candidate.y - worldY);
+      if (distance < minSpacing) {
+        return { candidate, distance, minSpacing };
+      }
+    }
+    return null;
+  }
+
   willLoseLineEndpointAfterDemolition(region, assetType) {
     let remainingAssets = 0;
     for (const type of ASSET_ORDER) {
@@ -1738,11 +1989,7 @@ export class GameRuntime {
   canEndpointHostLine(region) {
     if (!region) return false;
     if (this.isTownEntity(region)) return false;
-    return (
-      (region.assets.plant || 0) > 0 ||
-      (region.assets.substation || 0) > 0 ||
-      (region.assets.storage || 0) > 0
-    );
+    return this.getRegionTotalAssets(region) > 0;
   }
 
   clearLineSelection() {
@@ -1838,6 +2085,8 @@ export class GameRuntime {
         id: `line-${this.state.nextLineId++}`,
         a: startRegion.id,
         b: region.id,
+        flowFrom: startRegion.id,
+        flowTo: region.id,
         baseCapacity: this.estimateLineCapacity(length),
         built: true,
         length,
@@ -1851,6 +2100,8 @@ export class GameRuntime {
       this.state.links.push(line);
     } else {
       line.built = true;
+      line.flowFrom = startRegion.id;
+      line.flowTo = region.id;
       line.lineBuildCost = buildCost;
       if (!Number.isFinite(line.length) || line.length <= 0) {
         line.length = this.calculateLineLength(startRegion, region);
@@ -1876,6 +2127,7 @@ export class GameRuntime {
     const rule = ASSET_RULES[this.buildAssetType];
     if (!rule) return;
     let target = region || null;
+    let shouldInsertTarget = false;
     const clickedOpenPoint = !target;
 
     if (target && this.isTownEntity(target)) {
@@ -1907,12 +2159,30 @@ export class GameRuntime {
       );
 
       target = nearbyNode || this.createInfrastructureNode(worldPoint.x, worldPoint.y);
-      if (!nearbyNode) {
-        this.state.regions.push(target);
-        if (this.resourceZones.length) {
-          this.applyResourceCoverageToRegions();
-        }
-      }
+      shouldInsertTarget = !nearbyNode;
+    }
+
+    if (this.getRegionTotalAssets(target) > 0) {
+      this.pushAlert(
+        `${target.name} already hosts infrastructure. Buildings must be placed on separate points.`,
+        "warning",
+        5
+      );
+      return null;
+    }
+
+    const spacingConflict = this.findInfrastructureBuildSpacingConflict(
+      target.x,
+      target.y,
+      target.id
+    );
+    if (spacingConflict) {
+      this.pushAlert(
+        `Build location too close to ${spacingConflict.candidate.name}. Minimum spacing is ${BUILDING_MIN_SPACING_MULTIPLIER}x radius.`,
+        "warning",
+        5
+      );
+      return null;
     }
 
     if (this.state.runtimeSeconds < target.cooldownUntil) {
@@ -1934,7 +2204,18 @@ export class GameRuntime {
       return null;
     }
 
+    if (shouldInsertTarget) {
+      this.state.regions.push(target);
+      if (this.resourceZones.length) {
+        this.applyResourceCoverageToRegions();
+      }
+    }
+
     target.assets[this.buildAssetType] += 1;
+    if (this.buildAssetType === "storage") {
+      // New batteries always start empty; keep existing stored charge unchanged.
+      this.normalizeRegionStorageCharge(target);
+    }
     const assetBuildCosts = this.ensureRegionAssetBuildCosts(target);
     assetBuildCosts[this.buildAssetType].push(cost);
     if (this.buildAssetType === "plant") {
@@ -2038,6 +2319,37 @@ export class GameRuntime {
     );
   }
 
+  recomputeRegionDemolitionCooldown(regionId) {
+    const region = this.findRegion(regionId);
+    if (!region) return;
+    const pending = this.state.pendingDemolitions || [];
+    const nextCooldown = pending
+      .filter((item) => item.regionId === regionId)
+      .reduce((max, item) => Math.max(max, Number(item.completesAt || 0)), 0);
+    region.cooldownUntil = Math.max(this.state.runtimeSeconds, nextCooldown);
+  }
+
+  cancelPendingDemolition(regionId, assetType = null) {
+    const pending = this.state.pendingDemolitions || [];
+    const index = pending.findIndex(
+      (item) =>
+        item.regionId === regionId &&
+        (assetType == null || item.assetType === assetType)
+    );
+    if (index < 0) return false;
+
+    const [removed] = pending.splice(index, 1);
+    this.state.pendingDemolitions = pending;
+    this.recomputeRegionDemolitionCooldown(regionId);
+
+    const assetLabel = removed?.assetLabel || ASSET_RULES[removed?.assetType]?.label || "Asset";
+    const regionName =
+      removed?.regionName || this.findRegion(regionId)?.name || "selected location";
+    this.logTimeline(`Demolition canceled for ${assetLabel} in ${regionName}.`);
+    this.pushAlert(`${assetLabel} demolition canceled in ${regionName}.`, "advisory", 4);
+    return true;
+  }
+
   updatePendingDemolitions() {
     const pending = this.state.pendingDemolitions || [];
     if (!pending.length) return;
@@ -2083,47 +2395,117 @@ export class GameRuntime {
         if (totalRefund > 0) {
           this.state.budget += totalRefund;
         }
+        if (item.assetType === "storage") {
+          this.normalizeRegionStorageCharge(region);
+        }
         if (item.assetType === "plant" && region.assets.plant <= 0) {
           region.plantType = DEFAULT_PLANT_TYPE;
         }
+        const regionCleared =
+          !this.isTownEntity(region) && this.getRegionTotalAssets(region) <= 0
+            ? this.removeInfrastructureRegion(region.id)
+            : false;
         const refundSuffix = totalRefund > 0 ? ` (+${totalRefund} budget)` : "";
+        const clearedSuffix = regionCleared ? " Location cleared." : "";
         if (lineCount > 0) {
           this.logTimeline(
-            `Demolished ${item.assetLabel} in ${region.name}; decommissioned ${lineCount} connected line${lineCount === 1 ? "" : "s"}${refundSuffix}.`
+            `Demolished ${item.assetLabel} in ${region.name}; decommissioned ${lineCount} connected line${lineCount === 1 ? "" : "s"}${refundSuffix}.${clearedSuffix}`
           );
           this.pushAlert(
-            `${item.assetLabel} demolished in ${region.name}. ${lineCount} connected line${lineCount === 1 ? "" : "s"} removed${refundSuffix}.`,
+            `${item.assetLabel} demolished in ${region.name}. ${lineCount} connected line${lineCount === 1 ? "" : "s"} removed${refundSuffix}.${clearedSuffix}`,
             "warning",
             4
           );
         } else {
-          this.logTimeline(`Demolished ${item.assetLabel} in ${region.name}${refundSuffix}.`);
+          this.logTimeline(
+            `Demolished ${item.assetLabel} in ${region.name}${refundSuffix}.${clearedSuffix}`
+          );
           this.pushAlert(
-            `${item.assetLabel} demolished in ${region.name}${refundSuffix}.`,
+            `${item.assetLabel} demolished in ${region.name}${refundSuffix}.${clearedSuffix}`,
             "warning",
             4
           );
         }
       }
     }
-    this.state.pendingDemolitions = remaining;
+    this.state.pendingDemolitions = remaining.filter((item) => !!this.findRegion(item.regionId));
   }
 
-  handleReroute(region) {
-    const currentIndex = PRIORITY_ORDER.indexOf(region.priority);
-    region.priority = PRIORITY_ORDER[(currentIndex + 1) % PRIORITY_ORDER.length];
-    this.logTimeline(`${region.name} routing priority set to ${region.priority.toUpperCase()}.`);
-    this.pushAlert(`${region.name} rerouted to ${region.priority} priority.`, "advisory", 4);
-    this.recordTutorialAction("reroute", { isTown: this.isTownEntity(region) });
+  clearAllPriorityModifiers() {
+    let cleared = 0;
+    for (const region of this.state.regions) {
+      const previous = this.normalizePriority(region.priority);
+      if (previous !== PRIORITY_DEFAULT) {
+        cleared += 1;
+      }
+      region.priority = PRIORITY_DEFAULT;
+    }
+    if (cleared > 0) {
+      this.logTimeline(`Cleared elevated priority from ${cleared} location${cleared === 1 ? "" : "s"}.`);
+      this.pushAlert(`Priority reset: ${cleared} location${cleared === 1 ? "" : "s"} returned to nominal.`, "advisory", 4);
+    } else {
+      this.pushAlert("Priority reset: all locations already nominal.", "advisory", 3);
+    }
+    this.pushHudUpdate();
+  }
+
+  handleReroute(worldPoint, sourceRegion = null) {
+    if (!worldPoint && !sourceRegion) return;
+    const centerX = sourceRegion ? sourceRegion.x : worldPoint.x;
+    const centerY = sourceRegion ? sourceRegion.y : worldPoint.y;
+    const radiusWorld = this.getRerouteRadiusWorld();
+    const targets = this.getRerouteTargetsInRange(centerX, centerY, radiusWorld);
+    if (!targets.length) {
+      this.pushAlert("No cities or infrastructure in reroute radius.", "advisory", 4);
+      return;
+    }
+
+    let elevatedCount = 0;
+    let townCount = 0;
+    let infrastructureCount = 0;
+    for (const target of targets) {
+      if (this.isTownEntity(target)) {
+        townCount += 1;
+      } else {
+        infrastructureCount += 1;
+      }
+      const previous = this.normalizePriority(target.priority);
+      target.priority = PRIORITY_ELEVATED;
+      if (previous !== PRIORITY_ELEVATED) {
+        elevatedCount += 1;
+      }
+    }
+
+    const radiusText = Math.round(radiusWorld);
+    if (elevatedCount > 0) {
+      this.logTimeline(
+        `Reroute elevated priority for ${elevatedCount}/${targets.length} location${targets.length === 1 ? "" : "s"} (${townCount} city, ${infrastructureCount} infrastructure) within ${radiusText} radius.`
+      );
+      this.pushAlert(
+        `Priority elevated for ${elevatedCount}/${targets.length} location${targets.length === 1 ? "" : "s"} in reroute radius.`,
+        "advisory",
+        4
+      );
+    } else {
+      this.pushAlert(
+        `All ${targets.length} location${targets.length === 1 ? "" : "s"} in reroute radius are already elevated.`,
+        "advisory",
+        4
+      );
+    }
+    this.recordTutorialAction("reroute", { isTown: this.isTownEntity(sourceRegion) });
   }
 
   handlePrimaryClick() {
     this.callbacks.onDismissDemolishConfirm?.();
-    if (this.tool === TOOL_PAN) {
-      return;
-    }
     const worldPoint = this.screenToWorld(this.mouse.x, this.mouse.y);
     const region = this.findRegionAt(worldPoint.x, worldPoint.y);
+
+    if (this.tool === TOOL_PAN) {
+      this.selectedRegionId = region ? region.id : null;
+      this.pushHudUpdate();
+      return;
+    }
 
     if (this.tool === TOOL_BUILD) {
       const target = this.handleBuild(region, worldPoint);
@@ -2131,6 +2513,13 @@ export class GameRuntime {
       if (target) {
         this.tool = TOOL_PAN;
       }
+      this.pushHudUpdate();
+      return;
+    }
+
+    if (this.tool === TOOL_REROUTE) {
+      this.selectedRegionId = region ? region.id : null;
+      this.handleReroute(worldPoint, region);
       this.pushHudUpdate();
       return;
     }
@@ -2144,8 +2533,6 @@ export class GameRuntime {
     this.selectedRegionId = region.id;
     if (this.tool === TOOL_DEMOLISH) {
       this.handleDemolish(region);
-    } else if (this.tool === TOOL_REROUTE) {
-      this.handleReroute(region);
     } else if (this.tool === TOOL_LINE) {
       this.handleLineTool(region);
     }
@@ -2162,15 +2549,23 @@ export class GameRuntime {
       return;
     }
 
-    const demolishCandidate = this.getDemolishCandidate(region, this.buildAssetType);
-    if (!demolishCandidate) {
-      this.pushAlert(`No removable assets available at ${region.name}.`, "advisory", 4);
-      this.selectedRegionId = region.id;
+    this.selectedRegionId = region.id;
+    const pendingForPreferredAsset =
+      ASSET_RULES[this.buildAssetType] ? this.findPendingDemolition(region.id, this.buildAssetType) : null;
+    const pendingDemolition = pendingForPreferredAsset || this.findPendingDemolition(region.id);
+    if (pendingDemolition) {
+      this.cancelPendingDemolition(region.id, pendingDemolition.assetType);
       this.pushHudUpdate();
       return;
     }
 
-    this.selectedRegionId = region.id;
+    const demolishCandidate = this.getDemolishCandidate(region, this.buildAssetType);
+    if (!demolishCandidate) {
+      this.pushAlert(`No removable assets available at ${region.name}.`, "advisory", 4);
+      this.pushHudUpdate();
+      return;
+    }
+
     this.callbacks.onRequestDemolishConfirm?.({
       regionId: region.id,
       regionName: region.name,
@@ -2231,7 +2626,7 @@ export class GameRuntime {
     this.spawnEventsIfNeeded();
     this.updateDemand(dt);
     this.updateTownCoverage();
-    this.resolveGrid();
+    this.resolveGrid(dt);
     this.evaluateTutorialPassiveProgress();
     this.updateTownServiceStability(dt);
     this.updateTownEmergence();
@@ -2433,19 +2828,13 @@ export class GameRuntime {
       1,
       1.5
     );
-    const storageBoostMultiplier = clamp(1 + resource.wind * 0.05 + resource.sun * 0.08, 1, 1.2);
-    return (
-      entity.assets.plant * ASSET_RULES.plant.generation * plantBoostMultiplier +
-      entity.assets.storage * ASSET_RULES.storage.generation * storageBoostMultiplier
-    );
+    return entity.assets.plant * ASSET_RULES.plant.generation * plantBoostMultiplier;
   }
 
   calculateStoredPowerMWh() {
-    const storageReservePerUnitMWh = Math.max(0, Number(ASSET_RULES.storage?.generation || 0));
-    if (storageReservePerUnitMWh <= 0) return 0;
     return this.state.regions.reduce((total, region) => {
-      const storageUnits = Math.max(0, Number(region?.assets?.storage || 0));
-      return total + storageUnits * storageReservePerUnitMWh;
+      const charge = this.normalizeRegionStorageCharge(region);
+      return total + charge;
     }, 0);
   }
 
@@ -2777,7 +3166,7 @@ export class GameRuntime {
       id: resolvedId,
       name: resolvedName,
       radius: Number(anchor.radius || randomRange(54, 66)),
-      priority: "normal",
+      priority: PRIORITY_DEFAULT,
       townCount: 1,
       townCap: 1,
       nominalBaseDemand: Number(anchor.baseDemand || initialDemand),
@@ -2789,6 +3178,8 @@ export class GameRuntime {
       coverageSourceId: null,
       coverageDistance: 0,
       assets: { plant: 0, substation: 0, storage: 0 },
+      storageChargeMWh: 0,
+      storageChargingMw: 0,
       assetBuildCosts: this.createEmptyAssetBuildCosts(),
       plantType: DEFAULT_PLANT_TYPE,
       resourceProfile: this.createEmptyResourceProfile(),
@@ -2816,8 +3207,14 @@ export class GameRuntime {
     if (this.state.reliability < profile.reliabilityFloor) return;
     const poweredSubstations = this.getPoweredSubstationIds();
     if (!poweredSubstations.size) return;
-    const totalDemand = Math.max(0, Number(this.state.totalDemand || 0));
-    const totalServed = Math.max(0, Number(this.state.totalServed || 0));
+    const totalDemand = this.state.regions.reduce(
+      (sum, region) => sum + (this.isTownEntity(region) ? Math.max(0, Number(region.demand || 0)) : 0),
+      0
+    );
+    const totalServed = this.state.regions.reduce(
+      (sum, region) => sum + (this.isTownEntity(region) ? Math.max(0, Number(region.served || 0)) : 0),
+      0
+    );
     const demandMetRatio = totalDemand <= 0.01 ? 1 : totalServed / totalDemand;
     if (demandMetRatio < Number(profile.minDemandMetRatio || 0)) return;
 
@@ -2890,7 +3287,7 @@ export class GameRuntime {
     this.pushAlert(`New town emerged: ${town.name}. Demand baseline increased.`, "warning", 6);
   }
 
-  resolveGrid() {
+  resolveGrid(dt = TICK_SECONDS) {
     for (const link of this.state.links) {
       link.used = 0;
       link.stress = 0;
@@ -2913,6 +3310,7 @@ export class GameRuntime {
     const componentByTown = this.buildTownComponents();
     const generationByComponent = new Map();
     const coveredByComponent = new Map();
+    const storageByComponent = new Map();
 
     for (const town of towns) {
       const componentId = componentByTown.get(town.id) || town.id;
@@ -2920,6 +3318,18 @@ export class GameRuntime {
       generationByComponent.set(componentId, (generationByComponent.get(componentId) || 0) + generation);
       town.served = 0;
       town.unmet = town.demand;
+      town.storageChargingMw = 0;
+
+      const storageUnits = this.getStorageUnitCount(town);
+      if (storageUnits > 0) {
+        this.normalizeRegionStorageCharge(town);
+        if (!storageByComponent.has(componentId)) {
+          storageByComponent.set(componentId, []);
+        }
+        storageByComponent.get(componentId).push(town);
+      } else if (Number(town.storageChargeMWh || 0) !== 0) {
+        town.storageChargeMWh = 0;
+      }
 
       if (town.coveredBySubstation && town.coverageSourceId) {
         const sourceComponent = componentByTown.get(town.coverageSourceId) || town.coverageSourceId;
@@ -2930,24 +3340,65 @@ export class GameRuntime {
       }
     }
 
-    const prioritySort = { high: 0, normal: 1, low: 2 };
+    const prioritySort = { elevated: 0, nominal: 1 };
+    const remainingGenerationByComponent = new Map();
     for (const [componentId, coveredTowns] of coveredByComponent.entries()) {
       let pool = generationByComponent.get(componentId) || 0;
-      if (pool <= 0.0001) continue;
+      if (pool > 0.0001) {
+        coveredTowns.sort((a, b) => {
+          const p =
+            prioritySort[this.normalizePriority(a.priority)] -
+            prioritySort[this.normalizePriority(b.priority)];
+          if (p !== 0) return p;
+          return b.demand - a.demand;
+        });
 
-      coveredTowns.sort((a, b) => {
-        const p = prioritySort[a.priority] - prioritySort[b.priority];
+        for (const town of coveredTowns) {
+          if (pool <= 0.0001) break;
+          const moved = Math.min(town.unmet, pool);
+          town.served += moved;
+          town.unmet -= moved;
+          pool -= moved;
+        }
+      }
+      remainingGenerationByComponent.set(componentId, pool);
+    }
+
+    for (const [componentId, generation] of generationByComponent.entries()) {
+      if (!remainingGenerationByComponent.has(componentId)) {
+        remainingGenerationByComponent.set(componentId, generation);
+      }
+    }
+
+    let totalStorageChargingMw = 0;
+    const storageDrawByComponent = new Map();
+    for (const [componentId, storageRegions] of storageByComponent.entries()) {
+      let pool = remainingGenerationByComponent.get(componentId) || 0;
+      if (pool <= 0.0001) continue;
+      storageRegions.sort((a, b) => {
+        const p =
+          prioritySort[this.normalizePriority(a.priority)] -
+          prioritySort[this.normalizePriority(b.priority)];
         if (p !== 0) return p;
-        return b.demand - a.demand;
+        return a.id.localeCompare(b.id);
       });
 
-      for (const town of coveredTowns) {
+      for (const storageRegion of storageRegions) {
         if (pool <= 0.0001) break;
-        const moved = Math.min(town.unmet, pool);
-        town.served += moved;
-        town.unmet -= moved;
-        pool -= moved;
+        const requestedMw = this.getStorageChargeDemandMW(storageRegion, dt);
+        if (requestedMw <= 0) continue;
+        const drawMw = Math.min(requestedMw, pool);
+        if (drawMw <= 0) continue;
+        this.addStorageChargeFromGrid(storageRegion, drawMw, dt);
+        storageRegion.storageChargingMw = (storageRegion.storageChargingMw || 0) + drawMw;
+        totalStorageChargingMw += drawMw;
+        storageDrawByComponent.set(
+          componentId,
+          (storageDrawByComponent.get(componentId) || 0) + drawMw
+        );
+        pool -= drawMw;
       }
+      remainingGenerationByComponent.set(componentId, pool);
     }
 
     const componentServed = new Map();
@@ -2956,6 +3407,9 @@ export class GameRuntime {
       if (!town.coveredBySubstation || !town.coverageSourceId) continue;
       const componentId = componentByTown.get(town.coverageSourceId) || town.coverageSourceId;
       componentServed.set(componentId, (componentServed.get(componentId) || 0) + town.served);
+    }
+    for (const [componentId, storageDraw] of storageDrawByComponent.entries()) {
+      componentServed.set(componentId, (componentServed.get(componentId) || 0) + storageDraw);
     }
 
     for (const link of this.state.links) {
@@ -2979,13 +3433,27 @@ export class GameRuntime {
       town.utilization = town.demand > 0 ? town.served / town.demand : 1;
     }
 
-    this.state.totalDemand = towns.reduce((acc, town) => acc + town.demand, 0);
-    this.state.totalServed = towns.reduce((acc, town) => acc + town.served, 0);
-    this.state.totalUnmet = towns.reduce((acc, town) => acc + town.unmet, 0);
+    const townDemandTotal = towns.reduce(
+      (acc, town) => acc + (this.isTownEntity(town) ? town.demand : 0),
+      0
+    );
+    const townServedTotal = towns.reduce(
+      (acc, town) => acc + (this.isTownEntity(town) ? town.served : 0),
+      0
+    );
+    const townUnmetTotal = towns.reduce(
+      (acc, town) => acc + (this.isTownEntity(town) ? town.unmet : 0),
+      0
+    );
+
+    this.state.totalDemand = townDemandTotal + totalStorageChargingMw;
+    this.state.totalServed = townServedTotal + totalStorageChargingMw;
+    this.state.totalUnmet = townUnmetTotal;
     this.state.totalGeneration = Array.from(generationByComponent.values()).reduce(
       (acc, value) => acc + value,
       0
     );
+    this.state.storageChargingMw = totalStorageChargingMw;
   }
 
   findPath(startId, endId) {
@@ -3055,8 +3523,16 @@ export class GameRuntime {
     this.state.budget +=
       (revenue - operatingCost - lineMaintenanceCost - unmetPenalty - overloadPenalty - lawsuitPenalty) * dt;
 
+    const townDemandForReliability = regions.reduce(
+      (total, region) => total + (this.isTownEntity(region) ? Math.max(0, Number(region.demand || 0)) : 0),
+      0
+    );
+    const townUnmetForReliability = regions.reduce(
+      (total, region) => total + (this.isTownEntity(region) ? Math.max(0, Number(region.unmet || 0)) : 0),
+      0
+    );
     const unmetRatio =
-      this.state.totalDemand > 0 ? this.state.totalUnmet / this.state.totalDemand : 0;
+      townDemandForReliability > 0 ? townUnmetForReliability / townDemandForReliability : 0;
     const overloadRatio =
       this.state.links.length > 0
         ? this.state.links.filter((link) => link.overload).length / this.state.links.length
@@ -3374,6 +3850,69 @@ export class GameRuntime {
     return this.findRegion(this.selectedRegionId);
   }
 
+  getRegionLineFlowTotals(regionId) {
+    let incomingMw = 0;
+    let outgoingMw = 0;
+    for (const link of this.state.links) {
+      if (!link.built) continue;
+      const usedMw = Math.max(0, Number(link.used || 0));
+      if (usedMw <= 0.0001) continue;
+
+      const hasFlowEndpoints =
+        this.findRegion(link.flowFrom) && this.findRegion(link.flowTo);
+      const flowFrom = hasFlowEndpoints ? link.flowFrom : link.a;
+      const flowTo = hasFlowEndpoints ? link.flowTo : link.b;
+
+      if (flowFrom === regionId) {
+        outgoingMw += usedMw;
+      }
+      if (flowTo === regionId) {
+        incomingMw += usedMw;
+      }
+    }
+    return { incomingMw, outgoingMw };
+  }
+
+  buildSelectedRegionPopup(region) {
+    if (!region) return null;
+    const anchor = this.worldToScreen(region.x, region.y);
+    const localTownDemandMw = this.isTownEntity(region) ? Math.max(0, Number(region.demand || 0)) : 0;
+    const storageDemandMw = Math.max(0, this.getStorageChargeDemandMW(region, TICK_SECONDS));
+    const totalDemandMw = localTownDemandMw + storageDemandMw;
+    const localTownServedMw = this.isTownEntity(region) ? Math.max(0, Number(region.served || 0)) : 0;
+    const localStorageInMw = Math.max(0, Number(region.storageChargingMw || 0));
+    const localDemandServedMw = localTownServedMw + localStorageInMw;
+    const totalSupplyMw = Math.max(0, Number(this.computeGenerationForEntity(region) || 0));
+    const lineFlow = this.getRegionLineFlowTotals(region.id);
+    const powerInMw = lineFlow.incomingMw + totalSupplyMw;
+    const powerOutMw = lineFlow.outgoingMw + localDemandServedMw;
+    const powerStoredMWh = Math.max(0, Number(this.normalizeRegionStorageCharge(region)));
+    const storedCapacityMWh = Math.max(0, Number(this.getRegionStorageCapacityMWh(region)));
+    const showDemand = totalDemandMw > 0.05 || powerInMw > 0.05;
+    const showSupply = totalSupplyMw > 0.05 || powerOutMw > 0.05;
+    const showStored = storedCapacityMWh > 0;
+    const kindLabel = this.isTownEntity(region) ? "City" : "Structure";
+
+    return {
+      id: region.id,
+      name: region.name,
+      kindLabel,
+      anchorX: Number(anchor.x.toFixed(1)),
+      anchorY: Number(anchor.y.toFixed(1)),
+      totalDemandMw: Number(totalDemandMw.toFixed(2)),
+      powerInMw: Number(powerInMw.toFixed(2)),
+      powerInDiffMw: Number((powerInMw - totalDemandMw).toFixed(2)),
+      totalSupplyMw: Number(totalSupplyMw.toFixed(2)),
+      powerOutMw: Number(powerOutMw.toFixed(2)),
+      powerOutDiffMw: Number((powerOutMw - totalSupplyMw).toFixed(2)),
+      powerStoredMWh: Number(powerStoredMWh.toFixed(2)),
+      storedCapacityMWh: Number(storedCapacityMWh.toFixed(2)),
+      showDemand,
+      showSupply,
+      showStored,
+    };
+  }
+
   render() {
     const ctx = this.ctx;
     const width = this.canvas.clientWidth;
@@ -3466,11 +4005,6 @@ export class GameRuntime {
       ctx.textBaseline = "alphabetic";
     }
 
-    const vignette = ctx.createLinearGradient(0, 0, width, height);
-    vignette.addColorStop(0, "rgba(4, 15, 24, 0.16)");
-    vignette.addColorStop(1, "rgba(4, 15, 24, 0.3)");
-    ctx.fillStyle = vignette;
-    ctx.fillRect(0, 0, width, height);
   }
 
   drawLinks(ctx) {
@@ -3491,9 +4025,16 @@ export class GameRuntime {
 
       this.drawLongDistancePowerline(ctx, sa, sb, zoom, color);
 
+      const flowStartRegion = this.findRegion(link.flowFrom);
+      const flowEndRegion = this.findRegion(link.flowTo);
+      const pulseStart = flowStartRegion && flowEndRegion ? flowStartRegion : a;
+      const pulseEnd = flowStartRegion && flowEndRegion ? flowEndRegion : b;
+      const flowFrom = this.worldToScreen(pulseStart.x, pulseStart.y);
+      const flowTo = this.worldToScreen(pulseEnd.x, pulseEnd.y);
+
       const t = (this.renderPulse * 0.5) % 1;
-      const pulseX = lerp(sa.x, sb.x, t);
-      const pulseY = lerp(sa.y, sb.y, t);
+      const pulseX = lerp(flowFrom.x, flowTo.x, t);
+      const pulseY = lerp(flowFrom.y, flowTo.y, t);
       ctx.fillStyle = stress > 1 ? "#ff8b8b" : "#e6fff2";
       ctx.beginPath();
       ctx.arc(pulseX, pulseY, 2.5 + Math.min(4, stress * 3), 0, Math.PI * 2);
@@ -3522,7 +4063,7 @@ export class GameRuntime {
       towerMainStroke: clamp(0.75 + zoom * 0.24, 0.86, 2.05),
       towerDetailStroke: clamp(0.44 + zoom * 0.11, 0.58, 1.2),
       insulatorRadius: clamp(0.65 + zoom * 0.18, 0.8, 2.2),
-      towerSpacing: clamp(128 * tileScale, 22, 64),
+      towerSpacing: clamp(128 * tileScale, 22, 64) / Math.max(0.01, LONG_RANGE_TOWER_COUNT_RATIO),
     };
   }
 
@@ -4301,21 +4842,56 @@ export class GameRuntime {
     this.drawPlantBuildCostPreview(ctx, previewCost, iconSize);
   }
 
+  drawRerouteRadiusPreview(ctx) {
+    if (this.tool !== TOOL_REROUTE) return;
+    if (!this.mouse.inside) return;
+    if (this.camera.dragActive || this.pointerDown.dragging) return;
+
+    const zoom = this.getCameraZoom();
+    const world = this.screenToWorld(this.mouse.x, this.mouse.y);
+    const hoveredRegion = this.findRegionAt(world.x, world.y);
+    const centerWorldX = hoveredRegion ? hoveredRegion.x : world.x;
+    const centerWorldY = hoveredRegion ? hoveredRegion.y : world.y;
+    const center = hoveredRegion
+      ? this.worldToScreen(centerWorldX, centerWorldY)
+      : { x: this.mouse.x, y: this.mouse.y };
+    const radiusWorld = this.getRerouteRadiusWorld();
+
+    ctx.save();
+    ctx.fillStyle = "rgba(118, 205, 255, 0.14)";
+    ctx.strokeStyle = "rgba(118, 205, 255, 0.78)";
+    ctx.lineWidth = 1.6;
+    ctx.setLineDash([5, 7]);
+    ctx.beginPath();
+    ctx.arc(center.x, center.y, radiusWorld * zoom, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.restore();
+  }
+
   drawOverlay(ctx, width, height) {
     this.drawLineToolPreview(ctx);
     this.drawBuildCursorPreview(ctx);
+    this.drawRerouteRadiusPreview(ctx);
 
     if (this.paused) {
+      const pauseBoxWidth = 256;
+      const pauseBoxHeight = 56;
+      const pauseBoxX = (width - pauseBoxWidth) / 2;
+      const pauseBoxY = (height - pauseBoxHeight) / 2;
       ctx.fillStyle = "rgba(8, 18, 26, 0.74)";
-      ctx.fillRect(width / 2 - 128, 66, 256, 56);
+      ctx.fillRect(pauseBoxX, pauseBoxY, pauseBoxWidth, pauseBoxHeight);
       ctx.strokeStyle = "rgba(242, 246, 214, 0.42)";
       ctx.lineWidth = 1.3;
-      ctx.strokeRect(width / 2 - 128, 66, 256, 56);
+      ctx.strokeRect(pauseBoxX, pauseBoxY, pauseBoxWidth, pauseBoxHeight);
       ctx.fillStyle = "#f4f7d8";
       ctx.font = '600 22px "Rajdhani", sans-serif';
       ctx.textAlign = "center";
-      ctx.fillText("Simulation Paused", width / 2, 101);
+      ctx.textBaseline = "middle";
+      ctx.fillText("Simulation Paused", width / 2, pauseBoxY + pauseBoxHeight / 2);
       ctx.textAlign = "left";
+      ctx.textBaseline = "alphabetic";
     }
   }
 
@@ -4356,6 +4932,7 @@ export class GameRuntime {
       objective,
       alerts: this.state.alerts,
       incidents: this.state.incidents,
+      selectedEntityPopup: this.buildSelectedRegionPopup(selected),
       selectedTown: selected && this.isTownEntity(selected) ? selected : null,
       selectedRegion: selected,
       selectedEntity: selected,
@@ -4445,6 +5022,8 @@ export class GameRuntime {
     this.config = deepClone(snapshotPayload.runConfig || this.config);
     this.applyRunConfigDefaults();
     this.state = this.rehydrateSnapshot(snapshotPayload.gameState || this.state);
+    this.enforceInfrastructureOccupancyRules();
+    this.pruneEmptyInfrastructureNodes();
     this.ensureRegionResourceProfiles();
     if (this.resourceZones.length) {
       this.applyResourceCoverageToRegions();
@@ -4489,6 +5068,12 @@ export class GameRuntime {
     this.selectedRegionId = snapshotPayload.selectedRegionId || null;
     this.lineBuildStartRegionId = snapshotPayload.lineBuildStartRegionId || null;
     this.lineCostPreview = snapshotPayload.lineCostPreview || null;
+    if (this.selectedRegionId && !this.findRegion(this.selectedRegionId)) {
+      this.selectedRegionId = null;
+    }
+    if (this.lineBuildStartRegionId && !this.findRegion(this.lineBuildStartRegionId)) {
+      this.clearLineSelection();
+    }
     this.paused = !!snapshotPayload.paused;
     this.resourceRevealHeld = false;
     this.applyDevModeState();
@@ -4503,7 +5088,7 @@ export class GameRuntime {
       name: town.name,
       x: Number(town.x.toFixed(1)),
       y: Number(town.y.toFixed(1)),
-      priority: town.priority,
+      priority: this.normalizePriority(town.priority),
       climate: town.climate,
       terrain: town.terrain,
       population: Number(town.population.toFixed(2)),
@@ -4524,6 +5109,9 @@ export class GameRuntime {
         naturalGas: Number((town.resourceProfile?.natural_gas || 0).toFixed(3)),
       },
       assets: { ...town.assets },
+      storageChargeMWh: Number(this.normalizeRegionStorageCharge(town).toFixed(2)),
+      storageCapacityMWh: Number(this.getRegionStorageCapacityMWh(town).toFixed(2)),
+      storageChargingMw: Number((town.storageChargingMw || 0).toFixed(2)),
       plantType: town.plantType || DEFAULT_PLANT_TYPE,
       }));
 
@@ -4534,9 +5122,13 @@ export class GameRuntime {
         name: node.name,
         x: Number(node.x.toFixed(1)),
         y: Number(node.y.toFixed(1)),
+        priority: this.normalizePriority(node.priority),
         terrain: node.terrain,
         climate: node.climate,
         assets: { ...node.assets },
+        storageChargeMWh: Number(this.normalizeRegionStorageCharge(node).toFixed(2)),
+        storageCapacityMWh: Number(this.getRegionStorageCapacityMWh(node).toFixed(2)),
+        storageChargingMw: Number((node.storageChargingMw || 0).toFixed(2)),
         plantType: node.plantType || DEFAULT_PLANT_TYPE,
       }));
 
@@ -4565,6 +5157,7 @@ export class GameRuntime {
       totalServed: Number(this.state.totalServed.toFixed(2)),
       totalUnmet: Number(this.state.totalUnmet.toFixed(2)),
       storedPowerMWh: Number(this.calculateStoredPowerMWh().toFixed(2)),
+      storageChargingMw: Number((this.state.storageChargingMw || 0).toFixed(2)),
       selectedTool: this.tool,
       selectedBuildAsset: this.buildAssetType,
       selectedBuildPlantType: this.buildPlantType,
@@ -4666,6 +5259,8 @@ export class GameRuntime {
           id: link.id,
           a: link.a,
           b: link.b,
+          flowFrom: link.flowFrom || link.a,
+          flowTo: link.flowTo || link.b,
           used: Number(link.used.toFixed(2)),
           safeCapacity: Number(link.safeCapacity.toFixed(2)),
           stress: Number(link.stress.toFixed(3)),
