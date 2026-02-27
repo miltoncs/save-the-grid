@@ -1303,3 +1303,21 @@ Validation:
   - Right-clicked the line segment.
   - Confirm popover text included `Demolish Line ...`.
   - Accepting confirm produced alert: `Line removed between ...`.
+
+### Powerplant popup: removed demand metric row
+
+- Updated selected-entity popup rendering so powerplant panels no longer include the demand metric row.
+- Runtime now emits `isPowerplant` in `selectedEntityPopup` payloads when the selected structure has at least one plant asset.
+- Popup renderer (`src/game/app.js`) now conditionally omits the `Total Demand` row when `popup.isPowerplant` is true, while keeping relevant flow/supply rows.
+
+Validation:
+
+- JS syntax checks:
+  - `node --check src/game/runtime.js`
+  - `node --check src/game/app.js`
+- develop-web-game smoke:
+  - `node /Users/mstafford/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js --url http://127.0.0.1:4173 --actions-file /Users/mstafford/.codex/skills/develop-web-game/references/action_payloads.json --click-selector "#start-btn" --iterations 1 --pause-ms 220 --screenshot-dir /Users/mstafford/.codex/worktrees/ce01/save-the-grid/output/web-game-powerplant-popup-smoke`
+- Targeted popup validation (Playwright):
+  - built/selected `node-1` powerplant and asserted popup text excludes demand label.
+  - assertion artifact: `/Users/mstafford/.codex/worktrees/ce01/save-the-grid/output/powerplant-popup-validation/assertion.json`
+  - screenshot: `/Users/mstafford/.codex/worktrees/ce01/save-the-grid/output/powerplant-popup-validation/powerplant-popup.png`

@@ -3996,6 +3996,7 @@ export class GameRuntime {
   buildSelectedRegionPopup(region) {
     if (!region) return null;
     const anchor = this.worldToScreen(region.x, region.y);
+    const isPowerplant = !this.isTownEntity(region) && Math.max(0, Number(region?.assets?.plant || 0)) > 0;
     const localTownDemandMw = this.isTownEntity(region) ? Math.max(0, Number(region.demand || 0)) : 0;
     const storageDemandMw = Math.max(0, this.getStorageChargeDemandMW(region, TICK_SECONDS));
     const totalDemandMw = localTownDemandMw + storageDemandMw;
@@ -4017,6 +4018,7 @@ export class GameRuntime {
       id: region.id,
       name: region.name,
       kindLabel,
+      isPowerplant,
       anchorX: Number(anchor.x.toFixed(1)),
       anchorY: Number(anchor.y.toFixed(1)),
       totalDemandMw: Number(totalDemandMw.toFixed(2)),
