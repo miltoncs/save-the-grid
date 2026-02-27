@@ -543,15 +543,6 @@ export const ALERT_LEVELS = {
   critical: { label: "Critical", color: "#ff6262", icon: "!!" },
 };
 
-export const NEWS_BLURBS = [
-  "Cabinet brief: maintenance backlog is under review.",
-  "National bulletin: urban demand remains elevated.",
-  "Policy desk: lawmakers request outage risk reduction.",
-  "Regional dispatch: transmission utilization spikes in the north.",
-  "Treasury signal: capital discipline remains a top priority.",
-  "Public sentiment: stable service improves confidence.",
-];
-
 export const STORAGE_KEYS = {
   records: "stg_records_v1",
   settings: "stg_settings_v1",
