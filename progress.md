@@ -1303,3 +1303,26 @@ Validation:
   - Right-clicked the line segment.
   - Confirm popover text included `Demolish Line ...`.
   - Accepting confirm produced alert: `Line removed between ...`.
+
+### Powerplant names now use type labels (not Grid Point)
+
+- Updated `src/game/runtime.js` naming flow so infrastructure nodes with a built plant display by plant type:
+  - Added `getPlantDisplayName(region)` and `getRegionDisplayName(region, fallback)`.
+  - Plant-backed nodes now resolve to `Wind Powerplant`, `Solar Powerplant`, or `Gas Powerplant`.
+- Replaced user-facing `region.name` usages with `getRegionDisplayName(...)` in plant-relevant runtime surfaces:
+  - build/demolish alerts + timeline messages,
+  - line labels and line commission/removal alerts,
+  - demolish confirm payload `regionName`,
+  - selected popup title payload,
+  - `render_game_to_text` infrastructure node names.
+- Updated plant label constant for gas from `Natural Gas Powerplant` to `Gas Powerplant`.
+
+Validation:
+
+- `node --check src/game/runtime.js`
+- develop-web-game smoke run:
+  - `node /Users/mstafford/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js --url http://127.0.0.1:5173 --actions-file /Users/mstafford/.codex/skills/develop-web-game/references/action_payloads.json --click-selector "#start-btn" --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-powerplant-naming`
+- Targeted Playwright placement check (wind + solar + gas) confirmed text-state names:
+  - `Wind Powerplant`
+  - `Solar Powerplant`
+  - `Gas Powerplant`

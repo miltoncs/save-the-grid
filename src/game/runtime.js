@@ -89,7 +89,7 @@ const DEFAULT_PLANT_TYPE = "wind";
 const PLANT_TYPE_DEMOLISH_LABELS = {
   wind: "Wind Powerplant",
   sun: "Solar Powerplant",
-  natural_gas: "Natural Gas Powerplant",
+  natural_gas: "Gas Powerplant",
 };
 const DEMOLISH_ASSET_LABELS = {
   substation: "Substation",
@@ -334,6 +334,22 @@ export class GameRuntime {
       return PLANT_TYPE_DEMOLISH_LABELS[plantType] || "Powerplant";
     }
     return DEMOLISH_ASSET_LABELS[assetType] || (ASSET_RULES[assetType]?.label ?? "Asset");
+  }
+
+  getPlantDisplayName(region) {
+    const plantType = this.normalizePlantType(region?.plantType);
+    return PLANT_TYPE_DEMOLISH_LABELS[plantType] || "Powerplant";
+  }
+
+  getRegionDisplayName(region, fallback = "selected location") {
+    if (!region) return fallback;
+    if (this.isTownEntity(region)) {
+      return String(region.name || fallback);
+    }
+    if (Number(region.assets?.plant || 0) > 0) {
+      return this.getPlantDisplayName(region);
+    }
+    return String(region.name || fallback);
   }
 
   createEmptyAssetBuildCosts() {
@@ -1801,7 +1817,7 @@ export class GameRuntime {
     const a = this.findRegion(line?.a);
     const b = this.findRegion(line?.b);
     if (!a || !b) return "Long-Range Powerline";
-    return `Line ${a.name} -> ${b.name}`;
+    return `Line ${this.getRegionDisplayName(a, "Point A")} -> ${this.getRegionDisplayName(b, "Point B")}`;
   }
 
   estimateLineDemolishRefund(line) {
@@ -1813,8 +1829,8 @@ export class GameRuntime {
     if (!line || !line.built) return false;
     const startRegion = this.findRegion(line.a);
     const endRegion = this.findRegion(line.b);
-    const startName = startRegion?.name || "Point A";
-    const endName = endRegion?.name || "Point B";
+    const startName = this.getRegionDisplayName(startRegion, "Point A");
+    const endName = this.getRegionDisplayName(endRegion, "Point B");
     const refund = this.estimateLineDemolishRefund(line);
     if (refund > 0) {
       this.state.budget += refund;
@@ -2101,7 +2117,8 @@ export class GameRuntime {
       }
       this.lineBuildStartRegionId = region.id;
       this.lineCostPreview = null;
-      this.pushAlert(`Line start selected: ${region.name}. Choose endpoint point.`, "advisory", 5);
+      const regionName = this.getRegionDisplayName(region);
+      this.pushAlert(`Line start selected: ${regionName}. Choose endpoint point.`, "advisory", 5);
       return;
     }
 
@@ -2142,9 +2159,11 @@ export class GameRuntime {
       const refund = Math.max(12, Math.floor((existing.lineBuildCost || buildCost) * 0.42));
       this.state.budget += refund;
       this.state.score += 4;
-      this.logTimeline(`Removed Line ${startRegion.name} -> ${region.name} (+${refund} budget).`);
+      const startRegionName = this.getRegionDisplayName(startRegion);
+      const endRegionName = this.getRegionDisplayName(region);
+      this.logTimeline(`Removed Line ${startRegionName} -> ${endRegionName} (+${refund} budget).`);
       this.pushAlert(
-        `Line removed between ${startRegion.name} and ${region.name}.`,
+        `Line removed between ${startRegionName} and ${endRegionName}.`,
         "warning",
         4
       );
@@ -2204,10 +2223,12 @@ export class GameRuntime {
       this.state.budget -= buildCost;
     }
     this.state.score += 10;
+    const startRegionName = this.getRegionDisplayName(startRegion);
+    const endRegionName = this.getRegionDisplayName(region);
     this.logTimeline(
-      `Built Line ${startRegion.name} -> ${region.name} (${buildCost} budget, cap ${line.baseCapacity}).`
+      `Built Line ${startRegionName} -> ${endRegionName} (${buildCost} budget, cap ${line.baseCapacity}).`
     );
-    this.pushAlert(`Line commissioned: ${startRegion.name} to ${region.name}.`, "advisory", 5);
+    this.pushAlert(`Line commissioned: ${startRegionName} to ${endRegionName}.`, "advisory", 5);
     this.recordTutorialAction("line_built");
     this.clearLineSelection();
   }
@@ -2252,8 +2273,9 @@ export class GameRuntime {
     }
 
     if (this.getRegionTotalAssets(target) > 0) {
+      const targetName = this.getRegionDisplayName(target);
       this.pushAlert(
-        `${target.name} already hosts infrastructure. Buildings must be placed on separate points.`,
+        `${targetName} already hosts infrastructure. Buildings must be placed on separate points.`,
         "warning",
         5
       );
@@ -2266,8 +2288,9 @@ export class GameRuntime {
       target.id
     );
     if (spacingConflict) {
+      const conflictName = this.getRegionDisplayName(spacingConflict.candidate);
       this.pushAlert(
-        `Build location too close to ${spacingConflict.candidate.name}. Minimum spacing is ${BUILDING_MIN_SPACING_MULTIPLIER}x radius.`,
+        `Build location too close to ${conflictName}. Minimum spacing is ${BUILDING_MIN_SPACING_MULTIPLIER}x radius.`,
         "warning",
         5
       );
@@ -2275,8 +2298,9 @@ export class GameRuntime {
     }
 
     if (this.state.runtimeSeconds < target.cooldownUntil) {
+      const targetName = this.getRegionDisplayName(target);
       this.pushAlert(
-        `${target.name} location cooling down after demolition.`,
+        `${targetName} location cooling down after demolition.`,
         "advisory",
         4
       );
@@ -2314,8 +2338,9 @@ export class GameRuntime {
       this.state.budget -= cost;
     }
     this.state.score += 5;
-    this.logTimeline(`Built ${rule.label} at ${target.name} (${cost} budget).`);
-    this.pushAlert(`${rule.label} commissioned at ${target.name}.`, "advisory", 4);
+    const targetName = this.getRegionDisplayName(target);
+    this.logTimeline(`Built ${rule.label} at ${targetName} (${cost} budget).`);
+    this.pushAlert(`${rule.label} commissioned at ${targetName}.`, "advisory", 4);
     this.recordTutorialAction("build", {
       assetType: this.buildAssetType,
       onOpenPoint: clickedOpenPoint,
@@ -2325,8 +2350,9 @@ export class GameRuntime {
 
   handleDemolish(region, preferredAssetType = this.buildAssetType) {
     const candidate = this.getDemolishCandidate(region, preferredAssetType);
+    const regionName = this.getRegionDisplayName(region);
     if (!candidate) {
-      this.pushAlert(`No removable assets available at ${region.name}.`, "advisory", 4);
+      this.pushAlert(`No removable assets available at ${regionName}.`, "advisory", 4);
       return false;
     }
 
@@ -2335,7 +2361,7 @@ export class GameRuntime {
     const existingPending = this.findPendingDemolition(region.id, assetType);
     if (existingPending) {
       this.pushAlert(
-        `${assetLabel} demolition already in progress at ${region.name}.`,
+        `${assetLabel} demolition already in progress at ${regionName}.`,
         "advisory",
         4
       );
@@ -2346,7 +2372,7 @@ export class GameRuntime {
     this.state.pendingDemolitions.push({
       id: `pending-demo-${Math.round(performance.now() * Math.random())}`,
       regionId: region.id,
-      regionName: region.name,
+      regionName,
       assetType,
       assetLabel,
       refund: candidate.refund,
@@ -2356,10 +2382,10 @@ export class GameRuntime {
     });
     region.cooldownUntil = Math.max(Number(region.cooldownUntil || 0), completesAt);
     this.logTimeline(
-      `Demolition started for ${assetLabel} in ${region.name} (${DEMOLITION_DURATION_SECONDS}s).`
+      `Demolition started for ${assetLabel} in ${regionName} (${DEMOLITION_DURATION_SECONDS}s).`
     );
     this.pushAlert(
-      `${assetLabel} demolition started in ${region.name} (${DEMOLITION_DURATION_SECONDS}s).`,
+      `${assetLabel} demolition started in ${regionName} (${DEMOLITION_DURATION_SECONDS}s).`,
       "warning",
       4
     );
@@ -2441,7 +2467,7 @@ export class GameRuntime {
 
     const assetLabel = removed?.assetLabel || ASSET_RULES[removed?.assetType]?.label || "Asset";
     const regionName =
-      removed?.regionName || this.findRegion(regionId)?.name || "selected location";
+      removed?.regionName || this.getRegionDisplayName(this.findRegion(regionId), "selected location");
     this.logTimeline(`Demolition canceled for ${assetLabel} in ${regionName}.`);
     this.pushAlert(`${assetLabel} demolition canceled in ${regionName}.`, "advisory", 4);
     return true;
@@ -2464,6 +2490,7 @@ export class GameRuntime {
       }
       const count = Number(region.assets[item.assetType] || 0);
       if (count > 0) {
+        const regionName = this.getRegionDisplayName(region);
         region.assets[item.assetType] = Math.max(0, count - 1);
         const assetBuildCosts = this.ensureRegionAssetBuildCosts(region);
         const buildHistory = assetBuildCosts[item.assetType];
@@ -2506,19 +2533,19 @@ export class GameRuntime {
         const clearedSuffix = regionCleared ? " Location cleared." : "";
         if (lineCount > 0) {
           this.logTimeline(
-            `Demolished ${item.assetLabel} in ${region.name}; decommissioned ${lineCount} connected line${lineCount === 1 ? "" : "s"}${refundSuffix}.${clearedSuffix}`
+            `Demolished ${item.assetLabel} in ${regionName}; decommissioned ${lineCount} connected line${lineCount === 1 ? "" : "s"}${refundSuffix}.${clearedSuffix}`
           );
           this.pushAlert(
-            `${item.assetLabel} demolished in ${region.name}. ${lineCount} connected line${lineCount === 1 ? "" : "s"} removed${refundSuffix}.${clearedSuffix}`,
+            `${item.assetLabel} demolished in ${regionName}. ${lineCount} connected line${lineCount === 1 ? "" : "s"} removed${refundSuffix}.${clearedSuffix}`,
             "warning",
             4
           );
         } else {
           this.logTimeline(
-            `Demolished ${item.assetLabel} in ${region.name}${refundSuffix}.${clearedSuffix}`
+            `Demolished ${item.assetLabel} in ${regionName}${refundSuffix}.${clearedSuffix}`
           );
           this.pushAlert(
-            `${item.assetLabel} demolished in ${region.name}${refundSuffix}.${clearedSuffix}`,
+            `${item.assetLabel} demolished in ${regionName}${refundSuffix}.${clearedSuffix}`,
             "warning",
             4
           );
@@ -2673,14 +2700,16 @@ export class GameRuntime {
 
     const demolishCandidate = this.getDemolishCandidate(region, this.buildAssetType);
     if (!demolishCandidate) {
-      this.pushAlert(`No removable assets available at ${region.name}.`, "advisory", 4);
+      const regionName = this.getRegionDisplayName(region);
+      this.pushAlert(`No removable assets available at ${regionName}.`, "advisory", 4);
       this.pushHudUpdate();
       return;
     }
 
+    const regionName = this.getRegionDisplayName(region);
     this.callbacks.onRequestDemolishConfirm?.({
       regionId: region.id,
-      regionName: region.name,
+      regionName,
       assetType: demolishCandidate.assetType,
       assetLabel: this.getDemolishAssetLabel(region, demolishCandidate.assetType),
       refund: demolishCandidate.refund,
@@ -4015,7 +4044,7 @@ export class GameRuntime {
 
     return {
       id: region.id,
-      name: region.name,
+      name: this.getRegionDisplayName(region),
       kindLabel,
       anchorX: Number(anchor.x.toFixed(1)),
       anchorY: Number(anchor.y.toFixed(1)),
@@ -5321,7 +5350,7 @@ export class GameRuntime {
       .filter((entity) => !this.isTownEntity(entity))
       .map((node) => ({
         id: node.id,
-        name: node.name,
+        name: this.getRegionDisplayName(node),
         x: Number(node.x.toFixed(1)),
         y: Number(node.y.toFixed(1)),
         priority: this.normalizePriority(node.priority),
