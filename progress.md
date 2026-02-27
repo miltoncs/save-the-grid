@@ -1303,3 +1303,23 @@ Validation:
   - Right-clicked the line segment.
   - Confirm popover text included `Demolish Line ...`.
   - Accepting confirm produced alert: `Line removed between ...`.
+
+### Plant build selection now shows MW output alongside cost
+
+- Updated plant build dock tooltips in `src/game/app.js` to include generation output text:
+  - `Output <generation> MW` for wind, solar, and gas plant buttons.
+- Updated on-canvas plant build preview label in `src/game/runtime.js`:
+  - from `Cost <n>`
+  - to `Cost <n> +<mw> MW`
+
+Validation:
+
+- Syntax checks:
+  - `node --check src/game/app.js`
+  - `node --check src/game/runtime.js`
+- develop-web-game smoke run:
+  - `node "$HOME/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js" --url http://127.0.0.1:5173 --actions-file "$HOME/.codex/skills/develop-web-game/references/action_payloads.json" --click-selector "#start-btn" --iterations 3 --pause-ms 250 --screenshot-dir output/web-game-plant-mw-tooltip`
+- Targeted plant-selection preview verification (clicked plant build icon on dock):
+  - `node "$HOME/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js" --url http://127.0.0.1:5173 --click-selector "#start-btn" --actions-json '{"steps":[{"buttons":["left_mouse_button"],"frames":2,"mouse_x":580,"mouse_y":680},{"buttons":[],"frames":8}]}' --iterations 1 --pause-ms 150 --screenshot-dir output/web-game-plant-mw-finalcheck`
+  - Verified in screenshot: `output/web-game-plant-mw-finalcheck/shot-0.png` shows `Cost 135 +60 MW` near the selected plant cursor preview.
+  - Verified text-state: `output/web-game-plant-mw-finalcheck/state-0.json` shows `selectedTool: "build"` and `selectedBuildAsset: "plant"`.

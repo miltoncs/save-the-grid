@@ -4957,7 +4957,8 @@ export class GameRuntime {
   drawPlantBuildCostPreview(ctx, cost, iconSize) {
     if (!Number.isFinite(cost)) return;
 
-    const label = `Cost ${Math.max(0, Math.round(cost))}`;
+    const outputMw = Math.max(0, Number(ASSET_RULES.plant?.generation || 0));
+    const label = `Cost ${Math.max(0, Math.round(cost))} +${outputMw.toFixed(0)} MW`;
     const width = this.canvas.clientWidth;
     const height = this.canvas.clientHeight;
 
