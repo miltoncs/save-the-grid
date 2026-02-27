@@ -1454,3 +1454,20 @@ Validation:
 - targeted reroute verification:
   - `node "$HOME/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js" --url http://127.0.0.1:4173 --click-selector "#start-btn" --actions-json '{"steps":[{"buttons":["b"],"frames":2},{"buttons":["left_mouse_button"],"frames":2,"mouse_x":482,"mouse_y":202},{"buttons":[],"frames":12}]}' --iterations 1 --pause-ms 220 --screenshot-dir output/web-game-priority-overlay-targeted2`
   - Verified `output/web-game-priority-overlay-targeted2/state-0.json` reports town `priority: "elevated"` and alert text `Priority elevated for 1/1 location in reroute radius.`
+
+### Suppress structure/city info popup while building long-range powerlines
+
+- Updated HUD payload generation in `src/game/runtime.js`:
+  - In `pushHudUpdate()`, `selectedEntityPopup` is now forced to `null` when `this.tool === TOOL_LINE`.
+  - This prevents the floating structure/city info panel from appearing during long-range powerline build interactions.
+- Selection state (`selectedRegionId`) remains intact for line-tool interaction flow and highlights; only the popup is suppressed.
+
+Validation:
+- `node --check src/game/runtime.js`
+- develop-web-game smoke run:
+  - `node "$HOME/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js" --url http://127.0.0.1:5173 --actions-file "$HOME/.codex/skills/develop-web-game/references/action_payloads.json" --click-selector "#start-btn" --iterations 2 --pause-ms 220 --screenshot-dir output/web-game-line-popup-regression`
+- Targeted Playwright assertion:
+  - Clicked a city in long-range line tool mode; popup remained hidden.
+  - Built an infrastructure structure, switched back to long-range line tool, clicked the structure; popup remained hidden.
+  - Assertion output: `townPopupHidden: true`, `structurePopupHidden: true`, `consoleErrorCount: 0`.
+  - Screenshot: `output/line-popup-assert/line-tool-no-info-panel.png`

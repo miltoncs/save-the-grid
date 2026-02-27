@@ -5241,6 +5241,8 @@ export class GameRuntime {
   pushHudUpdate() {
     const selected = this.getSelectedRegion();
     const objective = this.buildObjectiveStatus();
+    const selectedEntityPopup =
+      this.tool === TOOL_LINE ? null : this.buildSelectedRegionPopup(selected);
 
     this.callbacks.onHud({
       runLabel: this.config.label,
@@ -5275,7 +5277,7 @@ export class GameRuntime {
       objective,
       alerts: this.state.alerts,
       incidents: this.state.incidents,
-      selectedEntityPopup: this.buildSelectedRegionPopup(selected),
+      selectedEntityPopup,
       selectedTown: selected && this.isTownEntity(selected) ? selected : null,
       selectedRegion: selected,
       selectedEntity: selected,
