@@ -1303,3 +1303,50 @@ Validation:
   - Right-clicked the line segment.
   - Confirm popover text included `Demolish Line ...`.
   - Accepting confirm produced alert: `Line removed between ...`.
+
+### Status icons simplified (no background)
+
+- Replaced `/assets/icons/circular/status-warning.svg` with a transparent, minimal yellow exclamation glyph.
+- Replaced `/assets/icons/circular/status-alert.svg` with a transparent, minimal red exclamation glyph.
+- Removed circular/core background styling from both.
+
+### Simplified line rendering at highest zoomed-out levels
+
+- Updated low-zoom powerline rendering in `src/game/runtime.js`:
+  - Added `SIMPLIFIED_LINE_RENDER_ZOOM_THRESHOLD = 0.9`.
+  - Added helper `drawThinParallelLines(...)` to render N thin parallel wires between endpoints.
+- Long-range lines:
+  - In `drawLongDistancePowerline(...)`, when zoom is at or below the threshold, rendering now switches to **3 thin parallel lines** and skips tower/wire-bundle detail.
+- Local substation service links:
+  - In `drawTownServiceLinks(...)`, when zoom is at or below the threshold, each source-to-town link now renders as **2 thin parallel lines** directly between endpoints.
+
+Validation:
+- `node --check src/game/runtime.js`
+- develop-web-game smoke:
+  - `node "$HOME/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js" --url http://127.0.0.1:5173 --actions-file "$HOME/.codex/skills/develop-web-game/references/action_payloads.json" --click-selector "#start-btn" --iterations 1 --pause-ms 220 --screenshot-dir output/web-game-zoomed-line-style-smoke`
+- Targeted Playwright visual capture at minimum zoom:
+  - `output/zoomed-line-style-both-types.png`
+
+### Build preview: invalid placement tint + side-effect fix
+
+- Existing disallowed-build preview behavior was retained (red-tinted ghost + red marker).
+- Fixed preview placement validation to avoid mutating runtime node IDs while hovering:
+  - Added `createInfrastructureNodePreview(...)` in `src/game/runtime.js`.
+  - Updated `getBuildPlacementPreviewState(...)` to use preview-only nodes instead of `createInfrastructureNode(...)`.
+- This keeps invalid/valid cursor feedback stable and prevents `nextNodeId` increments from mouse movement.
+
+Validation:
+- `node --check src/game/runtime.js`
+- develop-web-game smoke captures:
+  - `output/web-game/build-preview-invalid/shot-0.png`
+  - `output/web-game/build-preview-smoke/shot-0.png`
+  - `output/web-game/build-preview-smoke2/shot-0.png`
+  - `output/web-game/build-preview-smoke3/shot-0.png`
+
+### Long-range line range reduced
+
+- Updated `LONG_RANGE_LINE_MAX_DISTANCE` from `1000` to `500` in `src/game/runtime.js`.
+- This halves the max allowable long-range powerline build distance and updates out-of-range validation/messages automatically via `getMaxLineRange()`.
+
+Validation:
+- `node --check src/game/runtime.js`

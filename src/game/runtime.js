@@ -95,9 +95,10 @@ const DEMOLISH_ASSET_LABELS = {
   substation: "Substation",
   storage: "Battery",
 };
-const LONG_RANGE_LINE_MAX_DISTANCE = 1000;
+const LONG_RANGE_LINE_MAX_DISTANCE = 500;
 const LONG_RANGE_TOWER_COUNT_RATIO = 0.25;
 const SIMPLIFIED_LINE_RENDER_ZOOM_THRESHOLD = 0.9;
+const BUILD_PREVIEW_DISALLOWED_FILTER = "sepia(1) saturate(8) hue-rotate(-35deg) brightness(0.9)";
 const STORAGE_UNIT_CAPACITY_MWH = 20;
 const STORAGE_CHARGE_DRAW_MW = 20;
 const IN_GAME_HOUR_REAL_SECONDS = 120;
@@ -1704,6 +1705,23 @@ export class GameRuntime {
     };
   }
 
+  createInfrastructureNodePreview(worldX, worldY) {
+    const localBiome = this.inferLocalBiomeAtPoint(worldX, worldY);
+    return {
+      id: null,
+      name: "Preview Grid Point",
+      entityType: "node",
+      x: clamp(worldX, 0, BASE_MAP.width),
+      y: clamp(worldY, 0, BASE_MAP.height),
+      radius: INFRASTRUCTURE_NODE_RADIUS,
+      districtType: localBiome.districtType,
+      terrain: localBiome.terrain,
+      climate: localBiome.climate,
+      cooldownUntil: 0,
+      assets: { plant: 0, substation: 0, storage: 0 },
+    };
+  }
+
   getTownInteractionRadius(entity) {
     if (!entity) return 0;
     return MAP_OBJECT_INTERACTION_RADIUS_WORLD;
@@ -2026,6 +2044,83 @@ export class GameRuntime {
       }
     }
     return null;
+  }
+
+  getBuildPlacementPreviewState(worldPoint, hoveredRegion = null) {
+    if (!worldPoint) {
+      return {
+        allowed: false,
+        reason: "no-point",
+        target: null,
+      };
+    }
+
+    let target = hoveredRegion || this.findRegionAt(worldPoint.x, worldPoint.y) || null;
+    if (target && this.isTownEntity(target)) {
+      return {
+        allowed: false,
+        reason: "town",
+        target,
+      };
+    }
+
+    if (!target) {
+      const outOfBounds =
+        worldPoint.x < 0 ||
+        worldPoint.x > BASE_MAP.width ||
+        worldPoint.y < 0 ||
+        worldPoint.y > BASE_MAP.height;
+      if (outOfBounds) {
+        return {
+          allowed: false,
+          reason: "bounds",
+          target: null,
+        };
+      }
+
+      const nearbyNode = this.state.regions.find(
+        (candidate) =>
+          !this.isTownEntity(candidate) &&
+          Math.hypot(candidate.x - worldPoint.x, candidate.y - worldPoint.y) <=
+            this.getTownInteractionRadius(candidate)
+      );
+      target = nearbyNode || this.createInfrastructureNodePreview(worldPoint.x, worldPoint.y);
+    }
+
+    if (this.getRegionTotalAssets(target) > 0) {
+      return {
+        allowed: false,
+        reason: "occupied",
+        target,
+      };
+    }
+
+    const spacingConflict = this.findInfrastructureBuildSpacingConflict(
+      target.x,
+      target.y,
+      target.id
+    );
+    if (spacingConflict) {
+      return {
+        allowed: false,
+        reason: "spacing",
+        target,
+      };
+    }
+
+    if (this.state.runtimeSeconds < Number(target.cooldownUntil || 0)) {
+      return {
+        allowed: false,
+        reason: "cooldown",
+        target,
+      };
+    }
+
+    return {
+      allowed: true,
+      reason: null,
+      target,
+    };
   }
 
   willLoseLineEndpointAfterDemolition(region, assetType) {
@@ -4985,6 +5080,19 @@ export class GameRuntime {
     ctx.restore();
   }
 
+  drawDisallowedBuildPreviewMarker(ctx, x, y, iconSize) {
+    const radius = iconSize * 0.48;
+    ctx.save();
+    ctx.fillStyle = "rgba(255, 88, 88, 0.26)";
+    ctx.strokeStyle = "rgba(255, 160, 160, 0.95)";
+    ctx.lineWidth = Math.max(1.2, iconSize * 0.06);
+    ctx.beginPath();
+    ctx.arc(x, y, radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+  }
+
   drawBuildCursorPreview(ctx) {
     if (this.tool !== TOOL_BUILD) return;
     if (!this.mouse.inside) return;
@@ -4992,14 +5100,16 @@ export class GameRuntime {
 
     const zoom = this.getCameraZoom();
     const world = this.screenToWorld(this.mouse.x, this.mouse.y);
-    if (world.x < 0 || world.x > BASE_MAP.width || world.y < 0 || world.y > BASE_MAP.height) {
-      return;
-    }
+    const hoveredRegion = this.findRegionAt(world.x, world.y);
+    const placement = this.getBuildPlacementPreviewState(world, hoveredRegion);
+    const disallowed = !placement.allowed;
 
     if (this.buildAssetType === "substation") {
       const radiusWorld = this.config.substationRadius || SUBSTATION_RADIUS_BY_PROFILE.standard;
       ctx.save();
-      ctx.strokeStyle = "rgba(242, 246, 214, 0.72)";
+      ctx.strokeStyle = disallowed
+        ? "rgba(255, 170, 170, 0.86)"
+        : "rgba(242, 246, 214, 0.72)";
       ctx.lineWidth = 1.6;
       ctx.setLineDash([3, 6]);
       ctx.beginPath();
@@ -5015,6 +5125,9 @@ export class GameRuntime {
     if (icon) {
       ctx.save();
       ctx.globalAlpha = 0.42;
+      if (disallowed) {
+        ctx.filter = BUILD_PREVIEW_DISALLOWED_FILTER;
+      }
       ctx.drawImage(
         icon,
         this.mouse.x - iconSize / 2,
@@ -5023,6 +5136,9 @@ export class GameRuntime {
         iconSize
       );
       ctx.restore();
+      if (disallowed) {
+        this.drawDisallowedBuildPreviewMarker(ctx, this.mouse.x, this.mouse.y, iconSize);
+      }
       this.drawPlantBuildCostPreview(ctx, previewCost, iconSize);
       return;
     }
@@ -5038,6 +5154,9 @@ export class GameRuntime {
     };
     ctx.save();
     ctx.globalAlpha = 0.42;
+    if (disallowed) {
+      ctx.filter = BUILD_PREVIEW_DISALLOWED_FILTER;
+    }
     this.drawAssetIcon(
       ctx,
       this.buildAssetType,
@@ -5047,6 +5166,9 @@ export class GameRuntime {
       fallbackRegion
     );
     ctx.restore();
+    if (disallowed) {
+      this.drawDisallowedBuildPreviewMarker(ctx, this.mouse.x, this.mouse.y, iconSize);
+    }
     this.drawPlantBuildCostPreview(ctx, previewCost, iconSize);
   }
 
