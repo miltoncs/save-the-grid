@@ -1436,3 +1436,21 @@ Validation:
   - artifacts:
     - `output/web-game-remove-news-blurbs/shot-0.png`
     - `output/web-game-remove-news-blurbs/state-0.json`
+
+### Reroute elevated-priority overlay: top-right + 15% icon area
+
+- Updated `drawPriorityOverlay()` in `src/game/runtime.js` to place the elevated-priority overlay at the top-right corner of each structure/city icon.
+- Scaled overlay by area ratio instead of width ratio:
+  - Added `PRIORITY_OVERLAY_AREA_RATIO = 0.15`.
+  - Overlay side length now computes as `iconSize * Math.sqrt(PRIORITY_OVERLAY_AREA_RATIO)`, which yields 15% of base icon area.
+- Updated fallback badge (used only if overlay asset fails to load) to render as a small top-right marker matching the same geometry envelope.
+
+Validation:
+- `node --check src/game/runtime.js`
+- `node --check src/game/app.js`
+- `node --check src/game/core.js`
+- develop-web-game client smoke:
+  - `node "$HOME/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js" --url http://127.0.0.1:4173 --actions-file "$HOME/.codex/skills/develop-web-game/references/action_payloads.json" --click-selector "#start-btn" --iterations 1 --pause-ms 220 --screenshot-dir output/web-game-priority-overlay-topright-15pct`
+- targeted reroute verification:
+  - `node "$HOME/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js" --url http://127.0.0.1:4173 --click-selector "#start-btn" --actions-json '{"steps":[{"buttons":["b"],"frames":2},{"buttons":["left_mouse_button"],"frames":2,"mouse_x":482,"mouse_y":202},{"buttons":[],"frames":12}]}' --iterations 1 --pause-ms 220 --screenshot-dir output/web-game-priority-overlay-targeted2`
+  - Verified `output/web-game-priority-overlay-targeted2/state-0.json` reports town `priority: "elevated"` and alert text `Priority elevated for 1/1 location in reroute radius.`

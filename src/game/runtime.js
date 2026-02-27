@@ -104,6 +104,7 @@ const IN_GAME_HOUR_REAL_SECONDS = 120;
 const IN_GAME_HOURS_PER_REAL_SECOND = 1 / IN_GAME_HOUR_REAL_SECONDS;
 const PRIORITY_DEFAULT = "nominal";
 const PRIORITY_ELEVATED = "elevated";
+const PRIORITY_OVERLAY_AREA_RATIO = 0.15;
 const LEGACY_PRIORITY_MAP = {
   low: PRIORITY_DEFAULT,
   normal: PRIORITY_DEFAULT,
@@ -4915,31 +4916,29 @@ export class GameRuntime {
 
   drawPriorityOverlay(ctx, point, iconSize, region) {
     if (this.normalizePriority(region?.priority) !== PRIORITY_ELEVATED) return;
+    const size = iconSize * Math.sqrt(PRIORITY_OVERLAY_AREA_RATIO);
+    const left = point.x + (iconSize / 2 - size);
+    const top = point.y - iconSize / 2;
+    const centerX = left + size / 2;
+    const centerY = top + size / 2;
     const overlay = this.iconSet.overlay?.priorityElevated || null;
     if (overlay) {
-      const size = Math.max(16, iconSize * 0.8);
       ctx.save();
       ctx.globalAlpha = 0.98;
-      ctx.drawImage(
-        overlay,
-        point.x - size / 2,
-        point.y - size / 2,
-        size,
-        size
-      );
+      ctx.drawImage(overlay, left, top, size, size);
       ctx.restore();
       return;
     }
 
     // Fallback if overlay icon is unavailable.
     ctx.save();
-    ctx.strokeStyle = "rgba(126, 212, 255, 0.95)";
-    ctx.lineWidth = Math.max(1.2, iconSize * 0.08);
-    ctx.setLineDash([3, 4]);
+    ctx.fillStyle = "rgba(126, 212, 255, 0.95)";
+    ctx.strokeStyle = "rgba(13, 27, 42, 0.96)";
+    ctx.lineWidth = Math.max(1, iconSize * 0.04);
     ctx.beginPath();
-    ctx.arc(point.x, point.y, iconSize * 0.45, 0, Math.PI * 2);
+    ctx.arc(centerX, centerY, size * 0.46, 0, Math.PI * 2);
+    ctx.fill();
     ctx.stroke();
-    ctx.setLineDash([]);
     ctx.restore();
   }
 
