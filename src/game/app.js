@@ -892,6 +892,7 @@ export class SaveTheGridApp {
                 data-testid="asset-plant"
                 aria-label="Build wind plant (1)"
               >
+                <span class="dock-selected-stat dock-selected-cost" aria-hidden="true">Cost ${windPlant.cost}</span>
                 <img
                   class="asset-icon-image"
                   src="/assets/icons/circular/plant-wind.svg"
@@ -899,6 +900,7 @@ export class SaveTheGridApp {
                   aria-hidden="true"
                 />
                 <span class="dock-shortcut-chip" aria-hidden="true">1</span>
+                <span class="dock-selected-stat dock-selected-output" aria-hidden="true">${windPlant.generationMw} MW</span>
                 <span class="dock-tooltip" aria-hidden="true">
                   <span class="dock-tooltip-title">Wind Plant</span>
                   <span class="dock-tooltip-price">Price ${windPlant.cost}</span>
@@ -913,6 +915,7 @@ export class SaveTheGridApp {
                 data-testid="asset-plant-solar"
                 aria-label="Build solar plant (2)"
               >
+                <span class="dock-selected-stat dock-selected-cost" aria-hidden="true">Cost ${solarPlant.cost}</span>
                 <img
                   class="asset-icon-image"
                   src="/assets/icons/circular/plant-solar.svg"
@@ -920,6 +923,7 @@ export class SaveTheGridApp {
                   aria-hidden="true"
                 />
                 <span class="dock-shortcut-chip" aria-hidden="true">2</span>
+                <span class="dock-selected-stat dock-selected-output" aria-hidden="true">${solarPlant.generationMw} MW</span>
                 <span class="dock-tooltip" aria-hidden="true">
                   <span class="dock-tooltip-title">Solar Plant</span>
                   <span class="dock-tooltip-price">Price ${solarPlant.cost}</span>
@@ -934,6 +938,7 @@ export class SaveTheGridApp {
                 data-testid="asset-plant-gas"
                 aria-label="Build natural gas plant (3)"
               >
+                <span class="dock-selected-stat dock-selected-cost" aria-hidden="true">Cost ${gasPlant.cost}</span>
                 <img
                   class="asset-icon-image"
                   src="/assets/icons/circular/plant-gas.svg"
@@ -941,6 +946,7 @@ export class SaveTheGridApp {
                   aria-hidden="true"
                 />
                 <span class="dock-shortcut-chip" aria-hidden="true">3</span>
+                <span class="dock-selected-stat dock-selected-output" aria-hidden="true">${gasPlant.generationMw} MW</span>
                 <span class="dock-tooltip" aria-hidden="true">
                   <span class="dock-tooltip-title">Natural Gas Plant</span>
                   <span class="dock-tooltip-price">Price ${gasPlant.cost}</span>
