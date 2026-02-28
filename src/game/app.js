@@ -767,10 +767,6 @@ export class SaveTheGridApp {
         </main>
 
         <div class="floating-ui-layer">
-          <div class="floating-group floating-top-left">
-            <div class="floating-chip floating-chip-icon">GRID</div>
-            <div class="floating-chip floating-chip-label" id="hud-run-label">Standard Run</div>
-          </div>
 
           <div class="floating-group floating-top-right">
             <span class="floating-chip">Time <strong id="hud-timer">00:00</strong></span>
