@@ -4229,6 +4229,7 @@ export class GameRuntime {
     if (!region) return null;
     const anchor = this.worldToScreen(region.x, region.y);
     const isCity = this.isTownEntity(region);
+    const townClassification = this.getTownClassification(region);
     const isPowerplant = !isCity && Math.max(0, Number(region?.assets?.plant || 0)) > 0;
     const localTownDemandMw = this.isTownEntity(region) ? Math.max(0, Number(region.demand || 0)) : 0;
     const storageDemandMw = Math.max(0, this.getStorageChargeDemandMW(region, TICK_SECONDS));
@@ -4239,7 +4240,11 @@ export class GameRuntime {
     const totalSupplyMw = Math.max(0, Number(this.computeGenerationForEntity(region) || 0));
     const powerStoredMWh = Math.max(0, Number(this.normalizeRegionStorageCharge(region)));
     const storedCapacityMWh = Math.max(0, Number(this.getRegionStorageCapacityMWh(region)));
-    const kindLabel = this.isTownEntity(region) ? "City" : "Structure";
+    const kindLabel = isCity
+      ? townClassification === "capital"
+        ? "capital"
+        : townClassification || "town"
+      : "structure";
 
     return {
       id: region.id,
@@ -4859,10 +4864,18 @@ export class GameRuntime {
     ctx.restore();
   }
 
-  getTownIconForRegion(region) {
+  getTownClassification(region) {
     if (!this.isTownEntity(region)) return null;
-    if (region.id === "capital") return this.iconSet.town.capital || null;
-    if ((region.population || 0) >= 52) return this.iconSet.town.city || null;
+    if (region.id === "capital") return "capital";
+    if ((region.population || 0) >= 52) return "city";
+    return "town";
+  }
+
+  getTownIconForRegion(region) {
+    const classification = this.getTownClassification(region);
+    if (!classification) return null;
+    if (classification === "capital") return this.iconSet.town.capital || null;
+    if (classification === "city") return this.iconSet.town.city || null;
     return this.iconSet.town.hamlet || null;
   }
 
