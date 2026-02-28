@@ -1,14 +1,14 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96" fill="none">
   <defs>
     <radialGradient id="core-town-hamlet" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(38 32) rotate(50) scale(62)">
-      <stop offset="0" stop-color="#1d3a2b"/>
-      <stop offset="1" stop-color="#111d16"/>
+      <stop offset="0" stop-color="#946D4B"/>
+      <stop offset="1" stop-color="#6B4B31"/>
     </radialGradient>
   </defs>
-  <circle cx="48" cy="48" r="44" fill="#0d1511"/>
-  <circle cx="48" cy="48" r="39" fill="url(#core-town-hamlet)" stroke="#96b79f" stroke-width="1.5"/>
-  <circle cx="48" cy="48" r="31" stroke="#a7e6bd" stroke-opacity="0.48" stroke-width="1.5"/>
-  <g stroke="#eaf7ee" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none">
+  <circle cx="48" cy="48" r="44" fill="#F2ECE1"/>
+  <circle cx="48" cy="48" r="39" fill="url(#core-town-hamlet)" stroke="#201D1B" stroke-width="1.5"/>
+  <circle cx="48" cy="48" r="31" stroke="#7A7F86" stroke-opacity="0.48" stroke-width="1.5"/>
+  <g stroke="#181614" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none">
     <path d="M34 58V50L40 45L46 50V58"/>
     <path d="M44 58V47L52 41L60 47V58"/>
     <path d="M56 58V51L61 47L66 51V58"/>
