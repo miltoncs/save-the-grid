@@ -132,6 +132,10 @@ const ZOOM_WHEEL_SENSITIVITY = 0.0016;
 const ZOOM_SMOOTHING_PER_SECOND = 12;
 const ZOOM_EPSILON = 0.0001;
 const CAMERA_PAN_OVERSCROLL_VIEWPORTS = 0.5;
+const CAMERA_FOCUS_SMOOTHING_PER_SECOND = 11;
+const ALERT_FOCUS_ZOOM = 3.2;
+const TOWN_SERVICE_ALERT_MARKER_PREFIX = "town-service:";
+const TOWN_NEEDS_POWER_ALERT_THRESHOLD_MW = 0.5;
 
 export class GameRuntime {
   constructor(options) {
@@ -186,6 +190,7 @@ export class GameRuntime {
       dragCamY: BASE_MAP.height / 2,
     };
     this.zoomFocus = null;
+    this.cameraFocusTarget = null;
 
     this.tool = TOOL_PAN;
     this.buildAssetType = "plant";
@@ -1283,6 +1288,7 @@ export class GameRuntime {
 
     this.renderPulse += dt;
     this.updateZoom(dt);
+    this.updateCameraFocus(dt);
     this.handleKeyboardPan(dt);
     this.handleEdgePan(dt);
     this.render();
@@ -1298,6 +1304,7 @@ export class GameRuntime {
       }
       this.renderPulse += TICK_SECONDS;
       this.updateZoom(TICK_SECONDS);
+      this.updateCameraFocus(TICK_SECONDS);
     }
     this.render();
     return Promise.resolve();
@@ -1366,6 +1373,7 @@ export class GameRuntime {
 
     if (this.camera.dragActive) {
       this.zoomFocus = null;
+      this.cameraFocusTarget = null;
       const zoom = this.getCameraZoom();
       const dx = (event.clientX - this.camera.dragStartX) / zoom;
       const dy = (event.clientY - this.camera.dragStartY) / zoom;
@@ -1382,6 +1390,7 @@ export class GameRuntime {
       event.button === 1 ||
       (event.button === 0 && event.altKey)
     ) {
+      this.cameraFocusTarget = null;
       this.camera.dragActive = true;
       this.camera.dragStartX = event.clientX;
       this.camera.dragStartY = event.clientY;
@@ -1549,6 +1558,71 @@ export class GameRuntime {
     if (Math.abs(targetZoom - this.camera.zoom) <= ZOOM_EPSILON) {
       this.zoomFocus = null;
     }
+  }
+
+  setCameraFocusTarget(worldX, worldY) {
+    const x = Number(worldX);
+    const y = Number(worldY);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) {
+      this.cameraFocusTarget = null;
+      return false;
+    }
+    this.cameraFocusTarget = {
+      x: clamp(x, 0, BASE_MAP.width),
+      y: clamp(y, 0, BASE_MAP.height),
+    };
+    return true;
+  }
+
+  updateCameraFocus(dt) {
+    if (!this.cameraFocusTarget) return;
+    const blend = 1 - Math.exp(-CAMERA_FOCUS_SMOOTHING_PER_SECOND * Math.max(0, dt));
+    this.camera.x = lerp(this.camera.x, this.cameraFocusTarget.x, blend);
+    this.camera.y = lerp(this.camera.y, this.cameraFocusTarget.y, blend);
+    this.clampCameraToMap();
+    if (Math.hypot(this.camera.x - this.cameraFocusTarget.x, this.camera.y - this.cameraFocusTarget.y) <= 0.75) {
+      this.camera.x = this.cameraFocusTarget.x;
+      this.camera.y = this.cameraFocusTarget.y;
+      this.clampCameraToMap();
+      this.cameraFocusTarget = null;
+    }
+  }
+
+  focusCameraOnRegion(regionId, { zoom = ALERT_FOCUS_ZOOM } = {}) {
+    const region = this.findRegion(regionId);
+    if (!region) return false;
+    const width = this.canvas.clientWidth;
+    const height = this.canvas.clientHeight;
+    if (width > 0 && height > 0) {
+      this.zoomFocus = {
+        screenX: width / 2,
+        screenY: height / 2,
+        worldX: region.x,
+        worldY: region.y,
+      };
+    } else {
+      this.zoomFocus = null;
+      this.camera.x = region.x;
+      this.camera.y = region.y;
+      this.clampCameraToMap();
+    }
+    this.setCameraFocusTarget(region.x, region.y);
+    const targetZoom = clamp(Math.max(this.getTargetZoom(), Number(zoom) || ALERT_FOCUS_ZOOM), MIN_CAMERA_ZOOM, MAX_CAMERA_ZOOM);
+    this.setZoomTarget(targetZoom);
+    this.selectedRegionId = region.id;
+    this.callbacks.onDismissDemolishConfirm?.();
+    this.pushHudUpdate();
+    return true;
+  }
+
+  focusCameraOnAlert(alertId) {
+    const alert = this.state.alerts.find((entry) => entry.id === alertId);
+    if (!alert?.focusRegionId) return false;
+    const focused = this.focusCameraOnRegion(alert.focusRegionId);
+    if (!focused) return false;
+    this.highlightedAlertId = alert.id;
+    this.callbacks.onHighlightAlert(alert.id);
+    return true;
   }
 
   onWheel(event) {
@@ -2981,6 +3055,7 @@ export class GameRuntime {
     if (!panX && !panY) return;
 
     this.zoomFocus = null;
+    this.cameraFocusTarget = null;
     const speed = 520;
     const zoom = this.getCameraZoom();
     const magnitude = Math.hypot(panX, panY) || 1;
@@ -3008,6 +3083,7 @@ export class GameRuntime {
 
     if (!panX && !panY) return;
     this.zoomFocus = null;
+    this.cameraFocusTarget = null;
     const zoom = this.getCameraZoom();
     this.camera.x += (panX * speed * dt) / zoom;
     this.camera.y += (panY * speed * dt) / zoom;
@@ -3031,6 +3107,7 @@ export class GameRuntime {
     this.updateScoring(dt);
     this.applyDevModeState();
     this.evaluateObjectiveAndEndConditions(dt);
+    this.syncTownServiceAlerts();
 
     this.trimAlerts();
     this.pushHudUpdate();
@@ -4103,36 +4180,6 @@ export class GameRuntime {
       this.state.lawsuits = 0;
     }
 
-    if (unmetRatio > 0.32) {
-      this.pushTransientAlertOnce(
-        "grid-stress",
-        "Grid stress rising: unmet demand sustained beyond warning threshold.",
-        "warning",
-        4
-      );
-    }
-
-    const uncoveredTowns = this.state.regions.filter(
-      (region) => this.isTownEntity(region) && !region.coveredBySubstation
-    ).length;
-    if (uncoveredTowns > 0) {
-      this.pushTransientAlertOnce(
-        "coverage-gap",
-        `Coverage gap detected: ${uncoveredTowns} town(s) outside powered substation radius.`,
-        "warning",
-        4
-      );
-    }
-
-    if (this.state.reliability < 35) {
-      this.pushTransientAlertOnce(
-        "reliability-critical",
-        "Reliability entering critical range.",
-        "critical",
-        4
-      );
-    }
-
     if (this.state.budget < 160) {
       this.pushTransientAlertOnce(
         "budget-low",
@@ -4301,6 +4348,84 @@ export class GameRuntime {
     }
   }
 
+  getTownServiceAlertState(region) {
+    if (!this.isTownEntity(region)) return null;
+    if (!region.coveredBySubstation) return "unconnected";
+    const unmet = Math.max(0, Number(region.unmet || 0));
+    if (unmet > TOWN_NEEDS_POWER_ALERT_THRESHOLD_MW) {
+      return "needs-power";
+    }
+    return null;
+  }
+
+  syncTownServiceAlerts() {
+    const now = this.state.runtimeSeconds;
+    const desiredMarkers = new Set();
+    const existingByMarker = new Map();
+    for (const alert of this.state.alerts) {
+      if (typeof alert?.marker !== "string") continue;
+      if (!alert.marker.startsWith(TOWN_SERVICE_ALERT_MARKER_PREFIX)) continue;
+      existingByMarker.set(alert.marker, alert);
+    }
+
+    for (const region of this.state.regions) {
+      const alertState = this.getTownServiceAlertState(region);
+      if (!alertState) continue;
+      const marker = `${TOWN_SERVICE_ALERT_MARKER_PREFIX}${alertState}:${region.id}`;
+      desiredMarkers.add(marker);
+      const townName = this.getRegionDisplayName(region, "City");
+      const text =
+        alertState === "unconnected"
+          ? `${townName} is unconnected!`
+          : `${townName} needs more power!`;
+      const level = alertState === "unconnected" ? "critical" : "warning";
+      const existing = existingByMarker.get(marker);
+      if (existing) {
+        existing.text = text;
+        existing.level = level;
+        existing.persistent = true;
+        existing.regionId = region.id;
+        existing.focusRegionId = region.id;
+        existing.createdAt = Number.isFinite(existing.createdAt) ? existing.createdAt : now;
+        existing.expiresAt = Number.isFinite(existing.expiresAt) ? Math.max(existing.expiresAt, now + 2) : now + 2;
+        continue;
+      }
+      const id = `alert-${marker}`;
+      this.state.alerts.unshift({
+        id,
+        marker,
+        text,
+        level,
+        persistent: true,
+        regionId: region.id,
+        focusRegionId: region.id,
+        createdAt: now,
+        expiresAt: now + 2,
+      });
+      if (level === "critical") {
+        this.highlightedAlertId = id;
+        this.callbacks.onHighlightAlert(id);
+      }
+    }
+
+    const previousHighlighted = this.highlightedAlertId;
+    this.state.alerts = this.state.alerts.filter((alert) => {
+      if (typeof alert?.marker !== "string") return true;
+      if (!alert.marker.startsWith(TOWN_SERVICE_ALERT_MARKER_PREFIX)) return true;
+      return desiredMarkers.has(alert.marker);
+    });
+    if (
+      previousHighlighted &&
+      !this.state.alerts.some((alert) => alert.id === previousHighlighted)
+    ) {
+      const fallbackCritical = this.state.alerts.find((alert) => alert.level === "critical");
+      this.highlightedAlertId = fallbackCritical ? fallbackCritical.id : null;
+      if (fallbackCritical) {
+        this.callbacks.onHighlightAlert(fallbackCritical.id);
+      }
+    }
+  }
+
   pushTransientAlertOnce(marker, text, level, ttl) {
     const now = this.state.runtimeSeconds;
     const present = this.state.alerts.some(
@@ -4325,8 +4450,15 @@ export class GameRuntime {
   trimAlerts() {
     const now = this.state.runtimeSeconds;
     this.state.alerts = this.state.alerts
-      .filter((alert) => alert.expiresAt > now)
-      .slice(0, 9);
+      .filter((alert) => alert.persistent || Number(alert.expiresAt) > now)
+      .slice(0, 20);
+    if (
+      this.highlightedAlertId &&
+      !this.state.alerts.some((alert) => alert.id === this.highlightedAlertId)
+    ) {
+      this.highlightedAlertId = null;
+      this.callbacks.onHighlightAlert(null);
+    }
   }
 
   logTimeline(text) {
