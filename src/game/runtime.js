@@ -5584,30 +5584,36 @@ export class GameRuntime {
       0,
       Number(previewData.baseGeneration ?? previewData.effectiveGeneration ?? 0)
     );
-    const label = `Cost ${Math.max(0, Math.round(previewData.cost))} | Base ${baseOutputMw.toFixed(0)} MW`;
+    const costLabel = `Cost ${Math.max(0, Math.round(previewData.cost))}`;
+    const outputLabel = `${baseOutputMw.toFixed(0)} MW`;
     const width = this.canvas.clientWidth;
     const height = this.canvas.clientHeight;
+    const padX = 8;
+    const boxHeight = 20;
 
     ctx.save();
     ctx.font = '600 12px "IBM Plex Mono", monospace';
-    const padX = 8;
-    const boxHeight = 22;
-    const boxWidth = Math.ceil(ctx.measureText(label).width) + padX * 2;
-    const anchorX = this.mouse.x - boxWidth / 2;
-    const anchorY = this.mouse.y - iconSize / 2 - boxHeight - 8;
-    const x = clamp(anchorX, 6, Math.max(6, width - boxWidth - 6));
-    const y = clamp(anchorY, 6, Math.max(6, height - boxHeight - 6));
-
-    ctx.fillStyle = "rgba(9, 27, 38, 0.88)";
-    ctx.strokeStyle = "rgba(134, 218, 255, 0.92)";
-    ctx.lineWidth = 1.2;
-    ctx.fillRect(x, y, boxWidth, boxHeight);
-    ctx.strokeRect(x, y, boxWidth, boxHeight);
-
-    ctx.fillStyle = "#ecfbff";
-    ctx.textAlign = "left";
+    ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText(label, x + padX, y + boxHeight / 2 + 0.5);
+
+    const labels = [
+      { text: costLabel, centerY: this.mouse.y - iconSize / 2 - boxHeight / 2 - 8 },
+      { text: outputLabel, centerY: this.mouse.y + iconSize / 2 + boxHeight / 2 + 8 },
+    ];
+    for (const label of labels) {
+      const boxWidth = Math.ceil(ctx.measureText(label.text).width) + padX * 2;
+      const x = clamp(this.mouse.x - boxWidth / 2, 6, Math.max(6, width - boxWidth - 6));
+      const y = clamp(label.centerY - boxHeight / 2, 6, Math.max(6, height - boxHeight - 6));
+
+      ctx.fillStyle = "rgba(9, 27, 38, 0.88)";
+      ctx.strokeStyle = "rgba(134, 218, 255, 0.92)";
+      ctx.lineWidth = 1.2;
+      ctx.fillRect(x, y, boxWidth, boxHeight);
+      ctx.strokeRect(x, y, boxWidth, boxHeight);
+
+      ctx.fillStyle = "#ecfbff";
+      ctx.fillText(label.text, x + boxWidth / 2, y + boxHeight / 2 + 0.5);
+    }
     ctx.restore();
   }
 
