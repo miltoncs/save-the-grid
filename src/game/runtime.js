@@ -5421,7 +5421,10 @@ export class GameRuntime {
       this.drawRegionAssets(ctx, point, iconSize, region);
       this.drawPriorityOverlay(ctx, point, iconSize, region);
 
-      if ((region.assets.substation || 0) > 0 && zoom >= 0.9) {
+      if (
+        (region.assets.substation || 0) > 0 &&
+        (zoom >= 0.9 || this.resourceRevealHeld)
+      ) {
         const coverageRadius =
           (this.config.substationRadius || SUBSTATION_RADIUS_BY_PROFILE.standard) * zoom;
         ctx.strokeStyle = region.coveredBySubstation
