@@ -4882,10 +4882,13 @@ export class GameRuntime {
 
     // Fallback if icon assets are unavailable: neutral marker only.
     ctx.save();
-    ctx.fillStyle = "rgba(170, 212, 188, 0.95)";
+    ctx.fillStyle = "rgba(242, 236, 225, 0.95)";
     ctx.beginPath();
     ctx.arc(x, y, iconSize / 2, 0, Math.PI * 2);
     ctx.fill();
+    ctx.strokeStyle = "rgba(24, 22, 20, 0.82)";
+    ctx.lineWidth = Math.max(1, iconSize * 0.08);
+    ctx.stroke();
     ctx.restore();
   }
 
