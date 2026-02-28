@@ -96,6 +96,11 @@ export const LINE_MAX_CAPACITY = 140;
 export const DEV_MODE_BUDGET_FLOOR = 1_000_000_000;
 export const TUTORIAL_STEP_DEFINITIONS = [
   {
+    id: "click_town",
+    title: "Click on the Town",
+    instruction: "Click on the town.",
+  },
+  {
     id: "resource_reveal",
     title: "Reveal Resources",
     instruction: "Press R to toggle the resource layer.",

@@ -724,6 +724,9 @@ export class GameRuntime {
     if (!currentStep) return;
 
     const matches =
+      (currentStep.id === "click_town" &&
+        action === "select_town" &&
+        details.isTown) ||
       (currentStep.id === "build_plant" &&
         action === "build" &&
         details.assetType === "plant" &&
@@ -930,16 +933,29 @@ export class GameRuntime {
       ? mapTowns.filter((region) => SPARSE_START_TOWN_IDS.has(region.id))
       : mapTowns;
     const towns = sourceTowns.map((region) => {
+      const starterRegion =
+        this.config.mode === "tutorial" && region.id === "capital"
+          ? {
+              ...region,
+              radius: 50,
+              districtType: "Rural Cluster",
+              baseDemand: 38,
+              population: 28,
+              growthRate: 0.28,
+              strategicValue: "Starter town for tutorial controls",
+              townVisualTier: "hamlet",
+            }
+          : region;
       const townCount = this.getSeededTownCount(region);
       const assets = this.getStarterAssetsForRegion(region, townCount);
-      const demandAnchor = this.getDemandAnchorForRegion({ ...region, townCount });
+      const demandAnchor = this.getDemandAnchorForRegion({ ...starterRegion, townCount });
       return {
-        ...deepClone(region),
+        ...deepClone(starterRegion),
         entityType: "town",
         priority: PRIORITY_DEFAULT,
         townCount,
         townCap: 1,
-        nominalBaseDemand: region.baseDemand,
+        nominalBaseDemand: starterRegion.baseDemand,
         stableServiceSeconds: townCount > 0 ? 8 : 0,
         outageSeconds: 0,
         coveredBySubstation: false,
@@ -2823,6 +2839,7 @@ export class GameRuntime {
 
     if (this.tool === TOOL_PAN) {
       this.selectedRegionId = region ? region.id : null;
+      this.recordTutorialAction("select_town", { isTown: !!region && this.isTownEntity(region) });
       this.pushHudUpdate();
       return;
     }
@@ -4861,6 +4878,10 @@ export class GameRuntime {
 
   getTownIconForRegion(region) {
     if (!this.isTownEntity(region)) return null;
+    const explicitTier = String(region.townVisualTier || "").toLowerCase();
+    if (explicitTier === "capital") return this.iconSet.town.capital || null;
+    if (explicitTier === "city") return this.iconSet.town.city || null;
+    if (explicitTier === "hamlet") return this.iconSet.town.hamlet || null;
     if (region.id === "capital") return this.iconSet.town.capital || null;
     if ((region.population || 0) >= 52) return this.iconSet.town.city || null;
     return this.iconSet.town.hamlet || null;
