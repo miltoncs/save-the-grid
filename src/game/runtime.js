@@ -107,6 +107,13 @@ const STORAGE_UNIT_CAPACITY_MWH = 20;
 const STORAGE_CHARGE_DRAW_MW = 20;
 const IN_GAME_HOUR_REAL_SECONDS = 120;
 const IN_GAME_HOURS_PER_REAL_SECOND = 1 / IN_GAME_HOUR_REAL_SECONDS;
+const TOWN_ICON_CITY_POPULATION_THRESHOLD = 52;
+const TOWN_SETTLEMENT_TYPES = new Set(["town", "city", "capital"]);
+const TOWN_DEMAND_BY_SETTLEMENT_TYPE = Object.freeze({
+  town: 45,
+  city: 70,
+  capital: 95,
+});
 const PRIORITY_DEFAULT = "nominal";
 const PRIORITY_ELEVATED = "elevated";
 const PRIORITY_OVERLAY_AREA_RATIO = 0.15;
@@ -583,11 +590,35 @@ export class GameRuntime {
     return { plant: 0, substation: 0, storage: 0 };
   }
 
+  inferTownSettlementType(region) {
+    const visualTier = String(region?.townVisualTier || "").toLowerCase();
+    if (visualTier === "capital") return "capital";
+    if (visualTier === "city") return "city";
+    if (visualTier === "hamlet") return "town";
+    if (region?.id === "capital") return "capital";
+    if (Number(region?.population || 0) >= TOWN_ICON_CITY_POPULATION_THRESHOLD) return "city";
+    return "town";
+  }
+
+  normalizeTownSettlementType(value, fallbackRegion = null) {
+    const normalized = String(value || "").toLowerCase();
+    if (TOWN_SETTLEMENT_TYPES.has(normalized)) return normalized;
+    return this.inferTownSettlementType(fallbackRegion);
+  }
+
+  getTownSettlementTypeForRegion(region) {
+    const normalizedType = this.normalizeTownSettlementType(region?.settlementType, region);
+    if (region && region.settlementType !== normalizedType) {
+      region.settlementType = normalizedType;
+    }
+    return normalizedType;
+  }
+
   getDemandAnchorForRegion(region) {
     const townCount = Math.max(0, Number(region.townCount || 0));
     if (townCount <= 0) return 0;
-    const nominalBaseDemand = Number(region.nominalBaseDemand || region.baseDemand || 0);
-    return nominalBaseDemand;
+    const settlementType = this.getTownSettlementTypeForRegion(region);
+    return TOWN_DEMAND_BY_SETTLEMENT_TYPE[settlementType] || TOWN_DEMAND_BY_SETTLEMENT_TYPE.town;
   }
 
   ensureRegionResourceProfiles() {
@@ -948,14 +979,22 @@ export class GameRuntime {
           : region;
       const townCount = this.getSeededTownCount(region);
       const assets = this.getStarterAssetsForRegion(region, townCount);
-      const demandAnchor = this.getDemandAnchorForRegion({ ...starterRegion, townCount });
+      const settlementType = this.getTownSettlementTypeForRegion(starterRegion);
+      const demandAnchor = this.getDemandAnchorForRegion({
+        ...starterRegion,
+        townCount,
+        settlementType,
+      });
       return {
         ...deepClone(starterRegion),
         entityType: "town",
         priority: PRIORITY_DEFAULT,
+        settlementType,
         townCount,
         townCap: 1,
-        nominalBaseDemand: starterRegion.baseDemand,
+        nominalBaseDemand: demandAnchor,
+        baseDemand: demandAnchor,
+        townVisualTier: starterRegion.townVisualTier || null,
         stableServiceSeconds: townCount > 0 ? 8 : 0,
         outageSeconds: 0,
         coveredBySubstation: false,
@@ -1082,7 +1121,12 @@ export class GameRuntime {
       region.coverageDistance = Math.max(0, Number(region.coverageDistance || 0));
       region.storageChargingMw = 0;
       region.priority = this.normalizePriority(region.priority);
-      region.baseDemand = region.entityType === "town" ? Number(region.baseDemand || 0) : 0;
+      const settlementType =
+        region.entityType === "town" ? this.getTownSettlementTypeForRegion(region) : null;
+      region.settlementType = settlementType;
+      const demandAnchor = region.entityType === "town" ? this.getDemandAnchorForRegion(region) : 0;
+      region.baseDemand = demandAnchor;
+      region.nominalBaseDemand = demandAnchor;
       region.population = region.entityType === "town" ? Number(region.population || 0) : 0;
       region.growthRate = region.entityType === "town" ? Number(region.growthRate || 0) : 0;
       if (!region.assets) {
@@ -3149,8 +3193,6 @@ export class GameRuntime {
 
       const climateMultiplier =
         1 + ((seasonProfile[region.climate] || 1) - 1) * this.config.climateIntensity;
-      const populationMultiplier =
-        1 + ((region.population - 20) / 100) * 0.52 * this.config.demandGrowthMultiplier;
       const volatility =
         region.climate === "warm"
           ? 1 + Math.sin(this.state.runtimeSeconds * 0.19 + region.x * 0.008) * 0.08
@@ -3160,7 +3202,7 @@ export class GameRuntime {
 
       const incidentDemand = this.getIncidentMultiplierForRegion(region.id, "demand_boost");
       const targetDemand = clamp(
-        demandAnchor * populationMultiplier * climateMultiplier * volatility * incidentDemand,
+        demandAnchor * climateMultiplier * volatility * incidentDemand,
         8,
         420
       );
@@ -3515,17 +3557,31 @@ export class GameRuntime {
     if (!anchor.id) {
       this.state.nextTownId = pendingTownIndex + 1;
     }
-    const initialDemand = clamp(anchor.baseDemand * randomRange(0.26, 0.42), 8, anchor.baseDemand);
     const population = Math.max(8, Number(anchor.population || 24) * randomRange(0.32, 0.48));
+    const settlementType = this.getTownSettlementTypeForRegion({
+      ...anchor,
+      id: resolvedId,
+      population,
+    });
+    const demandAnchor = this.getDemandAnchorForRegion({
+      ...anchor,
+      id: resolvedId,
+      settlementType,
+      townCount: 1,
+      population,
+    });
+    const initialDemand = clamp(demandAnchor * randomRange(0.26, 0.42), 8, demandAnchor);
     return {
       ...deepClone(anchor),
       id: resolvedId,
       name: resolvedName,
       radius: Number(anchor.radius || randomRange(54, 66)),
       priority: PRIORITY_DEFAULT,
+      settlementType,
       townCount: 1,
       townCap: 1,
-      nominalBaseDemand: Number(anchor.baseDemand || initialDemand),
+      nominalBaseDemand: demandAnchor,
+      baseDemand: demandAnchor,
       population,
       growthRate: Number(anchor.growthRate || 0.42),
       stableServiceSeconds: 0,
@@ -4882,8 +4938,9 @@ export class GameRuntime {
     if (explicitTier === "capital") return this.iconSet.town.capital || null;
     if (explicitTier === "city") return this.iconSet.town.city || null;
     if (explicitTier === "hamlet") return this.iconSet.town.hamlet || null;
-    if (region.id === "capital") return this.iconSet.town.capital || null;
-    if ((region.population || 0) >= 52) return this.iconSet.town.city || null;
+    const settlementType = this.getTownSettlementTypeForRegion(region);
+    if (settlementType === "capital") return this.iconSet.town.capital || null;
+    if (settlementType === "city") return this.iconSet.town.city || null;
     return this.iconSet.town.hamlet || null;
   }
 
@@ -5665,6 +5722,7 @@ export class GameRuntime {
       .map((town) => ({
       id: town.id,
       name: town.name,
+      settlementType: this.getTownSettlementTypeForRegion(town),
       x: Number(town.x.toFixed(1)),
       y: Number(town.y.toFixed(1)),
       priority: this.normalizePriority(town.priority),
