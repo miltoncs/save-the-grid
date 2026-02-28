@@ -807,6 +807,17 @@
   box-shadow: 0 0 0 1px rgba(246, 245, 208, 0.72), 0 0 12px rgba(245, 230, 174, 0.4);
 }
 
+.alert-list li.alert-focusable {
+  cursor: pointer;
+}
+
+.alert-list li.alert-focusable:hover,
+.alert-list li.alert-focusable:focus-visible {
+  border-color: rgba(236, 246, 208, 0.52);
+  box-shadow: 0 0 0 1px rgba(236, 246, 208, 0.36);
+  outline: none;
+}
+
 .records-layout {
   display: grid;
   gap: 14px;

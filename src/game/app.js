@@ -1116,6 +1116,29 @@ export class SaveTheGridApp {
       this.runtime.clearAllPriorityModifiers();
     });
 
+    const alertList = this.root.querySelector("#alert-list");
+    const focusAlertFromListItem = (listItem) => {
+      if (!this.runtime || !listItem) return;
+      if (listItem.getAttribute("data-alert-focusable") !== "true") return;
+      const alertId = listItem.getAttribute("data-alert-id");
+      if (!alertId) return;
+      this.runtime.focusCameraOnAlert(alertId);
+    };
+
+    alertList?.addEventListener("click", (event) => {
+      const target = event.target instanceof Element ? event.target.closest("li[data-alert-id]") : null;
+      if (!target) return;
+      focusAlertFromListItem(target);
+    });
+
+    alertList?.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      const target = event.target instanceof Element ? event.target.closest("li[data-alert-id]") : null;
+      if (!target) return;
+      event.preventDefault();
+      focusAlertFromListItem(target);
+    });
+
   }
 
   startRun(runConfig) {
@@ -1284,7 +1307,12 @@ export class SaveTheGridApp {
             .slice(0, 4)
             .map((alert) => {
               const level = ALERT_LEVELS[alert.level] || ALERT_LEVELS.advisory;
-              return `<li data-alert-id="${alert.id}" style="--level:${level.color}"><strong>${level.label}</strong><span>${alert.text}</span></li>`;
+              const focusable = !!alert.focusRegionId;
+              const classes = focusable ? "alert-focusable" : "";
+              const interactivity = focusable
+                ? ' role="button" tabindex="0" aria-label="Focus camera on alert location"'
+                : "";
+              return `<li class="${classes}" data-alert-id="${alert.id}" data-alert-focusable="${focusable ? "true" : "false"}" style="--level:${level.color}"${interactivity}><strong>${level.label}</strong><span>${alert.text}</span></li>`;
             })
             .join("")
         : "<li><span>No active alerts.</span></li>";
