@@ -1292,11 +1292,16 @@ export class SaveTheGridApp {
     const objectiveText = $("#objective-text");
     const objectiveDetail = $("#objective-detail");
     const objectiveFill = $("#objective-progress-fill");
+    const objectivePanel = this.root.querySelector(".floating-objective");
+    const tutorialObjectiveActive = payload.runLabel === "Tutorial";
 
     if (objectiveTitle) objectiveTitle.textContent = payload.objective.title;
     if (objectiveText) objectiveText.textContent = payload.objective.text;
     if (objectiveDetail) objectiveDetail.textContent = payload.objective.detail;
     if (objectiveFill) objectiveFill.style.width = `${Math.round(payload.objective.progress * 100)}%`;
+    if (objectivePanel) {
+      objectivePanel.classList.toggle("is-tutorial-objective", tutorialObjectiveActive);
+    }
 
     const incidentList = $("#incident-list");
     if (incidentList) {

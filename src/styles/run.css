@@ -273,6 +273,10 @@
   width: min(440px, 52vw);
 }
 
+.floating-objective.is-tutorial-objective {
+  top: max(4px, env(safe-area-inset-top));
+}
+
 .floating-ops-panel {
   right: 16px;
   bottom: 92px;
