@@ -745,6 +745,7 @@ export class SaveTheGridApp {
 
   buildRunScreenMarkup() {
     const plantCost = Math.ceil(ASSET_RULES.plant?.cost ?? 0);
+    const plantGenerationMw = Math.max(0, Number(ASSET_RULES.plant?.generation ?? 0)).toFixed(0);
     const substationCost = Math.ceil(ASSET_RULES.substation?.cost ?? 0);
     const storageCost = Math.ceil(ASSET_RULES.storage?.cost ?? 0);
     const lineCostPer100px = Math.ceil((LINE_BASE_BUILD_COST_PER_WORLD_UNIT ?? 0) * 100);
@@ -896,6 +897,7 @@ export class SaveTheGridApp {
                 <span class="dock-tooltip" aria-hidden="true">
                   <span class="dock-tooltip-title">Wind Plant</span>
                   <span class="dock-tooltip-price">Price ${plantCost}</span>
+                  <span class="dock-tooltip-price">Output ${plantGenerationMw} MW</span>
                 </span>
               </button>
               <button
@@ -915,6 +917,7 @@ export class SaveTheGridApp {
                 <span class="dock-tooltip" aria-hidden="true">
                   <span class="dock-tooltip-title">Solar Plant</span>
                   <span class="dock-tooltip-price">Price ${plantCost}</span>
+                  <span class="dock-tooltip-price">Output ${plantGenerationMw} MW</span>
                 </span>
               </button>
               <button
@@ -934,6 +937,7 @@ export class SaveTheGridApp {
                 <span class="dock-tooltip" aria-hidden="true">
                   <span class="dock-tooltip-title">Gas Plant</span>
                   <span class="dock-tooltip-price">Price ${plantCost}</span>
+                  <span class="dock-tooltip-price">Output ${plantGenerationMw} MW</span>
                 </span>
               </button>
               <button
