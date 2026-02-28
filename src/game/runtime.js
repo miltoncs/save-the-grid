@@ -4371,7 +4371,9 @@ export class GameRuntime {
     if (!region) return null;
     const anchor = this.worldToScreen(region.x, region.y);
     const isCity = this.isTownEntity(region);
-    const isPowerplant = !isCity && Math.max(0, Number(region?.assets?.plant || 0)) > 0;
+    const plantCount = Math.max(0, Number(region?.assets?.plant || 0));
+    const isPowerplant = !isCity && plantCount > 0;
+    const plantType = this.normalizePlantType(region?.plantType);
     const localTownDemandMw = this.isTownEntity(region) ? Math.max(0, Number(region.demand || 0)) : 0;
     const storageDemandMw = Math.max(0, this.getStorageChargeDemandMW(region, TICK_SECONDS));
     const totalDemandMw = localTownDemandMw + storageDemandMw;
@@ -4382,6 +4384,17 @@ export class GameRuntime {
     const powerStoredMWh = Math.max(0, Number(this.normalizeRegionStorageCharge(region)));
     const storedCapacityMWh = Math.max(0, Number(this.getRegionStorageCapacityMWh(region)));
     const kindLabel = this.isTownEntity(region) ? "City" : "Structure";
+    const showRecurringOperatingCost = isPowerplant && plantType === "natural_gas";
+    let recurringOperatingCostPerSecond = 0;
+    if (showRecurringOperatingCost) {
+      const perf = this.getPlantPerformanceSnapshot({
+        plantType,
+        resourceProfile: region.resourceProfile || this.createEmptyResourceProfile(),
+        climate: region.climate || "temperate",
+      });
+      recurringOperatingCostPerSecond =
+        Math.max(0, Number(perf.operatingCostPerPlantPerSecond || 0)) * plantCount;
+    }
 
     return {
       id: region.id,
@@ -4399,6 +4412,8 @@ export class GameRuntime {
       showPowerStored: storedCapacityMWh > 0,
       powerStoredMWh: Number(powerStoredMWh.toFixed(2)),
       storedCapacityMWh: Number(storedCapacityMWh.toFixed(2)),
+      showRecurringOperatingCost,
+      recurringOperatingCostPerSecond: Number(recurringOperatingCostPerSecond.toFixed(2)),
     };
   }
 
