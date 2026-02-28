@@ -2256,12 +2256,11 @@ export class GameRuntime {
   }
 
   willLoseLineEndpointAfterDemolition(region, assetType) {
-    let remainingAssets = 0;
-    for (const type of ASSET_ORDER) {
-      const count = Math.max(0, Number(region?.assets?.[type] || 0));
-      remainingAssets += type === assetType ? Math.max(0, count - 1) : count;
-    }
-    return remainingAssets <= 0;
+    if (!region || this.isTownEntity(region)) return true;
+    const substationCount = Math.max(0, Number(region?.assets?.substation || 0));
+    const remainingSubstations =
+      assetType === "substation" ? Math.max(0, substationCount - 1) : substationCount;
+    return remainingSubstations <= 0;
   }
 
   estimateDemolishRefund(region, assetType, buildingValue = this.peekDemolishAssetValue(region, assetType)) {
@@ -2305,7 +2304,7 @@ export class GameRuntime {
   canEndpointHostLine(region) {
     if (!region) return false;
     if (this.isTownEntity(region)) return false;
-    return this.getRegionTotalAssets(region) > 0;
+    return this.hasSubstationAsset(region);
   }
 
   clearLineSelection() {
@@ -2317,8 +2316,8 @@ export class GameRuntime {
     if (!this.lineBuildStartRegionId) {
       if (!this.canEndpointHostLine(region)) {
         const text = this.isTownEntity(region)
-          ? "Towns are demand points. Build a plant/substation/battery on an infrastructure point first."
-          : "Line endpoint must have a plant, substation, or battery before connecting.";
+          ? "Towns are demand points. Long-range lines start from substations on infrastructure points."
+          : "Long-range line endpoint must have a substation before connecting.";
         this.pushAlert(
           text,
           "advisory",
@@ -2345,8 +2344,8 @@ export class GameRuntime {
     }
     if (!this.canEndpointHostLine(startRegion) || !this.canEndpointHostLine(region)) {
       const text = this.isTownEntity(region) || this.isTownEntity(startRegion)
-        ? "Line endpoints must be infrastructure points with a plant, substation, or battery."
-        : "Line endpoints require plant/substation/battery infrastructure at both points.";
+        ? "Long-range line endpoints must be substations on infrastructure points."
+        : "Long-range line endpoints require substations at both points.";
       this.pushAlert(
         text,
         "warning",
@@ -3192,6 +3191,64 @@ export class GameRuntime {
     }, 0);
   }
 
+  getSubstationServiceRadius() {
+    return Math.max(
+      0,
+      Number(this.config.substationRadius || SUBSTATION_RADIUS_BY_PROFILE.standard || 0)
+    );
+  }
+
+  hasSubstationAsset(region) {
+    return Math.max(0, Number(region?.assets?.substation || 0)) > 0;
+  }
+
+  buildAutoShortRangeLinkSets() {
+    const townLinks = [];
+    const infrastructureLinks = [];
+    const radius = this.getSubstationServiceRadius();
+    if (radius <= 0) {
+      return { townLinks, infrastructureLinks };
+    }
+
+    const dedupeInfrastructurePairs = new Set();
+    for (const source of this.state.regions) {
+      if (!this.hasSubstationAsset(source)) continue;
+      for (const target of this.state.regions) {
+        if (!target || target.id === source.id) continue;
+        const distance = Math.hypot(source.x - target.x, source.y - target.y);
+        if (distance > radius) continue;
+
+        const targetIsSubstation = this.hasSubstationAsset(target);
+        const targetIsTown = this.isTownEntity(target);
+        if (targetIsSubstation || (!targetIsTown && this.getRegionTotalAssets(target) > 0)) {
+          const [aId, bId] = source.id < target.id ? [source.id, target.id] : [target.id, source.id];
+          const pairKey = `${aId}|${bId}`;
+          if (dedupeInfrastructurePairs.has(pairKey)) continue;
+          dedupeInfrastructurePairs.add(pairKey);
+          infrastructureLinks.push({
+            id: `short-infra-${aId}-${bId}`,
+            a: aId,
+            b: bId,
+            distance,
+            linkType: targetIsSubstation ? "substation" : "structure",
+          });
+          continue;
+        }
+
+        if (!targetIsTown) continue;
+        townLinks.push({
+          id: `short-town-${source.id}-${target.id}`,
+          a: source.id,
+          b: target.id,
+          distance,
+          linkType: "town",
+        });
+      }
+    }
+
+    return { townLinks, infrastructureLinks };
+  }
+
   buildTownComponents() {
     const adjacency = new Map();
     for (const town of this.state.regions) {
@@ -3200,6 +3257,13 @@ export class GameRuntime {
 
     for (const link of this.state.links) {
       if (!link.built || link.safeCapacity <= 0) continue;
+      if (!adjacency.has(link.a) || !adjacency.has(link.b)) continue;
+      adjacency.get(link.a).push(link.b);
+      adjacency.get(link.b).push(link.a);
+    }
+
+    const { infrastructureLinks } = this.buildAutoShortRangeLinkSets();
+    for (const link of infrastructureLinks) {
       if (!adjacency.has(link.a) || !adjacency.has(link.b)) continue;
       adjacency.get(link.a).push(link.b);
       adjacency.get(link.b).push(link.a);
@@ -3657,6 +3721,11 @@ export class GameRuntime {
       const a = this.findRegion(link.a);
       const b = this.findRegion(link.b);
       if (!a || !b || !link.built) {
+        link.safeCapacity = 0;
+        link.hardCapacity = 0;
+        continue;
+      }
+      if (!this.canEndpointHostLine(a) || !this.canEndpointHostLine(b)) {
         link.safeCapacity = 0;
         link.hardCapacity = 0;
         continue;
@@ -4660,22 +4729,26 @@ export class GameRuntime {
     const zoom = this.getCameraZoom();
     if (zoom <= 0.62) return;
 
-    for (const town of this.state.regions) {
-      if (!this.isTownEntity(town)) continue;
-      if (!town.coveredBySubstation || !town.coverageSourceId) continue;
-      const source = this.findRegion(town.coverageSourceId);
-      if (!source) continue;
-      if (source.id === town.id) continue;
+    const { townLinks, infrastructureLinks } = this.buildAutoShortRangeLinkSets();
+    const shortRangeLinks = [...infrastructureLinks, ...townLinks];
+
+    for (const link of shortRangeLinks) {
+      const source = this.findRegion(link.a);
+      const target = this.findRegion(link.b);
+      if (!source || !target) continue;
 
       const from = this.worldToScreen(source.x, source.y);
-      const to = this.worldToScreen(town.x, town.y);
+      const to = this.worldToScreen(target.x, target.y);
+      const isInfrastructureLink = link.linkType !== "town";
 
       if (zoom <= SIMPLIFIED_LINE_RENDER_ZOOM_THRESHOLD) {
         this.drawThinParallelLines(ctx, from, to, {
-          count: 2,
+          count: isInfrastructureLink ? 3 : 2,
           spacing: clamp(1.1 + zoom * 0.9, 1.1, 2.1),
           lineWidth: clamp(0.26 + zoom * 0.3, 0.45, 0.82),
-          strokeStyle: "rgba(123, 173, 198, 0.84)",
+          strokeStyle: isInfrastructureLink
+            ? "rgba(136, 198, 214, 0.86)"
+            : "rgba(123, 173, 198, 0.84)",
           alpha: 0.94,
         });
         continue;
@@ -5712,6 +5785,8 @@ export class GameRuntime {
         plantType: node.plantType || DEFAULT_PLANT_TYPE,
         plantState: buildPlantStateSnapshot(node),
       }));
+    const shortRangeLinkSets = this.buildAutoShortRangeLinkSets();
+    const shortRangeLinks = [...shortRangeLinkSets.infrastructureLinks, ...shortRangeLinkSets.townLinks];
 
     const payload = {
       mode: this.config.mode,
@@ -5855,6 +5930,13 @@ export class GameRuntime {
           stress: Number(link.stress.toFixed(3)),
           overload: link.overload,
         })),
+      shortRangeLinks: shortRangeLinks.map((link) => ({
+        id: link.id,
+        a: link.a,
+        b: link.b,
+        linkType: link.linkType,
+        distance: Number(link.distance.toFixed(2)),
+      })),
       incidents: this.state.incidents.map((incident) => ({
         title: incident.title,
         level: incident.level,

@@ -119,7 +119,7 @@ export const TUTORIAL_STEP_DEFINITIONS = [
     id: "build_line",
     title: "Build a Line",
     instruction:
-      "Press 6 (or L) to select the Powerline tool, click a power plant, then click a substation.",
+      "Press 6 (or L), click a substation to set the start, then click another substation endpoint.",
   },
   {
     id: "service_town",
