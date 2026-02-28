@@ -2419,6 +2419,39 @@ export class GameRuntime {
     return LONG_RANGE_LINE_MAX_DISTANCE;
   }
 
+  getLongRangeLineOverlapRadius(region) {
+    const placementRadius = this.getBuildPlacementRadius(region);
+    return Math.max(8, placementRadius * 0.45);
+  }
+
+  findLongRangeLineOverlapConflict(startRegion, endRegion) {
+    if (!startRegion || !endRegion) return null;
+    for (const candidate of this.state.regions) {
+      if (!candidate) continue;
+      if (candidate.id === startRegion.id || candidate.id === endRegion.id) continue;
+      const candidateOccupied =
+        this.isTownEntity(candidate) || this.getRegionTotalAssets(candidate) > 0;
+      if (!candidateOccupied) continue;
+      const clearanceRadius = this.getLongRangeLineOverlapRadius(candidate);
+      const distanceToSegment = this.pointToSegmentDistance(
+        candidate.x,
+        candidate.y,
+        startRegion.x,
+        startRegion.y,
+        endRegion.x,
+        endRegion.y
+      );
+      if (distanceToSegment <= clearanceRadius) {
+        return {
+          candidate,
+          distanceToSegment,
+          clearanceRadius,
+        };
+      }
+    }
+    return null;
+  }
+
   canEndpointHostLine(region) {
     if (!region) return false;
     if (this.isTownEntity(region)) return false;
@@ -2505,6 +2538,17 @@ export class GameRuntime {
         `Endpoint out of range. Maximum ${Math.round(maxRange)} (current ${Math.round(lineLength)}).`,
         "warning",
         5
+      );
+      return;
+    }
+
+    const overlapConflict = this.findLongRangeLineOverlapConflict(startRegion, region);
+    if (overlapConflict) {
+      const blockerName = this.getRegionDisplayName(overlapConflict.candidate);
+      this.pushAlert(
+        `Route blocked by ${blockerName}. Long-range lines cannot overlap existing structures or cities.`,
+        "warning",
+        6
       );
       return;
     }
@@ -5722,7 +5766,7 @@ export class GameRuntime {
     const selected = this.getSelectedRegion();
     const objective = this.buildObjectiveStatus();
     const selectedEntityPopup =
-      this.tool === TOOL_LINE ? null : this.buildSelectedRegionPopup(selected);
+      this.tool === TOOL_LINE || this.tool === TOOL_BUILD ? null : this.buildSelectedRegionPopup(selected);
 
     this.callbacks.onHud({
       runLabel: this.config.label,
