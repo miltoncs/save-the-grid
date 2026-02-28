@@ -243,9 +243,12 @@ select {
   border: 1px solid var(--line-faint);
   border-radius: 22px;
   position: relative;
+  align-self: start;
   overflow: hidden;
   background: #0a1c2a;
-  min-height: clamp(320px, 58vh, 680px);
+  height: clamp(320px, 58vh, 680px);
+  max-height: calc(100vh - (2 * clamp(14px, 2.2vw, 28px)));
+  min-height: 0;
   box-shadow: var(--shadow-heavy);
 }
 
