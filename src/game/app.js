@@ -105,6 +105,11 @@ function formatMwh(value) {
   return `${normalizeSignedValue(value).toFixed(1)} MWh`;
 }
 
+function formatRecurringCostPerSecond(value) {
+  const normalized = Math.max(0, Number(value || 0));
+  return `${normalized.toFixed(2)}/s`;
+}
+
 export class SaveTheGridApp {
   constructor(root) {
     this.root = root;
@@ -1321,6 +1326,14 @@ export class SaveTheGridApp {
           rows.push(
             `<div class="selected-entity-popup-row"><dt>Power Supply</dt><dd>${formatMw(
               popup.powerSupplyMw
+            )}</dd></div>`
+          );
+        }
+
+        if (popup.showRecurringOperatingCost) {
+          rows.push(
+            `<div class="selected-entity-popup-row"><dt>Recurring Operating Cost</dt><dd>${formatRecurringCostPerSecond(
+              popup.recurringOperatingCostPerSecond
             )}</dd></div>`
           );
         }
