@@ -4374,6 +4374,7 @@ export class GameRuntime {
     const plantCount = Math.max(0, Number(region?.assets?.plant || 0));
     const isPowerplant = !isCity && plantCount > 0;
     const plantType = this.normalizePlantType(region?.plantType);
+    const settlementType = isCity ? this.getTownSettlementTypeForRegion(region) : null;
     const localTownDemandMw = this.isTownEntity(region) ? Math.max(0, Number(region.demand || 0)) : 0;
     const storageDemandMw = Math.max(0, this.getStorageChargeDemandMW(region, TICK_SECONDS));
     const totalDemandMw = localTownDemandMw + storageDemandMw;
@@ -4383,7 +4384,7 @@ export class GameRuntime {
     const totalSupplyMw = Math.max(0, Number(this.computeGenerationForEntity(region) || 0));
     const powerStoredMWh = Math.max(0, Number(this.normalizeRegionStorageCharge(region)));
     const storedCapacityMWh = Math.max(0, Number(this.getRegionStorageCapacityMWh(region)));
-    const kindLabel = this.isTownEntity(region) ? "City" : "Structure";
+    const kindLabel = isCity ? settlementType || "town" : "Structure";
     const showRecurringOperatingCost = isPowerplant && plantType === "natural_gas";
     let recurringOperatingCostPerSecond = 0;
     if (showRecurringOperatingCost) {
