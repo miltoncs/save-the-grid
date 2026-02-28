@@ -1309,7 +1309,7 @@ export class SaveTheGridApp {
         selectedPopupKindNode.textContent = popup.kindLabel || "Structure";
 
         const popupWidth = 280;
-        const popupHeight = 230 + (Array.isArray(popup.detailRows) ? popup.detailRows.length * 22 : 0);
+        const popupHeight = 230;
         const targetX = clamp(Number(popup.anchorX || 0) + 26, 12, window.innerWidth - popupWidth - 12);
         const targetY = clamp(
           Number(popup.anchorY || 0) - popupHeight * 0.5,
@@ -1320,57 +1320,46 @@ export class SaveTheGridApp {
         selectedPopupNode.style.top = `${targetY}px`;
 
         const rows = [];
-        const demandDiffClass = popup.powerInDiffMw > 0 ? "is-positive" : popup.powerInDiffMw < 0 ? "is-negative" : "";
-        const supplyDiffClass = popup.powerOutDiffMw > 0 ? "is-positive" : popup.powerOutDiffMw < 0 ? "is-negative" : "";
 
-        if (popup.showDemand) {
-          if (!popup.isPowerplant) {
-            rows.push(
-              `<div class="selected-entity-popup-row"><dt>Total Demand</dt><dd>${formatMw(
-                popup.totalDemandMw
-              )}</dd></div>`
-            );
-          }
+        if (popup.showPowerSupply) {
           rows.push(
-            `<div class="selected-entity-popup-row"><dt>Power In</dt><dd>${formatMw(
-              popup.powerInMw
-            )} <span class="selected-entity-popup-diff ${demandDiffClass}">(${formatSignedMw(
-              popup.powerInDiffMw
-            )})</span></dd></div>`
-          );
-        }
-
-        if (popup.showSupply) {
-          rows.push(
-            `<div class="selected-entity-popup-row"><dt>Total Supply</dt><dd>${formatMw(
-              popup.totalSupplyMw
+            `<div class="selected-entity-popup-row"><dt>Power Supply</dt><dd>${formatMw(
+              popup.powerSupplyMw
             )}</dd></div>`
           );
+        }
+
+        if (popup.showPowerDemand) {
           rows.push(
-            `<div class="selected-entity-popup-row"><dt>Power Out</dt><dd>${formatMw(
-              popup.powerOutMw
-            )} <span class="selected-entity-popup-diff ${supplyDiffClass}">(${formatSignedMw(
-              popup.powerOutDiffMw
+            `<div class="selected-entity-popup-row"><dt>Power Demand</dt><dd>${formatMw(
+              popup.powerDemandMw
+            )}</dd></div>`
+          );
+        }
+
+        if (popup.showCurrentPower) {
+          const currentDiffClass =
+            popup.currentPowerDiffMw > 0
+              ? "is-positive"
+              : popup.currentPowerDiffMw < 0
+                ? "is-negative"
+                : "";
+          rows.push(
+            `<div class="selected-entity-popup-row"><dt>Current Power</dt><dd>${formatMw(
+              popup.currentPowerMw
+            )} <span class="selected-entity-popup-diff ${currentDiffClass}">(${formatSignedMw(
+              popup.currentPowerDiffMw
             )})</span></dd></div>`
           );
         }
 
-        if (popup.showStored) {
+        if (popup.showPowerStored) {
           const capacityText = popup.storedCapacityMWh > 0 ? ` / ${formatMwh(popup.storedCapacityMWh)}` : "";
           rows.push(
             `<div class="selected-entity-popup-row"><dt>Power Stored</dt><dd>${formatMwh(
               popup.powerStoredMWh
             )}${capacityText}</dd></div>`
           );
-        }
-
-        if (Array.isArray(popup.detailRows) && popup.detailRows.length) {
-          for (const detail of popup.detailRows) {
-            if (!detail || !detail.label) continue;
-            rows.push(
-              `<div class="selected-entity-popup-row"><dt>${detail.label}</dt><dd>${detail.value || ""}</dd></div>`
-            );
-          }
         }
 
         if (!rows.length) {

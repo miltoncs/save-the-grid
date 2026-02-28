@@ -4228,42 +4228,8 @@ export class GameRuntime {
   buildSelectedRegionPopup(region) {
     if (!region) return null;
     const anchor = this.worldToScreen(region.x, region.y);
-    const isPowerplant = !this.isTownEntity(region) && Math.max(0, Number(region?.assets?.plant || 0)) > 0;
-    const plantCount = Math.max(0, Number(region?.assets?.plant || 0));
-    const plantType = this.normalizePlantType(region?.plantType);
-    const plantPerf = isPowerplant
-      ? this.getPlantPerformanceSnapshot({
-          plantType,
-          resourceProfile: region.resourceProfile || this.createEmptyResourceProfile(),
-          climate: region.climate || "temperate",
-        })
-      : null;
-    const detailRows = [];
-    if (isPowerplant && plantPerf) {
-      const totalOutput = plantCount * plantPerf.generationPerPlant;
-      const totalOpex = plantCount * plantPerf.operatingCostPerPlantPerSecond;
-      const resourceLabel = plantPerf.resourceKey.replace(/_/g, " ");
-      detailRows.push({
-        label: "Plant Type",
-        value: this.getPlantPowerplantLabel(plantType).replace(" Powerplant", ""),
-      });
-      detailRows.push({
-        label: "Output",
-        value: `${totalOutput.toFixed(1)} MW (base ${plantPerf.baseGeneration.toFixed(1)} x${plantPerf.outputMultiplier.toFixed(2)})`,
-      });
-      detailRows.push({
-        label: "Operating",
-        value: `${totalOpex.toFixed(2)}/s (base ${plantPerf.baseOperatingCostPerSecond.toFixed(2)} x${plantPerf.operatingMultiplier.toFixed(2)})`,
-      });
-      detailRows.push({
-        label: "Resource Fit",
-        value: `${Math.round(plantPerf.resourceWeight * 100)}% ${resourceLabel} (x${plantPerf.resourceOutputMultiplier.toFixed(2)} output)`,
-      });
-      detailRows.push({
-        label: "Conditions",
-        value: `Season x${plantPerf.outputSeasonMultiplier.toFixed(2)} | Climate x${plantPerf.outputClimateMultiplier.toFixed(2)}`,
-      });
-    }
+    const isCity = this.isTownEntity(region);
+    const isPowerplant = !isCity && Math.max(0, Number(region?.assets?.plant || 0)) > 0;
     const localTownDemandMw = this.isTownEntity(region) ? Math.max(0, Number(region.demand || 0)) : 0;
     const storageDemandMw = Math.max(0, this.getStorageChargeDemandMW(region, TICK_SECONDS));
     const totalDemandMw = localTownDemandMw + storageDemandMw;
@@ -4271,35 +4237,26 @@ export class GameRuntime {
     const localStorageInMw = Math.max(0, Number(region.storageChargingMw || 0));
     const localDemandServedMw = localTownServedMw + localStorageInMw;
     const totalSupplyMw = Math.max(0, Number(this.computeGenerationForEntity(region) || 0));
-    const lineFlow = this.getRegionLineFlowTotals(region.id);
-    const powerInMw = lineFlow.incomingMw + totalSupplyMw;
-    const powerOutMw = lineFlow.outgoingMw + localDemandServedMw;
     const powerStoredMWh = Math.max(0, Number(this.normalizeRegionStorageCharge(region)));
     const storedCapacityMWh = Math.max(0, Number(this.getRegionStorageCapacityMWh(region)));
-    const showDemand = totalDemandMw > 0.05 || powerInMw > 0.05;
-    const showSupply = totalSupplyMw > 0.05 || powerOutMw > 0.05;
-    const showStored = storedCapacityMWh > 0;
     const kindLabel = this.isTownEntity(region) ? "City" : "Structure";
 
     return {
       id: region.id,
       name: this.getRegionDisplayName(region),
       kindLabel,
-      isPowerplant,
       anchorX: Number(anchor.x.toFixed(1)),
       anchorY: Number(anchor.y.toFixed(1)),
-      totalDemandMw: Number(totalDemandMw.toFixed(2)),
-      powerInMw: Number(powerInMw.toFixed(2)),
-      powerInDiffMw: Number((powerInMw - totalDemandMw).toFixed(2)),
-      totalSupplyMw: Number(totalSupplyMw.toFixed(2)),
-      powerOutMw: Number(powerOutMw.toFixed(2)),
-      powerOutDiffMw: Number((powerOutMw - totalSupplyMw).toFixed(2)),
+      showPowerSupply: isPowerplant,
+      powerSupplyMw: Number(totalSupplyMw.toFixed(2)),
+      showPowerDemand: isCity,
+      powerDemandMw: Number(totalDemandMw.toFixed(2)),
+      showCurrentPower: isCity,
+      currentPowerMw: Number(localDemandServedMw.toFixed(2)),
+      currentPowerDiffMw: Number((localDemandServedMw - totalDemandMw).toFixed(2)),
+      showPowerStored: storedCapacityMWh > 0,
       powerStoredMWh: Number(powerStoredMWh.toFixed(2)),
       storedCapacityMWh: Number(storedCapacityMWh.toFixed(2)),
-      showDemand,
-      showSupply,
-      showStored,
-      detailRows,
     };
   }
 
@@ -5277,30 +5234,19 @@ export class GameRuntime {
   drawPlantBuildCostPreview(ctx, previewData, iconSize) {
     if (!previewData || !Number.isFinite(previewData.cost)) return;
 
-    const resourceLabel = String(previewData.resourceKey || "")
-      .replace(/_/g, " ")
-      .trim();
-    const plantLabel = String(previewData.label || "Plant")
-      .replace(/\s*Powerplant$/i, "")
-      .trim();
-    const lines = [
-      `${plantLabel} C${Math.max(0, Math.round(previewData.cost))} G${Number(previewData.effectiveGeneration || 0).toFixed(1)}MW Op${Number(previewData.effectiveOperatingCostPerSecond || 0).toFixed(2)}/s`,
-      `xO${Number(previewData.outputMultiplier || 1).toFixed(2)} [R${Number(previewData.resourceOutputMultiplier || 1).toFixed(2)} S${Number(previewData.outputSeasonMultiplier || 1).toFixed(2)} C${Number(previewData.outputClimateMultiplier || 1).toFixed(2)}] Fit ${Math.round(Number(previewData.resourceWeight || 0) * 100)}% ${resourceLabel}`,
-    ];
+    const baseOutputMw = Math.max(
+      0,
+      Number(previewData.baseGeneration ?? previewData.effectiveGeneration ?? 0)
+    );
+    const label = `Cost ${Math.max(0, Math.round(previewData.cost))} | Base ${baseOutputMw.toFixed(0)} MW`;
     const width = this.canvas.clientWidth;
     const height = this.canvas.clientHeight;
 
     ctx.save();
     ctx.font = '600 12px "IBM Plex Mono", monospace';
     const padX = 8;
-    const padY = 5;
-    const lineHeight = 15;
-    const maxTextWidth = lines.reduce(
-      (max, line) => Math.max(max, Math.ceil(ctx.measureText(line).width)),
-      0
-    );
-    const boxWidth = maxTextWidth + padX * 2;
-    const boxHeight = lines.length * lineHeight + padY * 2;
+    const boxHeight = 22;
+    const boxWidth = Math.ceil(ctx.measureText(label).width) + padX * 2;
     const anchorX = this.mouse.x - boxWidth / 2;
     const anchorY = this.mouse.y - iconSize / 2 - boxHeight - 8;
     const x = clamp(anchorX, 6, Math.max(6, width - boxWidth - 6));
@@ -5314,10 +5260,8 @@ export class GameRuntime {
 
     ctx.fillStyle = "#ecfbff";
     ctx.textAlign = "left";
-    ctx.textBaseline = "top";
-    lines.forEach((line, index) => {
-      ctx.fillText(line, x + padX, y + padY + index * lineHeight);
-    });
+    ctx.textBaseline = "middle";
+    ctx.fillText(label, x + padX, y + boxHeight / 2 + 0.5);
     ctx.restore();
   }
 
