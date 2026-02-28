@@ -3,6 +3,10 @@
     grid-template-columns: 1fr;
   }
 
+  .menu-map-preview {
+    min-height: clamp(320px, 58vh, 680px);
+  }
+
   .floating-objective {
     width: min(420px, 56vw);
   }
