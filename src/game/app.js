@@ -868,12 +868,12 @@ export class SaveTheGridApp {
             <h3>Operations Feed</h3>
 
             <div class="ops-panel-block">
-              <h4>Alert Rail</h4>
+              <h4>Critical</h4>
               <ul id="alert-list" class="alert-list"></ul>
             </div>
 
             <div class="ops-panel-block">
-              <h4>Incident Rail</h4>
+              <h4>Warnings</h4>
               <ul id="incident-list" class="incident-list"></ul>
             </div>
           </section>
