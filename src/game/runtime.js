@@ -5722,7 +5722,7 @@ export class GameRuntime {
     const selected = this.getSelectedRegion();
     const objective = this.buildObjectiveStatus();
     const selectedEntityPopup =
-      this.tool === TOOL_LINE ? null : this.buildSelectedRegionPopup(selected);
+      this.tool === TOOL_LINE || this.tool === TOOL_BUILD ? null : this.buildSelectedRegionPopup(selected);
 
     this.callbacks.onHud({
       runLabel: this.config.label,
