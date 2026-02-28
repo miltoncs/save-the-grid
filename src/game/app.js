@@ -873,7 +873,6 @@ export class SaveTheGridApp {
               <div class="hud-metric-card"><span class="hud-metric-label">Power Supply</span><strong id="hud-power-supply">0 MW</strong></div>
               <div class="hud-metric-card"><span class="hud-metric-label">Power Demand</span><strong id="hud-power-demand">0 MW</strong></div>
               <div class="hud-metric-card"><span class="hud-metric-label">Stored Power</span><strong id="hud-stored-power">0 MWh</strong></div>
-              <div class="hud-metric-card"><span class="hud-metric-label">Reliability</span><strong id="hud-reliability">0%</strong></div>
               <div class="hud-metric-card"><span class="hud-metric-label">Score</span><strong id="hud-score">0</strong></div>
             </section>
           </div>
@@ -1183,7 +1182,6 @@ export class SaveTheGridApp {
     const runLabelNode = $("#hud-run-label");
     const budgetNode = $("#hud-budget");
     const powerSupplyNode = $("#hud-power-supply");
-    const reliabilityNode = $("#hud-reliability");
     const powerDemandNode = $("#hud-power-demand");
     const storedPowerNode = $("#hud-stored-power");
     const timerNode = $("#hud-timer");
@@ -1197,7 +1195,6 @@ export class SaveTheGridApp {
     if (
       !budgetNode ||
       !powerSupplyNode ||
-      !reliabilityNode ||
       !powerDemandNode ||
       !storedPowerNode ||
       !timerNode ||
@@ -1218,7 +1215,6 @@ export class SaveTheGridApp {
     powerSupplyNode.innerHTML = `<span class="hud-metric-diff ${supplyDemandClass}">(${formatSignedNumber(
       supplyDemandDelta
     )})</span><span class="hud-metric-value">${payload.powerSupply.toFixed(1)} MW</span>`;
-    reliabilityNode.textContent = `${payload.reliability.toFixed(1)}%`;
     powerDemandNode.textContent = `${payload.powerDemand.toFixed(1)} MW`;
     storedPowerNode.textContent = `${(payload.storedPowerMWh || 0).toFixed(1)} MWh`;
     timerNode.textContent = formatTime(payload.timer);
