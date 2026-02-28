@@ -291,6 +291,84 @@ export const ASSET_RULES = {
   },
 };
 
+export const PLANT_TYPE_RULES = {
+  wind: {
+    id: "wind",
+    label: "Wind",
+    cost: 168,
+    generation: 68,
+    operatingCostPerSecond: 1.08,
+    reliabilityBonus: 0.18,
+    resourceKey: "wind",
+    resourceOutputPerWeight: 0.65,
+    resourceOperatingReductionPerWeight: 0.18,
+    resourceReliabilityPerWeight: 0.28,
+    outputSeasonMultiplier: {
+      neutral: 1,
+      winter: 1.04,
+      spring: 1.12,
+      summer: 0.93,
+      autumn: 1.01,
+    },
+    outputClimateMultiplier: {
+      neutral: 1,
+      cold: 1.05,
+      temperate: 1,
+      warm: 0.95,
+    },
+  },
+  sun: {
+    id: "sun",
+    label: "Solar",
+    cost: 102,
+    generation: 44,
+    operatingCostPerSecond: 0.52,
+    reliabilityBonus: 0.14,
+    resourceKey: "sun",
+    resourceOutputPerWeight: 0.58,
+    resourceOperatingReductionPerWeight: 0.14,
+    resourceReliabilityPerWeight: 0.2,
+    outputSeasonMultiplier: {
+      neutral: 1,
+      winter: 0.82,
+      spring: 0.98,
+      summer: 1.24,
+      autumn: 0.9,
+    },
+    outputClimateMultiplier: {
+      neutral: 1,
+      cold: 0.88,
+      temperate: 1,
+      warm: 1.13,
+    },
+  },
+  natural_gas: {
+    id: "natural_gas",
+    label: "Natural Gas",
+    cost: 128,
+    generation: 78,
+    operatingCostPerSecond: 2.36,
+    reliabilityBonus: 0.24,
+    resourceKey: "natural_gas",
+    resourceOutputPerWeight: 0.24,
+    resourceOperatingReductionPerWeight: 0.34,
+    resourceReliabilityPerWeight: 0.18,
+    outputSeasonMultiplier: {
+      neutral: 1,
+      winter: 1.02,
+      spring: 1,
+      summer: 0.99,
+      autumn: 1,
+    },
+    outputClimateMultiplier: {
+      neutral: 1,
+      cold: 1.01,
+      temperate: 1,
+      warm: 0.99,
+    },
+  },
+};
+
 export const CAMPAIGN_MISSIONS = [
   {
     id: "m01-cold-start",

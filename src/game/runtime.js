@@ -3,6 +3,7 @@ import * as GameCore from "./core.js";
 const {
   ALERT_LEVELS,
   ASSET_RULES,
+  PLANT_TYPE_RULES,
   BASE_MAP,
   CAMPAIGN_MISSIONS,
   CLIMATE_MULTIPLIERS,
@@ -88,8 +89,12 @@ const DEFAULT_PLANT_TYPE = "wind";
 const PLANT_TYPE_DEMOLISH_LABELS = {
   wind: "Wind Powerplant",
   sun: "Solar Powerplant",
-  natural_gas: "Gas Powerplant",
+  natural_gas: "Natural Gas Powerplant",
 };
+const PLANT_OUTPUT_MULTIPLIER_MIN = 0.62;
+const PLANT_OUTPUT_MULTIPLIER_MAX = 1.95;
+const PLANT_OPERATING_MULTIPLIER_MIN = 0.52;
+const PLANT_OPERATING_MULTIPLIER_MAX = 1.55;
 const DEMOLISH_ASSET_LABELS = {
   substation: "Substation",
   storage: "Battery",
@@ -300,6 +305,102 @@ export class GameRuntime {
     return PLANT_TYPE_VALUES.has(value) ? value : DEFAULT_PLANT_TYPE;
   }
 
+  getPlantTypeRule(plantType = this.buildPlantType) {
+    const normalizedType = this.normalizePlantType(plantType);
+    return PLANT_TYPE_RULES[normalizedType] || PLANT_TYPE_RULES[DEFAULT_PLANT_TYPE];
+  }
+
+  getPlantPowerplantLabel(plantType = this.buildPlantType) {
+    const plantRule = this.getPlantTypeRule(plantType);
+    return `${plantRule.label || "Power"} Powerplant`;
+  }
+
+  getAssetRuleForBuild(assetType, plantType = this.buildPlantType) {
+    if (assetType === "plant") {
+      const plantRule = this.getPlantTypeRule(plantType);
+      return {
+        ...ASSET_RULES.plant,
+        label: this.getPlantPowerplantLabel(plantType),
+        cost: Number(plantRule.cost ?? ASSET_RULES.plant?.cost ?? 0),
+        generation: Number(plantRule.generation ?? ASSET_RULES.plant?.generation ?? 0),
+        operatingCostPerSecond: Number(
+          plantRule.operatingCostPerSecond ?? ASSET_RULES.plant?.operatingCostPerSecond ?? 0
+        ),
+        reliabilityBonus: Number(
+          plantRule.reliabilityBonus ?? ASSET_RULES.plant?.reliabilityBonus ?? 0
+        ),
+      };
+    }
+    return ASSET_RULES[assetType] || null;
+  }
+
+  getPlantPerformanceSnapshot({
+    plantType = this.buildPlantType,
+    resourceProfile = this.createEmptyResourceProfile(),
+    climate = "temperate",
+    season = this.state?.seasonLabel || "neutral",
+  } = {}) {
+    const normalizedType = this.normalizePlantType(plantType);
+    const plantRule = this.getPlantTypeRule(normalizedType);
+    const resourceKey = String(plantRule.resourceKey || normalizedType);
+    const rawResourceWeight =
+      resourceKey === "natural_gas"
+        ? resourceProfile.natural_gas ?? resourceProfile.naturalGas
+        : resourceProfile[resourceKey];
+    const resourceWeight = clamp(Number(rawResourceWeight || 0), 0, 1);
+
+    const outputSeasonMultiplier = Number(
+      plantRule.outputSeasonMultiplier?.[season] ??
+      plantRule.outputSeasonMultiplier?.neutral ??
+      1
+    );
+    const outputClimateMultiplier = Number(
+      plantRule.outputClimateMultiplier?.[climate] ??
+      plantRule.outputClimateMultiplier?.neutral ??
+      1
+    );
+    const resourceOutputMultiplier =
+      1 + resourceWeight * Number(plantRule.resourceOutputPerWeight || 0);
+    const outputMultiplier = clamp(
+      resourceOutputMultiplier * outputSeasonMultiplier * outputClimateMultiplier,
+      PLANT_OUTPUT_MULTIPLIER_MIN,
+      PLANT_OUTPUT_MULTIPLIER_MAX
+    );
+
+    const resourceOperatingMultiplier =
+      1 - resourceWeight * Number(plantRule.resourceOperatingReductionPerWeight || 0);
+    const operatingMultiplier = clamp(
+      resourceOperatingMultiplier,
+      PLANT_OPERATING_MULTIPLIER_MIN,
+      PLANT_OPERATING_MULTIPLIER_MAX
+    );
+
+    const baseGeneration = Math.max(0, Number(plantRule.generation || 0));
+    const generationPerPlant = baseGeneration * outputMultiplier;
+    const baseOperatingCostPerSecond = Math.max(0, Number(plantRule.operatingCostPerSecond || 0));
+    const operatingCostPerPlantPerSecond = baseOperatingCostPerSecond * operatingMultiplier;
+    const resourceReliabilityBonus =
+      resourceWeight * Number(plantRule.resourceReliabilityPerWeight || 0);
+
+    return {
+      plantType: normalizedType,
+      label: String(plantRule.label || "Power"),
+      resourceKey,
+      resourceWeight,
+      baseGeneration,
+      generationPerPlant,
+      baseOperatingCostPerSecond,
+      operatingCostPerPlantPerSecond,
+      outputSeasonMultiplier,
+      outputClimateMultiplier,
+      resourceOutputMultiplier,
+      outputMultiplier,
+      resourceOperatingMultiplier,
+      operatingMultiplier,
+      resourceReliabilityBonus,
+    };
+  }
+
   normalizePriority(value) {
     const normalized = LEGACY_PRIORITY_MAP[String(value || "").toLowerCase()];
     return PRIORITY_ORDER.includes(normalized) ? normalized : PRIORITY_DEFAULT;
@@ -332,14 +433,14 @@ export class GameRuntime {
   getDemolishAssetLabel(region, assetType) {
     if (assetType === "plant") {
       const plantType = this.normalizePlantType(region?.plantType);
-      return PLANT_TYPE_DEMOLISH_LABELS[plantType] || "Powerplant";
+      return PLANT_TYPE_DEMOLISH_LABELS[plantType] || this.getPlantPowerplantLabel(plantType);
     }
     return DEMOLISH_ASSET_LABELS[assetType] || (ASSET_RULES[assetType]?.label ?? "Asset");
   }
 
   getPlantDisplayName(region) {
     const plantType = this.normalizePlantType(region?.plantType);
-    return PLANT_TYPE_DEMOLISH_LABELS[plantType] || "Powerplant";
+    return PLANT_TYPE_DEMOLISH_LABELS[plantType] || this.getPlantPowerplantLabel(plantType);
   }
 
   getRegionDisplayName(region, fallback = "selected location") {
@@ -433,8 +534,9 @@ export class GameRuntime {
     }
   }
 
-  estimateAssetBuildCost(region, assetType) {
-    const rule = ASSET_RULES[assetType];
+  estimateAssetBuildCost(region, assetType, plantTypeOverride = null) {
+    const targetPlantType = plantTypeOverride ?? region?.plantType ?? this.buildPlantType;
+    const rule = this.getAssetRuleForBuild(assetType, targetPlantType);
     if (!rule) return 0;
     const terrainFactor = TERRAIN_COST_MULTIPLIERS[region?.terrain] || 1;
     const globalCostFactor = this.getModifierValue("build_cost", 1);
@@ -2327,7 +2429,8 @@ export class GameRuntime {
   }
 
   handleBuild(region, worldPoint) {
-    const rule = ASSET_RULES[this.buildAssetType];
+    const selectedPlantType = this.normalizePlantType(this.buildPlantType);
+    const rule = this.getAssetRuleForBuild(this.buildAssetType, selectedPlantType);
     if (!rule) return;
     let target = region || null;
     let shouldInsertTarget = false;
@@ -2425,7 +2528,7 @@ export class GameRuntime {
     const assetBuildCosts = this.ensureRegionAssetBuildCosts(target);
     assetBuildCosts[this.buildAssetType].push(cost);
     if (this.buildAssetType === "plant") {
-      target.plantType = this.normalizePlantType(this.buildPlantType);
+      target.plantType = selectedPlantType;
     }
     if (!this.isDevModeEnabled()) {
       this.state.budget -= cost;
@@ -3055,13 +3158,14 @@ export class GameRuntime {
 
   computeGenerationForEntity(entity) {
     if (this.isTownEntity(entity)) return 0;
-    const resource = entity.resourceProfile || this.createEmptyResourceProfile();
-    const plantBoostMultiplier = clamp(
-      1 + resource.wind * 0.16 + resource.sun * 0.14 + resource.natural_gas * 0.2,
-      1,
-      1.5
-    );
-    return entity.assets.plant * ASSET_RULES.plant.generation * plantBoostMultiplier;
+    const plantCount = Math.max(0, Number(entity?.assets?.plant || 0));
+    if (plantCount <= 0) return 0;
+    const perf = this.getPlantPerformanceSnapshot({
+      plantType: entity?.plantType,
+      resourceProfile: entity?.resourceProfile || this.createEmptyResourceProfile(),
+      climate: entity?.climate || "temperate",
+    });
+    return plantCount * perf.generationPerPlant;
   }
 
   calculateStoredPowerMWh() {
@@ -3731,15 +3835,21 @@ export class GameRuntime {
 
     const operatingBase = regions.reduce((acc, region) => {
       if (this.isTownEntity(region)) return acc;
-      const resource = region.resourceProfile || this.createEmptyResourceProfile();
-      const plantOperatingMultiplier = clamp(
-        1 - resource.natural_gas * 0.12 - resource.wind * 0.05 - resource.sun * 0.04,
-        0.72,
-        1
-      );
+      const plantCount = Math.max(0, Number(region.assets?.plant || 0));
+      const perf = plantCount > 0
+        ? this.getPlantPerformanceSnapshot({
+            plantType: region.plantType,
+            resourceProfile: region.resourceProfile || this.createEmptyResourceProfile(),
+            climate: region.climate || "temperate",
+          })
+        : null;
+      const plantOperatingCost =
+        plantCount > 0 && perf
+          ? plantCount * perf.operatingCostPerPlantPerSecond
+          : 0;
       return (
         acc +
-        region.assets.plant * ASSET_RULES.plant.operatingCostPerSecond * plantOperatingMultiplier +
+        plantOperatingCost +
         region.assets.substation * ASSET_RULES.substation.operatingCostPerSecond +
         region.assets.storage * ASSET_RULES.storage.operatingCostPerSecond
       );
@@ -3781,16 +3891,24 @@ export class GameRuntime {
 
     const assetReliabilityBonus = regions.reduce((acc, region) => {
       if (this.isTownEntity(region)) return acc;
-      const resource = region.resourceProfile || this.createEmptyResourceProfile();
-      const resourceReliability =
-        (resource.wind * 0.26 + resource.sun * 0.2 + resource.natural_gas * 0.18) *
-        (region.assets.plant + region.assets.storage * 0.6);
+      const plantCount = Math.max(0, Number(region.assets?.plant || 0));
+      let plantReliabilityBonus = 0;
+      if (plantCount > 0) {
+        const plantRule = this.getPlantTypeRule(region.plantType);
+        const perf = this.getPlantPerformanceSnapshot({
+          plantType: region.plantType,
+          resourceProfile: region.resourceProfile || this.createEmptyResourceProfile(),
+          climate: region.climate || "temperate",
+        });
+        plantReliabilityBonus =
+          plantCount * Number(plantRule.reliabilityBonus || 0) +
+          plantCount * Number(perf.resourceReliabilityBonus || 0);
+      }
       return (
         acc +
-        region.assets.plant * ASSET_RULES.plant.reliabilityBonus +
+        plantReliabilityBonus +
         region.assets.substation * ASSET_RULES.substation.reliabilityBonus +
-        region.assets.storage * ASSET_RULES.storage.reliabilityBonus +
-        resourceReliability
+        region.assets.storage * ASSET_RULES.storage.reliabilityBonus
       );
     }, 0);
 
@@ -4111,6 +4229,41 @@ export class GameRuntime {
     if (!region) return null;
     const anchor = this.worldToScreen(region.x, region.y);
     const isPowerplant = !this.isTownEntity(region) && Math.max(0, Number(region?.assets?.plant || 0)) > 0;
+    const plantCount = Math.max(0, Number(region?.assets?.plant || 0));
+    const plantType = this.normalizePlantType(region?.plantType);
+    const plantPerf = isPowerplant
+      ? this.getPlantPerformanceSnapshot({
+          plantType,
+          resourceProfile: region.resourceProfile || this.createEmptyResourceProfile(),
+          climate: region.climate || "temperate",
+        })
+      : null;
+    const detailRows = [];
+    if (isPowerplant && plantPerf) {
+      const totalOutput = plantCount * plantPerf.generationPerPlant;
+      const totalOpex = plantCount * plantPerf.operatingCostPerPlantPerSecond;
+      const resourceLabel = plantPerf.resourceKey.replace(/_/g, " ");
+      detailRows.push({
+        label: "Plant Type",
+        value: this.getPlantPowerplantLabel(plantType).replace(" Powerplant", ""),
+      });
+      detailRows.push({
+        label: "Output",
+        value: `${totalOutput.toFixed(1)} MW (base ${plantPerf.baseGeneration.toFixed(1)} x${plantPerf.outputMultiplier.toFixed(2)})`,
+      });
+      detailRows.push({
+        label: "Operating",
+        value: `${totalOpex.toFixed(2)}/s (base ${plantPerf.baseOperatingCostPerSecond.toFixed(2)} x${plantPerf.operatingMultiplier.toFixed(2)})`,
+      });
+      detailRows.push({
+        label: "Resource Fit",
+        value: `${Math.round(plantPerf.resourceWeight * 100)}% ${resourceLabel} (x${plantPerf.resourceOutputMultiplier.toFixed(2)} output)`,
+      });
+      detailRows.push({
+        label: "Conditions",
+        value: `Season x${plantPerf.outputSeasonMultiplier.toFixed(2)} | Climate x${plantPerf.outputClimateMultiplier.toFixed(2)}`,
+      });
+    }
     const localTownDemandMw = this.isTownEntity(region) ? Math.max(0, Number(region.demand || 0)) : 0;
     const storageDemandMw = Math.max(0, this.getStorageChargeDemandMW(region, TICK_SECONDS));
     const totalDemandMw = localTownDemandMw + storageDemandMw;
@@ -4146,6 +4299,7 @@ export class GameRuntime {
       showDemand,
       showSupply,
       showStored,
+      detailRows,
     };
   }
 
@@ -5051,52 +5205,119 @@ export class GameRuntime {
     ctx.restore();
   }
 
-  estimateBuildPreviewCost(worldPoint) {
+  estimateResourceProfileAtWorldPoint(worldPoint, region = null) {
+    if (region?.resourceProfile && typeof region.resourceProfile === "object") {
+      return {
+        wind: clamp(Number(region.resourceProfile.wind || 0), 0, 1),
+        sun: clamp(Number(region.resourceProfile.sun || 0), 0, 1),
+        natural_gas: clamp(
+          Number(region.resourceProfile.natural_gas ?? region.resourceProfile.naturalGas ?? 0),
+          0,
+          1
+        ),
+      };
+    }
+    const profile = this.createEmptyResourceProfile();
+    if (!worldPoint || !this.resourceZones.length) return profile;
+    const previewRegion = this.createInfrastructureNodePreview(worldPoint.x, worldPoint.y);
+    for (const zone of this.resourceZones) {
+      const coverage = this.estimateZoneCoverageForRegion(previewRegion, zone.polygon);
+      if (coverage <= 0) continue;
+      profile[zone.resource] = clamp(profile[zone.resource] + coverage, 0, 1);
+    }
+    return profile;
+  }
+
+  getPlantBuildPreviewDetails(worldPoint, hoveredRegion = null) {
     if (this.buildAssetType !== "plant") return null;
     if (!worldPoint) return null;
+    if (hoveredRegion && this.isTownEntity(hoveredRegion)) return null;
 
-    const rule = ASSET_RULES.plant;
+    const plantType = this.normalizePlantType(this.buildPlantType);
+    const rule = this.getAssetRuleForBuild("plant", plantType);
     if (!rule) return null;
 
-    const region = this.findRegionAt(worldPoint.x, worldPoint.y);
-    if (region && this.isTownEntity(region)) return null;
-
-    const terrain = region?.terrain || this.inferLocalBiomeAtPoint(worldPoint.x, worldPoint.y).terrain;
+    const fallbackBiome = this.inferLocalBiomeAtPoint(worldPoint.x, worldPoint.y);
+    const terrain = hoveredRegion?.terrain || fallbackBiome.terrain;
     const terrainFactor = TERRAIN_COST_MULTIPLIERS[terrain] || 1;
     const globalCostFactor = this.getModifierValue("build_cost", 1);
     const rawCost = rule.cost * terrainFactor * this.config.infraCostMultiplier * globalCostFactor;
-    return Math.ceil(rawCost);
+    const cost = Math.ceil(rawCost);
+    const resourceProfile = this.estimateResourceProfileAtWorldPoint(worldPoint, hoveredRegion);
+    const climate = hoveredRegion?.climate || fallbackBiome.climate || "temperate";
+    const perf = this.getPlantPerformanceSnapshot({
+      plantType,
+      resourceProfile,
+      climate,
+    });
+
+    return {
+      cost,
+      plantType,
+      label: rule.label || "Powerplant",
+      resourceKey: perf.resourceKey,
+      resourceWeight: perf.resourceWeight,
+      baseGeneration: perf.baseGeneration,
+      effectiveGeneration: perf.generationPerPlant,
+      baseOperatingCostPerSecond: perf.baseOperatingCostPerSecond,
+      effectiveOperatingCostPerSecond: perf.operatingCostPerPlantPerSecond,
+      outputMultiplier: perf.outputMultiplier,
+      resourceOutputMultiplier: perf.resourceOutputMultiplier,
+      outputSeasonMultiplier: perf.outputSeasonMultiplier,
+      outputClimateMultiplier: perf.outputClimateMultiplier,
+      operatingMultiplier: perf.operatingMultiplier,
+    };
   }
 
-  drawPlantBuildCostPreview(ctx, cost, iconSize) {
-    if (!Number.isFinite(cost)) return;
+  estimateBuildPreviewCost(worldPoint) {
+    const preview = this.getPlantBuildPreviewDetails(worldPoint);
+    return preview ? preview.cost : null;
+  }
 
-    const outputMw = Math.max(0, Number(ASSET_RULES.plant?.generation || 0));
-    const label = `Cost ${Math.max(0, Math.round(cost))} +${outputMw.toFixed(0)} MW`;
+  drawPlantBuildCostPreview(ctx, previewData, iconSize) {
+    if (!previewData || !Number.isFinite(previewData.cost)) return;
+
+    const resourceLabel = String(previewData.resourceKey || "")
+      .replace(/_/g, " ")
+      .trim();
+    const plantLabel = String(previewData.label || "Plant")
+      .replace(/\s*Powerplant$/i, "")
+      .trim();
+    const lines = [
+      `${plantLabel} C${Math.max(0, Math.round(previewData.cost))} G${Number(previewData.effectiveGeneration || 0).toFixed(1)}MW Op${Number(previewData.effectiveOperatingCostPerSecond || 0).toFixed(2)}/s`,
+      `xO${Number(previewData.outputMultiplier || 1).toFixed(2)} [R${Number(previewData.resourceOutputMultiplier || 1).toFixed(2)} S${Number(previewData.outputSeasonMultiplier || 1).toFixed(2)} C${Number(previewData.outputClimateMultiplier || 1).toFixed(2)}] Fit ${Math.round(Number(previewData.resourceWeight || 0) * 100)}% ${resourceLabel}`,
+    ];
     const width = this.canvas.clientWidth;
     const height = this.canvas.clientHeight;
 
     ctx.save();
     ctx.font = '600 12px "IBM Plex Mono", monospace';
-    const textWidth = Math.ceil(ctx.measureText(label).width);
-    const boxHeight = 20;
     const padX = 8;
-    const boxWidth = textWidth + padX * 2;
+    const padY = 5;
+    const lineHeight = 15;
+    const maxTextWidth = lines.reduce(
+      (max, line) => Math.max(max, Math.ceil(ctx.measureText(line).width)),
+      0
+    );
+    const boxWidth = maxTextWidth + padX * 2;
+    const boxHeight = lines.length * lineHeight + padY * 2;
     const anchorX = this.mouse.x - boxWidth / 2;
     const anchorY = this.mouse.y - iconSize / 2 - boxHeight - 8;
     const x = clamp(anchorX, 6, Math.max(6, width - boxWidth - 6));
     const y = clamp(anchorY, 6, Math.max(6, height - boxHeight - 6));
 
-    ctx.fillStyle = "rgba(112, 188, 232, 0.24)";
-    ctx.strokeStyle = "rgba(156, 223, 255, 0.62)";
-    ctx.lineWidth = 1;
+    ctx.fillStyle = "rgba(9, 27, 38, 0.88)";
+    ctx.strokeStyle = "rgba(134, 218, 255, 0.92)";
+    ctx.lineWidth = 1.2;
     ctx.fillRect(x, y, boxWidth, boxHeight);
     ctx.strokeRect(x, y, boxWidth, boxHeight);
 
-    ctx.fillStyle = "#d8f2ff";
+    ctx.fillStyle = "#ecfbff";
     ctx.textAlign = "left";
-    ctx.textBaseline = "middle";
-    ctx.fillText(label, x + padX, y + boxHeight / 2 + 0.5);
+    ctx.textBaseline = "top";
+    lines.forEach((line, index) => {
+      ctx.fillText(line, x + padX, y + padY + index * lineHeight);
+    });
     ctx.restore();
   }
 
@@ -5139,7 +5360,11 @@ export class GameRuntime {
       ctx.restore();
     }
 
-    const previewCost = this.estimateBuildPreviewCost(world);
+    const previewPlantData =
+      this.buildAssetType === "plant"
+        ? this.getPlantBuildPreviewDetails(world, hoveredRegion)
+        : null;
+    const previewCost = previewPlantData?.cost ?? this.estimateBuildPreviewCost(world);
     const iconSize = this.getMapObjectIconScreenSize();
     const icon = this.getBuildPreviewIcon();
     if (icon) {
@@ -5159,7 +5384,11 @@ export class GameRuntime {
       if (disallowed) {
         this.drawDisallowedBuildPreviewMarker(ctx, this.mouse.x, this.mouse.y, iconSize);
       }
-      this.drawPlantBuildCostPreview(ctx, previewCost, iconSize);
+      this.drawPlantBuildCostPreview(
+        ctx,
+        previewPlantData || (Number.isFinite(previewCost) ? { cost: previewCost } : null),
+        iconSize
+      );
       return;
     }
 
@@ -5189,7 +5418,11 @@ export class GameRuntime {
     if (disallowed) {
       this.drawDisallowedBuildPreviewMarker(ctx, this.mouse.x, this.mouse.y, iconSize);
     }
-    this.drawPlantBuildCostPreview(ctx, previewCost, iconSize);
+    this.drawPlantBuildCostPreview(
+      ctx,
+      previewPlantData || (Number.isFinite(previewCost) ? { cost: previewCost } : null),
+      iconSize
+    );
   }
 
   drawRerouteRadiusPreview(ctx) {
@@ -5427,6 +5660,38 @@ export class GameRuntime {
   }
 
   renderGameToText() {
+    const buildPlantStateSnapshot = (entity) => {
+      const plantCount = Math.max(0, Number(entity?.assets?.plant || 0));
+      if (plantCount <= 0) return null;
+      const perf = this.getPlantPerformanceSnapshot({
+        plantType: entity.plantType,
+        resourceProfile: entity.resourceProfile || this.createEmptyResourceProfile(),
+        climate: entity.climate || "temperate",
+      });
+      return {
+        type: perf.plantType,
+        label: this.getPlantPowerplantLabel(perf.plantType),
+        count: plantCount,
+        resourceKey: perf.resourceKey,
+        resourceWeight: Number(perf.resourceWeight.toFixed(3)),
+        baseOutputMw: Number(perf.baseGeneration.toFixed(2)),
+        outputMultiplier: Number(perf.outputMultiplier.toFixed(3)),
+        outputMwPerPlant: Number(perf.generationPerPlant.toFixed(2)),
+        outputMwTotal: Number((perf.generationPerPlant * plantCount).toFixed(2)),
+        baseOperatingPerSecond: Number(perf.baseOperatingCostPerSecond.toFixed(3)),
+        operatingMultiplier: Number(perf.operatingMultiplier.toFixed(3)),
+        operatingPerSecondPerPlant: Number(perf.operatingCostPerPlantPerSecond.toFixed(3)),
+        operatingPerSecondTotal: Number(
+          (perf.operatingCostPerPlantPerSecond * plantCount).toFixed(3)
+        ),
+        outputModifiers: {
+          resource: Number(perf.resourceOutputMultiplier.toFixed(3)),
+          season: Number(perf.outputSeasonMultiplier.toFixed(3)),
+          climate: Number(perf.outputClimateMultiplier.toFixed(3)),
+        },
+      };
+    };
+
     const townSnapshots = this.state.regions
       .filter((town) => this.isTownEntity(town))
       .map((town) => ({
@@ -5459,6 +5724,7 @@ export class GameRuntime {
       storageCapacityMWh: Number(this.getRegionStorageCapacityMWh(town).toFixed(2)),
       storageChargingMw: Number((town.storageChargingMw || 0).toFixed(2)),
       plantType: town.plantType || DEFAULT_PLANT_TYPE,
+      plantState: buildPlantStateSnapshot(town),
       }));
 
     const nodeSnapshots = this.state.regions
@@ -5476,6 +5742,7 @@ export class GameRuntime {
         storageCapacityMWh: Number(this.getRegionStorageCapacityMWh(node).toFixed(2)),
         storageChargingMw: Number((node.storageChargingMw || 0).toFixed(2)),
         plantType: node.plantType || DEFAULT_PLANT_TYPE,
+        plantState: buildPlantStateSnapshot(node),
       }));
 
     const payload = {
@@ -5507,6 +5774,11 @@ export class GameRuntime {
       selectedTool: this.tool,
       selectedBuildAsset: this.buildAssetType,
       selectedBuildPlantType: this.buildPlantType,
+      plantTypeRules: {
+        wind: this.getAssetRuleForBuild("plant", "wind"),
+        sun: this.getAssetRuleForBuild("plant", "sun"),
+        natural_gas: this.getAssetRuleForBuild("plant", "natural_gas"),
+      },
       selectedEntityId: this.selectedRegionId,
       selectedTownId:
         this.selectedRegionId && this.isTownEntity(this.findRegion(this.selectedRegionId))

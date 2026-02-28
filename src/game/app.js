@@ -5,6 +5,7 @@ import { generateMenuTerrainPreviewDataUrl } from "./menu-terrain-preview.js";
 const {
   ALERT_LEVELS,
   ASSET_RULES,
+  PLANT_TYPE_RULES,
   BASE_MAP,
   CAMPAIGN_MISSIONS,
   CLIMATE_MULTIPLIERS,
@@ -744,8 +745,17 @@ export class SaveTheGridApp {
   }
 
   buildRunScreenMarkup() {
-    const plantCost = Math.ceil(ASSET_RULES.plant?.cost ?? 0);
-    const plantGenerationMw = Math.max(0, Number(ASSET_RULES.plant?.generation ?? 0)).toFixed(0);
+    const getPlantTooltipStats = (plantType) => {
+      const plantRule = PLANT_TYPE_RULES?.[plantType] || PLANT_TYPE_RULES?.wind || {};
+      return {
+        cost: Math.ceil(Number(plantRule.cost ?? 0)),
+        generationMw: Math.max(0, Number(plantRule.generation ?? 0)).toFixed(0),
+        operatingCostPerSecond: Math.max(0, Number(plantRule.operatingCostPerSecond ?? 0)).toFixed(2),
+      };
+    };
+    const windPlant = getPlantTooltipStats("wind");
+    const solarPlant = getPlantTooltipStats("sun");
+    const gasPlant = getPlantTooltipStats("natural_gas");
     const substationCost = Math.ceil(ASSET_RULES.substation?.cost ?? 0);
     const storageCost = Math.ceil(ASSET_RULES.storage?.cost ?? 0);
     const lineCostPer100px = Math.ceil((LINE_BASE_BUILD_COST_PER_WORLD_UNIT ?? 0) * 100);
@@ -895,8 +905,9 @@ export class SaveTheGridApp {
                 <span class="dock-shortcut-chip" aria-hidden="true">1</span>
                 <span class="dock-tooltip" aria-hidden="true">
                   <span class="dock-tooltip-title">Wind Plant</span>
-                  <span class="dock-tooltip-price">Price ${plantCost}</span>
-                  <span class="dock-tooltip-price">Output ${plantGenerationMw} MW</span>
+                  <span class="dock-tooltip-price">Price ${windPlant.cost}</span>
+                  <span class="dock-tooltip-price">Output ${windPlant.generationMw} MW base</span>
+                  <span class="dock-tooltip-price">Operating ${windPlant.operatingCostPerSecond}/s</span>
                 </span>
               </button>
               <button
@@ -915,8 +926,9 @@ export class SaveTheGridApp {
                 <span class="dock-shortcut-chip" aria-hidden="true">2</span>
                 <span class="dock-tooltip" aria-hidden="true">
                   <span class="dock-tooltip-title">Solar Plant</span>
-                  <span class="dock-tooltip-price">Price ${plantCost}</span>
-                  <span class="dock-tooltip-price">Output ${plantGenerationMw} MW</span>
+                  <span class="dock-tooltip-price">Price ${solarPlant.cost}</span>
+                  <span class="dock-tooltip-price">Output ${solarPlant.generationMw} MW base</span>
+                  <span class="dock-tooltip-price">Operating ${solarPlant.operatingCostPerSecond}/s</span>
                 </span>
               </button>
               <button
@@ -934,9 +946,10 @@ export class SaveTheGridApp {
                 />
                 <span class="dock-shortcut-chip" aria-hidden="true">3</span>
                 <span class="dock-tooltip" aria-hidden="true">
-                  <span class="dock-tooltip-title">Gas Plant</span>
-                  <span class="dock-tooltip-price">Price ${plantCost}</span>
-                  <span class="dock-tooltip-price">Output ${plantGenerationMw} MW</span>
+                  <span class="dock-tooltip-title">Natural Gas Plant</span>
+                  <span class="dock-tooltip-price">Price ${gasPlant.cost}</span>
+                  <span class="dock-tooltip-price">Output ${gasPlant.generationMw} MW base</span>
+                  <span class="dock-tooltip-price">Operating ${gasPlant.operatingCostPerSecond}/s</span>
                 </span>
               </button>
               <button
@@ -1296,7 +1309,7 @@ export class SaveTheGridApp {
         selectedPopupKindNode.textContent = popup.kindLabel || "Structure";
 
         const popupWidth = 280;
-        const popupHeight = 230;
+        const popupHeight = 230 + (Array.isArray(popup.detailRows) ? popup.detailRows.length * 22 : 0);
         const targetX = clamp(Number(popup.anchorX || 0) + 26, 12, window.innerWidth - popupWidth - 12);
         const targetY = clamp(
           Number(popup.anchorY || 0) - popupHeight * 0.5,
@@ -1349,6 +1362,15 @@ export class SaveTheGridApp {
               popup.powerStoredMWh
             )}${capacityText}</dd></div>`
           );
+        }
+
+        if (Array.isArray(popup.detailRows) && popup.detailRows.length) {
+          for (const detail of popup.detailRows) {
+            if (!detail || !detail.label) continue;
+            rows.push(
+              `<div class="selected-entity-popup-row"><dt>${detail.label}</dt><dd>${detail.value || ""}</dd></div>`
+            );
+          }
         }
 
         if (!rows.length) {
